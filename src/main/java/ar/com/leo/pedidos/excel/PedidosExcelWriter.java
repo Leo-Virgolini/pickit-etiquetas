@@ -450,9 +450,14 @@ public class PedidosExcelWriter {
                 formatFecha(group.fecha()), styles.fecha);
 
         // Fila 2: Nombre (usuario)
-        String nombreTexto = group.nombreApellido();
-        if (group.usuario() != null && !group.usuario().isBlank())
-            nombreTexto += "  (" + group.usuario() + ")";
+        String nombreTexto;
+        if (group.nombreApellido() != null && !group.nombreApellido().isBlank()) {
+            nombreTexto = group.nombreApellido();
+            if (group.usuario() != null && !group.usuario().isBlank())
+                nombreTexto += "  (" + group.usuario() + ")";
+        } else {
+            nombreTexto = group.usuario() != null ? group.usuario() : "";
+        }
         mergeAndSet(sheet, startRow + 2, startRow + 2, startCol, endCol, nombreTexto, styles.nombre);
 
         // Fila 3: Headers de producto

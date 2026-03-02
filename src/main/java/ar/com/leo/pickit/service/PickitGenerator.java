@@ -40,7 +40,7 @@ public class PickitGenerator {
 
     public static File generarPickit(File stockExcel, File combosExcel, List<ProductoManual> productosManuales, boolean soloHoy) throws Exception {
 
-        AppLogger.info("PICKIT - Despacho: " + (soloHoy ? "Hasta hoy 23:59:59" : "Sin límite"));
+        AppLogger.info("PICKIT - Despacho ML: " + (soloHoy ? "Hasta hoy 23:59:59" : "Sin límite"));
 
         // Paso 1: Inicializar APIs
         AppLogger.info("PICKIT - Paso 1: Inicializando APIs (MercadoLibre + Tienda Nube)...");
@@ -75,22 +75,24 @@ public class PickitGenerator {
 
         var futureNube = executor.submit(() -> {
             AppLogger.info("PICKIT - Paso 4: Obteniendo ventas KT HOGAR (Tienda Nube)...");
-            List<Venta> ventas = TiendaNubeApi.obtenerVentasHogar();
-            todasLasVentas.addAll(ventas);
-            return ventas.size();
+            var result = TiendaNubeApi.obtenerVentasHogar();
+            todasLasVentas.addAll(result.ventas());
+            return result;
         });
 
         var futureGastro = executor.submit(() -> {
             AppLogger.info("PICKIT - Paso 5: Obteniendo ventas KT GASTRO (Tienda Nube)...");
-            List<Venta> ventas = TiendaNubeApi.obtenerVentasGastro();
-            todasLasVentas.addAll(ventas);
-            return ventas.size();
+            var result = TiendaNubeApi.obtenerVentasGastro();
+            todasLasVentas.addAll(result.ventas());
+            return result;
         });
 
         int countMLPrint = futureMLPrint.get();
         int countMLAgreement = futureMLAgreement.get();
-        int countNube = futureNube.get();
-        int countGastro = futureGastro.get();
+        var resultNube = futureNube.get();
+        var resultGastro = futureGastro.get();
+        int countNube = resultNube.totalOrdenes();
+        int countGastro = resultGastro.totalOrdenes();
 
         // Paso 6: Consolidar ventas
         AppLogger.info("PICKIT - Paso 6: Consolidando ventas...");
@@ -155,7 +157,7 @@ public class PickitGenerator {
                 }
                 todasLasVentas.removeAll(ventasARemover);
                 todasLasOrdenesML.removeIf(o -> ventaIdsExcluir.contains(o.getVentaId()));
-                AppLogger.info("PICKIT - Filtro SLA Hoy: " + ventaIdsExcluir.size() + " ventas ML excluidas");
+                AppLogger.info("PICKIT - Filtro SLA Hoy: " + ventaIdsExcluir.size() + " órdenes ML excluidas");
             }
         }
 
@@ -342,15 +344,26 @@ public class PickitGenerator {
         AppLogger.info("PICKIT - Paso 12: Generando Excel Pickit...");
         File resultado = PickitExcelWriter.generar(pickitItems, carrosOrdenes, slaOrdenes, soloHoy);
 
-        if (skusNoEncontrados > 0 || skusStockInsuficiente > 0 || skusConError > 0) {
-            AppLogger.warn("PICKIT - ========== RESUMEN ==========");
-            if (skusNoEncontrados > 0) AppLogger.warn("PICKIT -   SKUs no encontrados en Stock: " + skusNoEncontrados);
-            if (skusStockInsuficiente > 0) AppLogger.warn("PICKIT -   SKUs con stock insuficiente: " + skusStockInsuficiente);
-            if (skusConError > 0) AppLogger.warn("PICKIT -   SKUs con error: " + skusConError);
-            AppLogger.warn("PICKIT - ==============================");
-        }
+        int skusOk = skuCantidad.size() - skusNoEncontrados - skusStockInsuficiente - skusConError;
+        int countManuales = (productosManuales != null) ? productosManuales.size() : 0;
 
-        AppLogger.success("PICKIT - Proceso completado. " + pickitItems.size() + " items generados. Archivo: " + resultado.getAbsolutePath());
+        int totalOrdenes = countMLPrint + countMLAgreement + countNube + countGastro + countManuales;
+
+        AppLogger.success("PICKIT - ========== RESUMEN ==========");
+        AppLogger.success("PICKIT -   ML ready_to_print: " + countMLPrint + " órdenes");
+        AppLogger.success("PICKIT -   ML acuerdo: " + countMLAgreement + " órdenes");
+        AppLogger.success("PICKIT -   KT HOGAR: " + countNube + " órdenes");
+        AppLogger.success("PICKIT -   KT GASTRO: " + countGastro + " órdenes");
+        if (countManuales > 0) AppLogger.success("PICKIT -   Manuales: " + countManuales);
+        AppLogger.success("PICKIT -   Total: " + totalOrdenes + " órdenes | " + todasLasVentas.size() + " productos");
+        AppLogger.success("PICKIT -   SKUs únicos: " + skuCantidad.size() + " | OK: " + skusOk);
+        AppLogger.success("PICKIT -   Ordenes CARROS: " + carrosOrdenes.size());
+        if (skusNoEncontrados > 0) AppLogger.warn("PICKIT -   SKUs no encontrados en Stock: " + skusNoEncontrados);
+        if (skusStockInsuficiente > 0) AppLogger.warn("PICKIT -   SKUs con stock insuficiente: " + skusStockInsuficiente);
+        if (skusConError > 0) AppLogger.warn("PICKIT -   SKUs con error: " + skusConError);
+        AppLogger.success("PICKIT - ==============================");
+
+        AppLogger.success("PICKIT - Proceso completado. Archivo: " + resultado.getAbsolutePath());
         return resultado;
     }
 

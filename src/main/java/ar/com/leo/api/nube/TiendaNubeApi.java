@@ -28,7 +28,8 @@ import static ar.com.leo.api.HttpRetryHandler.BASE_SECRET_DIR;
 
 public class TiendaNubeApi {
 
-    public record TiendaNubeOrderResult(List<PedidoTN> pedidos, List<EtiquetaTN> etiquetas) {}
+    public record TiendaNubeOrderResult(List<PedidoTN> pedidos, List<EtiquetaTN> etiquetas, int totalOrdenes) {}
+    public record VentasResult(List<Venta> ventas, int totalOrdenes) {}
 
     private static final ObjectMapper mapper = JsonMapper.shared();
     private static final HttpClient httpClient = HttpClient.newHttpClient();
@@ -49,26 +50,27 @@ public class TiendaNubeApi {
         return true;
     }
 
-    public static List<Venta> obtenerVentasHogar() {
+    public static VentasResult obtenerVentasHogar() {
         StoreCredentials store = getStore(STORE_HOGAR);
         if (store == null) {
             AppLogger.warn("NUBE - Credenciales de " + STORE_HOGAR + " no disponibles.");
-            return List.of();
+            return new VentasResult(List.of(), 0);
         }
         return obtenerVentas(store, STORE_HOGAR);
     }
 
-    public static List<Venta> obtenerVentasGastro() {
+    public static VentasResult obtenerVentasGastro() {
         StoreCredentials store = getStore(STORE_GASTRO);
         if (store == null) {
             AppLogger.warn("NUBE - Credenciales de " + STORE_GASTRO + " no disponibles.");
-            return List.of();
+            return new VentasResult(List.of(), 0);
         }
         return obtenerVentas(store, STORE_GASTRO);
     }
 
-    private static List<Venta> obtenerVentas(StoreCredentials store, String label) {
+    private static VentasResult obtenerVentas(StoreCredentials store, String label) {
         List<Venta> ventas = new ArrayList<>();
+        int totalOrdenes = 0;
         String nextUrl = String.format(
                 "https://api.tiendanube.com/v1/%s/orders?payment_status=paid&shipping_status=unpacked&status=open&aggregates=fulfillment_orders&per_page=200&page=1",
                 store.storeId);
@@ -112,6 +114,8 @@ public class TiendaNubeApi {
                     continue;
                 }
 
+                totalOrdenes++;
+
                 JsonNode products = order.path("products");
                 if (!products.isArray()) continue;
 
@@ -138,8 +142,8 @@ public class TiendaNubeApi {
             nextUrl = parseLinkNext(response);
         }
 
-        AppLogger.info("NUBE (" + label + ") - Ventas obtenidas: " + ventas.size());
-        return ventas;
+        AppLogger.info("NUBE (" + label + ") - Órdenes: " + totalOrdenes + " | Productos: " + ventas.size());
+        return new VentasResult(ventas, totalOrdenes);
     }
 
     // ── Pedidos completos (para tab Pedidos) ──
@@ -148,7 +152,7 @@ public class TiendaNubeApi {
         StoreCredentials store = getStore(STORE_HOGAR);
         if (store == null) {
             AppLogger.warn("NUBE - Credenciales de " + STORE_HOGAR + " no disponibles.");
-            return new TiendaNubeOrderResult(List.of(), List.of());
+            return new TiendaNubeOrderResult(List.of(), List.of(), 0);
         }
         return obtenerPedidosCompletos(store, STORE_HOGAR);
     }
@@ -157,7 +161,7 @@ public class TiendaNubeApi {
         StoreCredentials store = getStore(STORE_GASTRO);
         if (store == null) {
             AppLogger.warn("NUBE - Credenciales de " + STORE_GASTRO + " no disponibles.");
-            return new TiendaNubeOrderResult(List.of(), List.of());
+            return new TiendaNubeOrderResult(List.of(), List.of(), 0);
         }
         return obtenerPedidosCompletos(store, STORE_GASTRO);
     }
@@ -165,6 +169,7 @@ public class TiendaNubeApi {
     private static TiendaNubeOrderResult obtenerPedidosCompletos(StoreCredentials store, String label) {
         List<PedidoTN> pedidos = new ArrayList<>();
         List<EtiquetaTN> etiquetas = new ArrayList<>();
+        int totalOrdenes = 0;
 
         String nextUrl = String.format(
                 "https://api.tiendanube.com/v1/%s/orders?payment_status=paid&shipping_status=unpacked&status=open&aggregates=fulfillment_orders&per_page=200&page=1",
@@ -216,7 +221,9 @@ public class TiendaNubeApi {
 
                 // Detectar método de envío
                 String shippingName = obtenerNombreEnvio(order);
-                String tipoEnvio = esPickup(order) ? "RETIRO" : (shippingName != null ? shippingName : "ENVÍO");
+                String tipoEnvio = esPickup(order) ? "RETIRO" : (shippingName != null ? limpiarNombreEnvio(shippingName) : "ENVÍO");
+
+                totalOrdenes++;
 
                 // Productos -> PedidoTN (uno por producto)
                 JsonNode products = order.path("products");
@@ -251,8 +258,8 @@ public class TiendaNubeApi {
             nextUrl = parseLinkNext(response);
         }
 
-        AppLogger.info("PEDIDOS NUBE (" + label + ") - Pedidos: " + pedidos.size() + " | Etiquetas LLEGA HOY: " + etiquetas.size());
-        return new TiendaNubeOrderResult(pedidos, etiquetas);
+        AppLogger.info("PEDIDOS NUBE (" + label + ") - Órdenes: " + totalOrdenes + " | Etiquetas LLEGA HOY: " + etiquetas.size());
+        return new TiendaNubeOrderResult(pedidos, etiquetas, totalOrdenes);
     }
 
     private static String buildLocalidad(JsonNode shippingAddress) {
@@ -288,6 +295,15 @@ public class TiendaNubeApi {
         }
 
         return null;
+    }
+
+    private static String limpiarNombreEnvio(String name) {
+        // Quitar detalle entre paréntesis: "CABA - LLEGA HOY  (Lunes a Viernes...)" -> "CABA - LLEGA HOY"
+        int parenIdx = name.indexOf('(');
+        if (parenIdx > 0) {
+            name = name.substring(0, parenIdx).trim();
+        }
+        return name;
     }
 
     private static String buildDomicilio(JsonNode shippingAddress) {

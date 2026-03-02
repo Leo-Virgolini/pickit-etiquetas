@@ -36,7 +36,7 @@
                     <VBox spacing="10" styleClass="tab-pickit-content" style="-fx-padding: 15;">
                         <!-- Radio SLA -->
                         <HBox spacing="15" alignment="CENTER_LEFT">
-                            <Label text="Despacho:" style="-fx-font-weight: bold;"/>
+                            <Label text="Despacho ML:" style="-fx-font-weight: bold;"/>
                             <RadioButton fx:id="radioPickitSlaHoy" text="&#x1F4C5; Hasta hoy" selected="true"/>
                             <RadioButton fx:id="radioPickitSlaTodos" text="&#x1F4C6; Sin l&#xED;mite"/>
                         </HBox>
@@ -76,7 +76,7 @@
                 </Tab>
 
                 <!-- ══ Tab Etiquetas ══ -->
-                <Tab text="&#x1F4CB; Etiquetas" closable="false" styleClass="tab, tab-etiquetas">
+                <Tab text="&#x1F4CB; Etiquetas ML" closable="false" styleClass="tab, tab-etiquetas">
                     <VBox VBox.vgrow="ALWAYS">
                         <TabPane fx:id="etiquetasSubTabPane" VBox.vgrow="NEVER">
                             <!-- Tab API MercadoLibre -->
@@ -90,7 +90,7 @@
                                                 styleClass="action-button"/>
                                         <Label text="Estado impresi&#xF3;n:"/>
                                         <ComboBox fx:id="estadoFilterCombo" prefWidth="210"/>
-                                        <Label text="Despacho:"/>
+                                        <Label text="Despacho ML:"/>
                                         <ComboBox fx:id="despachoFilterCombo" prefWidth="200"/>
                                     </HBox>
                                 </VBox>

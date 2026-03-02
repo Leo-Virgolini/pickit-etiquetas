@@ -15,24 +15,28 @@ Dos selectores de archivo persistentes (guardados en `Preferences`) disponibles 
 
 Genera un Excel de picking para el deposito con todos los pedidos pendientes de todos los canales.
 
-- **Fuentes de datos**: MercadoLibre (ordenes `ready_to_print` y `seller_agreement`), Tienda Nube (KT HOGAR y KT GASTRO), y productos manuales.
-- **Filtro SLA**: "Hasta hoy" (solo ordenes con despacho para hoy o antes) o "Sin limite" (todas las pendientes).
-- **Productos manuales**: agregar SKU + cantidad manualmente o importar desde Excel.
+- **Fuentes de datos**:
+  - **ML ready_to_print**: `/orders/search` con `shipping.status=ready_to_ship`, `shipping.substatus=ready_to_print`. Excluye ordenes con tag `delivered`.
+  - **ML acuerdo (seller_agreement)**: `/orders/search` con `tags=no_shipping`, `order.status=paid`, ultimos 7 dias. Excluye ordenes entregadas, cumplidas (`fulfilled`) y con notas (`/orders/{id}/notes`).
+  - **TN HOGAR / TN GASTRO**: `/v1/{storeId}/orders` con `payment_status=paid`, `shipping_status=unpacked`, `status=open`. Excluye ordenes pickup con nota del vendedor.
+  - **Productos manuales**: ingreso directo de SKU + cantidad.
+- **Filtro Despacho ML**: "Hasta hoy" (solo ordenes ML con SLA para hoy o antes) o "Sin limite" (todas las pendientes). Aplica solo a MercadoLibre; las ventas de Tienda Nube se incluyen siempre.
 - **Expansion de combos**: los SKU compuestos se expanden automaticamente en sus componentes con cantidades multiplicadas.
 - **Consulta de stock**: busca descripcion, proveedor, sector y stock actual en DUX ERP.
 - **Excel generado** (`Pickits y Carros/PICKIT_*.xlsx`) con 3 hojas:
   - **PICKIT**: lista ordenada por sector con columnas SKU, CANT, DESCRIPCION, PROVEEDOR, SECTOR, STOCK. Resaltado: coral=SKU invalido, amarillo=datos faltantes, bold=cantidad>1, naranja=stock insuficiente.
   - **CARROS**: ordenes con 3+ SKUs distintos agrupadas con letra (A, B, C...) para identificar carros fisicos.
   - **SLA**: listado de ordenes ML con fecha/hora de despacho esperado.
+- **Resumen en log**: al finalizar muestra desglose por seccion (ML ready_to_print, ML acuerdo, KT HOGAR, KT GASTRO, Manuales) con conteo de ordenes y productos, SKUs OK vs problemas.
 
-### Etiquetas
+### Etiquetas ML
 
 Dos sub-pestanas para obtener etiquetas ZPL, procesarlas y enviarlas a la impresora Zebra.
 
 #### API MercadoLibre
 
-1. **Obtener ordenes**: busca ordenes ME2 con estado `ready_to_ship`, con filtros por estado (pendientes/impresas/todas) y despacho (solo hoy/todas). Muestra tabla con columnas: Orden, Zona, SKU, Producto, Cantidad, Estado, Despacho.
-2. **Descargar etiquetas**: descarga ZPL de las ordenes seleccionadas via API de ML (en lotes de 50). Nota: ML cambia automaticamente el substatus de `ready_to_print` a `printed` al descargar.
+1. **Obtener ordenes**: `/orders/search` con `shipping.status=ready_to_ship` y filtros por substatus (pendientes: `ready_to_print` / impresas: `printed,ready_for_dropoff,ready_for_pickup` / todas) y despacho ML (solo hoy/todas). Muestra tabla con columnas: Orden, Zona, SKU, Producto, Cantidad, Estado, Despacho.
+2. **Descargar etiquetas**: `/shipment_labels?shipment_ids={ids}&response_type=zpl2` en lotes de 50. Nota: ML cambia automaticamente el substatus de `ready_to_print` a `printed` al descargar.
 3. **Procesamiento automatico**: parseo ZPL, asignacion de zona, ordenamiento e inyeccion de headers.
 
 #### Archivo Local
@@ -57,24 +61,28 @@ Dos sub-pestanas para obtener etiquetas ZPL, procesarlas y enviarlas a la impres
 
 Genera un Excel con tarjetas recortables de todos los pedidos pendientes, listas para pegar en los paquetes.
 
-- **Fuentes**: MercadoLibre (retiro, ultimos 7 dias) y Tienda Nube (KT HOGAR + KT GASTRO) en paralelo.
+- **Fuentes**:
+  - **ML retiro**: `/orders/search` con `tags=no_shipping`, `order.status=paid`, ultimos 7 dias. Excluye ordenes entregadas, cumplidas (`fulfilled`) y con notas. Obtiene nickname del comprador via `/users/{buyerId}` en paralelo (la API de ordenes ya no devuelve nombre/apellido).
+  - **TN HOGAR / TN GASTRO**: `/v1/{storeId}/orders` con `payment_status=paid`, `shipping_status=unpacked`, `status=open`. Excluye ordenes pickup con nota del vendedor. Genera etiquetas LLEGA HOY para envios que contengan "LLEGA HOY" en el nombre (excepto Zippin).
 - **Excel generado** (`Pedidos/PEDIDOS_*.xlsx`) con hasta 3 hojas:
 
 #### ML PEDIDOS RETIRO (violeta)
 - Tarjetas recortables con borde grueso, 2 columnas por pagina.
-- Cada tarjeta: N de venta (grande), fecha, nombre+usuario, tabla de productos (SKU, CANT, DETALLE).
+- Cada tarjeta: N de venta (grande), fecha, nickname del comprador, tabla de productos (SKU, CANT, DETALLE).
 - Productos con cantidad >1 resaltados en amarillo.
 - Altura dinamica: la tarjeta crece segun la cantidad de productos.
 
 #### TN PEDIDOS (verde)
 - Mismo layout de tarjetas recortables.
-- Badge de tienda (KT HOGAR / KT GASTRO) con tipo de envio (RETIRO, LLEGA HOY, etc.).
+- Badge de tienda (KT HOGAR / KT GASTRO) con tipo de envio simplificado (RETIRO, CABA - LLEGA HOY, etc.; se omite el detalle entre parentesis).
 
 #### TN ETIQUETAS (naranja)
 - Etiquetas de envio para pedidos "LLEGA HOY" (no Zippin), 10 por pagina.
 - Cada etiqueta: nombre grande, domicilio, localidad, CP, telefono, observaciones.
 
 Todas las hojas: A4 portrait, margenes estrechos, page breaks inteligentes basados en altura, numeracion de pagina.
+
+- **Resumen en log**: al finalizar muestra desglose por seccion (ML retiro, KT HOGAR, KT GASTRO, etiquetas LLEGA HOY) con conteo de ordenes.
 
 ## Integraciones
 

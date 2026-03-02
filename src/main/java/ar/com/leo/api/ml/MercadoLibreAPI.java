@@ -1020,6 +1020,7 @@ public class MercadoLibreAPI {
 
         List<PedidoML> pedidos = new ArrayList<>();
         Set<Long> orderIdsSeen = new HashSet<>();
+        Set<Long> buyerIds = new LinkedHashSet<>();
         int offset = 0;
         final int limit = 50;
         boolean hasMore = true;
@@ -1084,11 +1085,8 @@ public class MercadoLibreAPI {
                 }
 
                 // Buyer info
-                JsonNode buyer = order.path("buyer");
-                String usuario = buyer.path("nickname").asString("");
-                String firstName = buyer.path("first_name").asString("");
-                String lastName = buyer.path("last_name").asString("");
-                String nombreApellido = (firstName + " " + lastName).trim();
+                long buyerId = order.path("buyer").path("id").asLong(0);
+                if (buyerId > 0) buyerIds.add(buyerId);
 
                 // Items
                 JsonNode orderItems = order.path("order_items");
@@ -1101,7 +1099,7 @@ public class MercadoLibreAPI {
                     String detalle = item.path("title").asString("");
                     double quantity = orderItem.path("quantity").asDouble(0);
 
-                    pedidos.add(new PedidoML(orderId, fecha, usuario, nombreApellido, sku, quantity, detalle));
+                    pedidos.add(new PedidoML(orderId, fecha, "", "", sku, quantity, detalle, buyerId));
                 }
             }
 
@@ -1113,7 +1111,58 @@ public class MercadoLibreAPI {
         }
 
         AppLogger.info("PEDIDOS ML - Pedidos retiro: " + pedidos.size() + " (omitidas con nota: " + omitidas + ")");
+
+        // Obtener nicknames de buyers en paralelo
+        if (!buyerIds.isEmpty()) {
+            AppLogger.info("PEDIDOS ML - Obteniendo datos de " + buyerIds.size() + " compradores...");
+            Map<Long, String> buyerNicknames = obtenerBuyerNicknames(new ArrayList<>(buyerIds));
+
+            for (int i = 0; i < pedidos.size(); i++) {
+                PedidoML p = pedidos.get(i);
+                String nickname = buyerNicknames.getOrDefault(p.buyerId(), "");
+                if (!nickname.isEmpty()) {
+                    pedidos.set(i, new PedidoML(p.orderId(), p.fecha(), nickname, "", p.sku(), p.cantidad(), p.detalle(), p.buyerId()));
+                }
+            }
+        }
+
         return pedidos;
+    }
+
+    private static Map<Long, String> obtenerBuyerNicknames(List<Long> buyerIds) {
+        Map<Long, String> nicknameMap = new LinkedHashMap<>();
+        List<CompletableFuture<Void>> futures = new ArrayList<>();
+
+        for (Long buyerId : buyerIds) {
+            CompletableFuture<Void> future = CompletableFuture.runAsync(() -> {
+                verificarTokens();
+                String url = "https://api.mercadolibre.com/users/" + buyerId;
+                Supplier<HttpRequest> req = () -> HttpRequest.newBuilder()
+                        .uri(URI.create(url))
+                        .header("Authorization", "Bearer " + tokens.accessToken)
+                        .GET()
+                        .build();
+
+                HttpResponse<String> response = retryHandler.sendWithRetry(req);
+                if (response != null && response.statusCode() == 200) {
+                    try {
+                        JsonNode root = mapper.readTree(response.body());
+                        String nickname = root.path("nickname").asString("");
+                        if (!nickname.isEmpty()) {
+                            synchronized (nicknameMap) {
+                                nicknameMap.put(buyerId, nickname);
+                            }
+                        }
+                    } catch (Exception e) {
+                        AppLogger.warn("ML - Error al leer datos de buyer " + buyerId + ": " + e.getMessage());
+                    }
+                }
+            }, executor);
+            futures.add(future);
+        }
+
+        CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
+        return nicknameMap;
     }
 
     // -----------------------------------------------------------------------------------------------------------------

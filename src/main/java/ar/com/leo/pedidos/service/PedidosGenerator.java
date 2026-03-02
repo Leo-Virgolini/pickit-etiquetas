@@ -47,21 +47,22 @@ public class PedidosGenerator {
         var futureML = executor.submit(() -> {
             AppLogger.info("PEDIDOS - Paso 2: Obteniendo pedidos ML retiro...");
             List<PedidoML> result = MercadoLibreAPI.obtenerPedidosRetiro(userId);
-            AppLogger.info("PEDIDOS - ML retiro: " + result.size() + " items");
+            long ordenes = result.stream().map(PedidoML::orderId).distinct().count();
+            AppLogger.info("PEDIDOS - ML retiro: " + ordenes + " órdenes");
             return result;
         });
 
         var futureTNHogar = executor.submit(() -> {
             AppLogger.info("PEDIDOS - Paso 3: Obteniendo pedidos KT HOGAR (Tienda Nube)...");
             TiendaNubeOrderResult result = TiendaNubeApi.obtenerPedidosCompletosHogar();
-            AppLogger.info("PEDIDOS - KT HOGAR: " + result.pedidos().size() + " pedidos, " + result.etiquetas().size() + " etiquetas");
+            AppLogger.info("PEDIDOS - KT HOGAR: " + result.totalOrdenes() + " órdenes, " + result.etiquetas().size() + " etiquetas");
             return result;
         });
 
         var futureTNGastro = executor.submit(() -> {
             AppLogger.info("PEDIDOS - Paso 4: Obteniendo pedidos KT GASTRO (Tienda Nube)...");
             TiendaNubeOrderResult result = TiendaNubeApi.obtenerPedidosCompletosGastro();
-            AppLogger.info("PEDIDOS - KT GASTRO: " + result.pedidos().size() + " pedidos, " + result.etiquetas().size() + " etiquetas");
+            AppLogger.info("PEDIDOS - KT GASTRO: " + result.totalOrdenes() + " órdenes, " + result.etiquetas().size() + " etiquetas");
             return result;
         });
 
@@ -77,8 +78,10 @@ public class PedidosGenerator {
         List<EtiquetaTN> etiquetasTN = new ArrayList<>(tnHogar.etiquetas());
         etiquetasTN.addAll(tnGastro.etiquetas());
 
-        AppLogger.info(String.format("PEDIDOS - Totales: ML retiro=%d | TN pedidos=%d | TN etiquetas=%d",
-                pedidosML.size(), pedidosTN.size(), etiquetasTN.size()));
+        int totalOrdenesTN = tnHogar.totalOrdenes() + tnGastro.totalOrdenes();
+        long ordenesMLRetiro = pedidosML.stream().map(PedidoML::orderId).distinct().count();
+        AppLogger.info(String.format("PEDIDOS - Totales: ML retiro=%d | TN órdenes=%d | TN etiquetas=%d",
+                ordenesMLRetiro, totalOrdenesTN, etiquetasTN.size()));
 
         if (pedidosML.isEmpty() && pedidosTN.isEmpty() && etiquetasTN.isEmpty()) {
             AppLogger.warn("PEDIDOS - No se encontraron pedidos para procesar.");
@@ -90,6 +93,12 @@ public class PedidosGenerator {
         PedidosResult result = new PedidosResult(pedidosML, pedidosTN, etiquetasTN);
         File archivo = PedidosExcelWriter.generar(result);
 
+        AppLogger.success("PEDIDOS - ========== RESUMEN ==========");
+        AppLogger.success("PEDIDOS -   ML retiro: " + ordenesMLRetiro + " órdenes");
+        AppLogger.success("PEDIDOS -   KT HOGAR: " + tnHogar.totalOrdenes() + " órdenes");
+        AppLogger.success("PEDIDOS -   KT GASTRO: " + tnGastro.totalOrdenes() + " órdenes");
+        AppLogger.success("PEDIDOS -   Etiquetas LLEGA HOY: " + etiquetasTN.size());
+        AppLogger.success("PEDIDOS - ==============================");
         AppLogger.success("PEDIDOS - Proceso completado. Archivo: " + archivo.getAbsolutePath());
         return archivo;
     }

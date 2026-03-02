@@ -149,7 +149,7 @@ public class PickitExcelWriter {
             String fechaHora = ahora.format(DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm"));
             for (int i = 0; i < HEADERS.length; i++) {
                 Cell cell = titleRow.createCell(i);
-                if (i == 0) cell.setCellValue("PICKIT KT - " + fechaHora + " | Despacho: " + (soloHoy ? "Hoy" : "Sin límite"));
+                if (i == 0) cell.setCellValue("PICKIT KT - " + fechaHora + " | Despacho ML: " + (soloHoy ? "Hoy" : "Sin límite"));
                 cell.setCellStyle(titleStyle);
             }
             sheet.addMergedRegion(new CellRangeAddress(0, 0, 0, HEADERS.length - 1));
@@ -381,7 +381,7 @@ public class PickitExcelWriter {
         String fechaHora = ahora.format(DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm"));
         for (int i = 0; i < CARROS_HEADERS.length; i++) {
             Cell cell = titleRow.createCell(i);
-            if (i == 0) cell.setCellValue("CARROS KT - " + fechaHora + " | Despacho: " + (soloHoy ? "Hoy" : "Sin límite"));
+            if (i == 0) cell.setCellValue("CARROS KT - " + fechaHora + " | Despacho ML: " + (soloHoy ? "Hoy" : "Sin límite"));
             cell.setCellStyle(titleStyle);
         }
         sheet.addMergedRegion(new CellRangeAddress(0, 0, 0, CARROS_HEADERS.length - 1));
