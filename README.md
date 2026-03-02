@@ -62,13 +62,13 @@ Dos sub-pestanas para obtener etiquetas ZPL, procesarlas y enviarlas a la impres
 Genera un Excel con tarjetas recortables de todos los pedidos pendientes, listas para pegar en los paquetes.
 
 - **Fuentes**:
-  - **ML retiro**: `/orders/search` con `tags=no_shipping`, `order.status=paid`, ultimos 7 dias. Excluye ordenes entregadas, cumplidas (`fulfilled`) y con notas. Obtiene nickname del comprador via `/users/{buyerId}` en paralelo (la API de ordenes ya no devuelve nombre/apellido).
+  - **ML retiro**: `/orders/search` con `tags=no_shipping`, `order.status=paid`, ultimos 7 dias. Excluye ordenes entregadas, cumplidas (`fulfilled`) y con notas. Obtiene nombre, apellido y nickname del comprador via GET `/orders/{orderId}` en paralelo (el search solo devuelve `buyer.id` y `nickname`, el GET directo agrega `first_name` y `last_name`).
   - **TN HOGAR / TN GASTRO**: `/v1/{storeId}/orders` con `payment_status=paid`, `shipping_status=unpacked`, `status=open`. Excluye ordenes pickup con nota del vendedor. Genera etiquetas LLEGA HOY para envios que contengan "LLEGA HOY" en el nombre (excepto Zippin).
 - **Excel generado** (`Pedidos/PEDIDOS_*.xlsx`) con hasta 3 hojas:
 
 #### ML PEDIDOS RETIRO (violeta)
 - Tarjetas recortables con borde grueso, 2 columnas por pagina.
-- Cada tarjeta: N de venta (grande), fecha, nickname del comprador, tabla de productos (SKU, CANT, DETALLE).
+- Cada tarjeta: N de venta (grande), fecha, nombre y apellido del comprador con nickname entre parentesis, tabla de productos (SKU, CANT, DETALLE).
 - Productos con cantidad >1 resaltados en amarillo.
 - Altura dinamica: la tarjeta crece segun la cantidad de productos.
 

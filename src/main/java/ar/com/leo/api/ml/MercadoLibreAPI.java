@@ -6,10 +6,9 @@ import ar.com.leo.api.ml.model.MLCredentials;
 import ar.com.leo.api.ml.model.OrdenML;
 import ar.com.leo.api.ml.model.TokensML;
 import ar.com.leo.api.ml.model.Venta;
-import ar.com.leo.pedidos.model.PedidoML;
 import ar.com.leo.etiquetas.model.ZplLabel;
 import ar.com.leo.etiquetas.parser.ZplParser;
-import static ar.com.leo.etiquetas.parser.ZplParser.normalizeSku;
+import ar.com.leo.pedidos.model.PedidoML;
 import javafx.application.Platform;
 import javafx.scene.control.TextInputDialog;
 import tools.jackson.databind.JsonNode;
@@ -37,6 +36,7 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
 import static ar.com.leo.api.HttpRetryHandler.BASE_SECRET_DIR;
+import static ar.com.leo.etiquetas.parser.ZplParser.normalizeSku;
 
 public class MercadoLibreAPI {
 
@@ -62,6 +62,7 @@ public class MercadoLibreAPI {
     public static HttpRetryHandler getRetryHandler() {
         return retryHandler;
     }
+
     private static final ExecutorService executor = Executors.newFixedThreadPool(25);
     private static final ZplParser zplParser = new ZplParser();
     private static MLCredentials mlCredentials;
@@ -113,6 +114,7 @@ public class MercadoLibreAPI {
      * Obtiene las ventas de ML con etiqueta lista para imprimir.
      * Hace búsquedas separadas por grupo de substatus para poder asignar el substatus
      * a cada orden sin necesidad de consultar /shipments/{id} individualmente.
+     *
      * @param incluirImpresas si es true, incluye también las que ya fueron impresas/despachadas por el vendedor
      */
     public static MLOrderResult obtenerVentasReadyToPrint(String userId, boolean incluirImpresas) {
@@ -277,6 +279,7 @@ public class MercadoLibreAPI {
      * de {@code ready_to_print} a {@code printed} al descargar las etiquetas vía
      * {@code GET /shipment_labels}. Este es un efecto colateral del endpoint de ML,
      * no una acción explícita de esta aplicación.</p>
+     *
      * @param soloSlaHoy si es true, filtra ready_to_print con SLA &lt;= hoy y printed con SLA &gt;= hoy
      */
     public static List<ZplLabel> descargarEtiquetasZpl(String userId, boolean incluirImpresas, boolean soloSlaHoy) {
@@ -512,7 +515,8 @@ public class MercadoLibreAPI {
         return sb.toString();
     }
 
-    private record SkuInfo(String sku, String title, int quantity, String orderIds) {}
+    private record SkuInfo(String sku, String title, int quantity, String orderIds) {
+    }
 
     // -----------------------------------------------------------------------------------------------------------------
     // VENTAS SELLER AGREEMENT (sin envío)
@@ -1020,7 +1024,6 @@ public class MercadoLibreAPI {
 
         List<PedidoML> pedidos = new ArrayList<>();
         Set<Long> orderIdsSeen = new HashSet<>();
-        Set<Long> buyerIds = new LinkedHashSet<>();
         int offset = 0;
         final int limit = 50;
         boolean hasMore = true;
@@ -1064,7 +1067,10 @@ public class MercadoLibreAPI {
                 if (tagsNode.isArray()) {
                     boolean esEntregada = false;
                     for (JsonNode tag : tagsNode) {
-                        if ("delivered".equals(tag.asString())) { esEntregada = true; break; }
+                        if ("delivered".equals(tag.asString())) {
+                            esEntregada = true;
+                            break;
+                        }
                     }
                     if (esEntregada) continue;
                 }
@@ -1081,12 +1087,14 @@ public class MercadoLibreAPI {
                 String dateCreated = order.path("date_created").asString("");
                 OffsetDateTime fecha = null;
                 if (!dateCreated.isBlank()) {
-                    try { fecha = OffsetDateTime.parse(dateCreated); } catch (Exception ignored) {}
+                    try {
+                        fecha = OffsetDateTime.parse(dateCreated);
+                    } catch (Exception ignored) {
+                    }
                 }
 
-                // Buyer info
+                // Buyer ID
                 long buyerId = order.path("buyer").path("id").asLong(0);
-                if (buyerId > 0) buyerIds.add(buyerId);
 
                 // Items
                 JsonNode orderItems = order.path("order_items");
@@ -1112,16 +1120,19 @@ public class MercadoLibreAPI {
 
         AppLogger.info("PEDIDOS ML - Pedidos retiro: " + pedidos.size() + " (omitidas con nota: " + omitidas + ")");
 
-        // Obtener nicknames de buyers en paralelo
-        if (!buyerIds.isEmpty()) {
-            AppLogger.info("PEDIDOS ML - Obteniendo datos de " + buyerIds.size() + " compradores...");
-            Map<Long, String> buyerNicknames = obtenerBuyerNicknames(new ArrayList<>(buyerIds));
+        // Obtener datos de compradores via GET /orders/{id} en paralelo
+        Set<Long> orderIdsUnicos = new LinkedHashSet<>();
+        for (PedidoML p : pedidos) orderIdsUnicos.add(p.orderId());
+
+        if (!orderIdsUnicos.isEmpty()) {
+            AppLogger.info("PEDIDOS ML - Obteniendo datos de compradores (" + orderIdsUnicos.size() + " órdenes)...");
+            Map<Long, String[]> buyerMap = obtenerBuyersPorOrden(new ArrayList<>(orderIdsUnicos));
 
             for (int i = 0; i < pedidos.size(); i++) {
                 PedidoML p = pedidos.get(i);
-                String nickname = buyerNicknames.getOrDefault(p.buyerId(), "");
-                if (!nickname.isEmpty()) {
-                    pedidos.set(i, new PedidoML(p.orderId(), p.fecha(), nickname, "", p.sku(), p.cantidad(), p.detalle(), p.buyerId()));
+                String[] info = buyerMap.get(p.orderId());
+                if (info != null) {
+                    pedidos.set(i, new PedidoML(p.orderId(), p.fecha(), info[0], info[1], p.sku(), p.cantidad(), p.detalle(), p.buyerId()));
                 }
             }
         }
@@ -1129,14 +1140,14 @@ public class MercadoLibreAPI {
         return pedidos;
     }
 
-    private static Map<Long, String> obtenerBuyerNicknames(List<Long> buyerIds) {
-        Map<Long, String> nicknameMap = new LinkedHashMap<>();
+    private static Map<Long, String[]> obtenerBuyersPorOrden(List<Long> orderIds) {
+        Map<Long, String[]> buyerMap = new LinkedHashMap<>();
         List<CompletableFuture<Void>> futures = new ArrayList<>();
 
-        for (Long buyerId : buyerIds) {
+        for (Long orderId : orderIds) {
             CompletableFuture<Void> future = CompletableFuture.runAsync(() -> {
                 verificarTokens();
-                String url = "https://api.mercadolibre.com/users/" + buyerId;
+                String url = "https://api.mercadolibre.com/orders/" + orderId;
                 Supplier<HttpRequest> req = () -> HttpRequest.newBuilder()
                         .uri(URI.create(url))
                         .header("Authorization", "Bearer " + tokens.accessToken)
@@ -1146,15 +1157,16 @@ public class MercadoLibreAPI {
                 HttpResponse<String> response = retryHandler.sendWithRetry(req);
                 if (response != null && response.statusCode() == 200) {
                     try {
-                        JsonNode root = mapper.readTree(response.body());
-                        String nickname = root.path("nickname").asString("");
-                        if (!nickname.isEmpty()) {
-                            synchronized (nicknameMap) {
-                                nicknameMap.put(buyerId, nickname);
-                            }
+                        JsonNode buyer = mapper.readTree(response.body()).path("buyer");
+                        String nickname = buyer.path("nickname").asString("");
+                        String firstName = buyer.path("first_name").asString("");
+                        String lastName = buyer.path("last_name").asString("");
+                        String nombreApellido = (firstName + " " + lastName).trim();
+                        synchronized (buyerMap) {
+                            buyerMap.put(orderId, new String[]{nickname, nombreApellido});
                         }
                     } catch (Exception e) {
-                        AppLogger.warn("ML - Error al leer datos de buyer " + buyerId + ": " + e.getMessage());
+                        AppLogger.warn("ML - Error al leer buyer de orden " + orderId + ": " + e.getMessage());
                     }
                 }
             }, executor);
@@ -1162,7 +1174,7 @@ public class MercadoLibreAPI {
         }
 
         CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
-        return nicknameMap;
+        return buyerMap;
     }
 
     // -----------------------------------------------------------------------------------------------------------------
