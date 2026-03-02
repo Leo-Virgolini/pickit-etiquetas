@@ -1102,8 +1102,10 @@ public class MercadoLibreAPI {
 
                 for (JsonNode orderItem : orderItems) {
                     JsonNode item = orderItem.path("item");
-                    String sku = item.path("seller_sku").asString("");
-                    if (sku.isBlank()) sku = item.path("seller_custom_field").asString("");
+                    String rawSku = item.path("seller_sku").asString("");
+                    if (rawSku.isBlank()) rawSku = item.path("seller_custom_field").asString("");
+                    String sku = rawSku.isBlank() ? "" : normalizeSku(rawSku);
+                    if (sku == null) sku = "";
                     String detalle = item.path("title").asString("");
                     double quantity = orderItem.path("quantity").asDouble(0);
 

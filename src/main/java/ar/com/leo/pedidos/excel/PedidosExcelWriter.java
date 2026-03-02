@@ -102,12 +102,13 @@ public class PedidosExcelWriter {
             fecha.setFillPattern(FillPatternType.SOLID_FOREGROUND);
             setBordersOn(fecha, BorderStyle.THIN);
 
-            // Nombre (14pt bold)
+            // Nombre (14pt bold, shrink to fit)
             nombre = wb.createCellStyle();
             nombre.setFont(createXFont(wb, 14, true, false));
             nombre.setAlignment(HorizontalAlignment.LEFT);
             nombre.setVerticalAlignment(VerticalAlignment.CENTER);
             nombre.setIndention((short) 1);
+            nombre.setShrinkToFit(true);
             setBordersOn(nombre, BorderStyle.THIN);
 
             // Tienda badge (12pt bold, fondo oscuro, texto blanco)
