@@ -40,6 +40,18 @@ public class PickitGenerator {
 
     public static File generarPickit(File stockExcel, File combosExcel, List<ProductoManual> productosManuales,
                                      boolean soloHoy, boolean soloTurbo, boolean useML, boolean useNube, boolean useManual) throws Exception {
+        return generarPickit(stockExcel, combosExcel, productosManuales, soloHoy, soloTurbo, useML, useNube, useManual, null);
+    }
+
+    /**
+     * Variante con {@code outputDir} configurable. Si es {@code null}, el Excel
+     * resultante va a la carpeta {@code Pickits y Carros} adyacente al jar
+     * (comportamiento default de la GUI). Si se pasa un dir, el archivo se
+     * escribe ahí — pensado para integraciones CLI.
+     */
+    public static File generarPickit(File stockExcel, File combosExcel, List<ProductoManual> productosManuales,
+                                     boolean soloHoy, boolean soloTurbo, boolean useML, boolean useNube, boolean useManual,
+                                     File outputDir) throws Exception {
 
         // Si soloTurbo, forzar solo ML (turbo es exclusivo de MercadoLibre)
         if (soloTurbo) {
@@ -436,7 +448,7 @@ public class PickitGenerator {
 
         // Paso 12: Generar Excel
         AppLogger.info("PICKIT - Paso 12: Generando Excel Pickit...");
-        File resultado = PickitExcelWriter.generar(pickitItems, carrosOrdenes, slaOrdenes, soloHoy);
+        File resultado = PickitExcelWriter.generar(pickitItems, carrosOrdenes, slaOrdenes, soloHoy, outputDir);
 
         int skusOk = skuCantidad.size() - skusNoEncontrados - skusStockInsuficiente - skusConError;
 

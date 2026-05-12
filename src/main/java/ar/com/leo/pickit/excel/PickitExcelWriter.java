@@ -32,7 +32,21 @@ public class PickitExcelWriter {
     private static final String[] HEADERS = {"SKU", "CANT", "DESCRIPCION", "PROVEEDOR", "SECTOR", "STOCK"};
 
     public static File generar(List<PickitItem> items, List<CarrosOrden> carrosOrdenes, List<SlaOrden> slaOrdenes, boolean soloHoy) throws Exception {
-        Path excelDir = Paths.get(Util.getJarFolder(), "Pickits y Carros");
+        return generar(items, carrosOrdenes, slaOrdenes, soloHoy, null);
+    }
+
+    /**
+     * Variante con destino configurable: si {@code outputDir} es null, usa la
+     * carpeta {@code Pickits y Carros} adyacente al jar (comportamiento default
+     * de la GUI). Si se pasa un dir, el archivo se escribe ahí.
+     *
+     * <p>Útil para integraciones CLI (showroom-backend) donde el output debe ir
+     * a una carpeta montada vía volumen Docker, no a la carpeta del jar.
+     */
+    public static File generar(List<PickitItem> items, List<CarrosOrden> carrosOrdenes, List<SlaOrden> slaOrdenes, boolean soloHoy, File outputDir) throws Exception {
+        Path excelDir = outputDir != null
+                ? outputDir.toPath()
+                : Paths.get(Util.getJarFolder(), "Pickits y Carros");
         Files.createDirectories(excelDir);
 
         LocalDateTime ahora = LocalDateTime.now();
