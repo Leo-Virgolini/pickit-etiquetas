@@ -61,7 +61,8 @@ public final class PickitCli {
                     false,  // useML
                     false,  // useNube
                     true,   // useManual
-                    outputDir);
+                    outputDir,
+                    true);  // modoShowroom — solo hoja PICKIT, header "SHOWROOM"
 
             // El caller (showroom-backend) lee el path desde stdout.
             System.out.println(resultado.getAbsolutePath());

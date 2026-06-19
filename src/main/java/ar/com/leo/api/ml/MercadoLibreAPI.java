@@ -34,6 +34,8 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
@@ -67,6 +69,11 @@ public class MercadoLibreAPI {
 
     private static final ExecutorService executor = Executors.newFixedThreadPool(25);
     private static final ZplParser zplParser = new ZplParser();
+
+    // Patrones para identificar a qué envío pertenece cada etiqueta mirando su contenido ZPL,
+    // en vez de asumir el orden de la respuesta de ML (que no está garantizado).
+    private static final Pattern ZPL_ENVIO_PATTERN = Pattern.compile("Envio:\\s*(\\d+)");
+    private static final Pattern ZPL_QR_ID_PATTERN = Pattern.compile("\"id\"\\s*:\\s*\"(\\d+)\"");
     private static MLCredentials mlCredentials;
     private static volatile TokensML tokens;
 
@@ -467,18 +474,30 @@ public class MercadoLibreAPI {
         // Parsear las etiquetas
         List<ZplLabel> parsed = zplParser.parse(zplContent);
 
-        // Enriquecer con datos de las órdenes (SKU más confiable desde API)
+        // Enriquecer con datos de las órdenes (SKU más confiable desde API).
+        // IMPORTANTE: alinear cada etiqueta con su envío por CONTENIDO (el id dentro del ZPL),
+        // NO por posición. ML no garantiza que el orden de las etiquetas devueltas coincida con
+        // el de shipment_ids ni que haya exactamente una por envío; emparejar por posición
+        // desalinea SKU/zona/COD.EXT cuando se imprimen varias etiquetas.
         List<ZplLabel> enriched = new ArrayList<>();
-        Iterator<Long> idIterator = shipmentIds.iterator();
-        for (ZplLabel label : parsed) {
+        for (int i = 0; i < parsed.size(); i++) {
+            ZplLabel label = parsed.get(i);
+
+            Long shipId = identificarShipment(label.rawZpl(), shipmentIds);
+            if (shipId == null) {
+                // Fallback al comportamiento anterior (por posición) + aviso: puede cruzar datos.
+                shipId = i < shipmentIds.size() ? shipmentIds.get(i) : null;
+                AppLogger.warn("ML - No se pudo identificar el envío de una etiqueta por su contenido; "
+                        + "alineando por posición (shipId=" + shipId + "). Si las etiquetas salen con "
+                        + "SKU/COD.EXT cruzados, revisá el formato de etiqueta de ML.");
+            }
+
             String sku = label.sku();
             String desc = label.productDescription();
-
             int qty = 1;
             boolean turbo = false;
             String orderIds = "";
-            if (idIterator.hasNext()) {
-                long shipId = idIterator.next();
+            if (shipId != null) {
                 SkuInfo info = skuMap.get(shipId);
                 if (info != null) {
                     if (info.sku != null && !info.sku.isBlank()) {
@@ -497,6 +516,45 @@ public class MercadoLibreAPI {
         }
 
         return enriched;
+    }
+
+    /**
+     * Identifica a qué shipmentId pertenece una etiqueta ZPL mirando su contenido,
+     * para no depender del orden en que ML devuelve las etiquetas.
+     * <p>Estrategia: 1) campo "Envio: &lt;id&gt;" (coincidencia exacta); 2) el {@code id} del
+     * QR, que es el shipmentId seguido de dígitos de seguridad (coincidencia por prefijo).
+     *
+     * @param candidatos shipmentIds esperados en este batch.
+     * @return el shipmentId identificado, o {@code null} si no se puede determinar.
+     */
+    private static Long identificarShipment(String rawZpl, List<Long> candidatos) {
+        // 1) Campo "Envio: <id>"
+        Matcher env = ZPL_ENVIO_PATTERN.matcher(rawZpl);
+        if (env.find()) {
+            try {
+                long id = Long.parseLong(env.group(1));
+                if (candidatos.contains(id)) return id;
+            } catch (NumberFormatException ignored) {
+                // id no parseable: probar con el QR
+            }
+        }
+        // 2) id del QR = shipmentId + dígitos de seguridad → match por prefijo.
+        // Si varios candidatos son prefijo (caso raro con ids de distinta longitud),
+        // gana el más específico (el más largo) para evitar falsos positivos.
+        Matcher qr = ZPL_QR_ID_PATTERN.matcher(rawZpl);
+        if (qr.find()) {
+            String qrId = qr.group(1);
+            Long mejor = null;
+            for (Long c : candidatos) {
+                String s = String.valueOf(c);
+                if (qrId.startsWith(s)
+                        && (mejor == null || s.length() > String.valueOf(mejor).length())) {
+                    mejor = c;
+                }
+            }
+            return mejor;
+        }
+        return null;
     }
 
     private static String extractZplFromZip(byte[] zipData) {

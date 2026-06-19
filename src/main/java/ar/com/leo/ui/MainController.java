@@ -284,7 +284,12 @@ public class MainController {
         selectAllCheck.setSelected(true);
         selectAllCheck.setOnAction(e -> {
             boolean val = selectAllCheck.isSelected();
-            for (OrderTableRow row : orderTable.getItems()) {
+            // Afectar TODAS las filas (no solo las visibles del filtro del buscador),
+            // para ser consistente con el contador y la generación.
+            List<? extends OrderTableRow> todasLasFilas = filteredOrders != null
+                    ? filteredOrders.getSource()
+                    : orderTable.getItems();
+            for (OrderTableRow row : todasLasFilas) {
                 row.setSelected(val);
             }
         });
@@ -893,10 +898,15 @@ public class MainController {
             return;
         }
 
-        // Filtrar solo las órdenes seleccionadas (deduplicar por orderId)
+        // Filtrar solo las órdenes seleccionadas (deduplicar por orderId).
+        // Importante: iterar la lista completa (no orderTable.getItems(), que solo trae
+        // las filas visibles según el buscador) para no perder selecciones ocultas por el filtro.
+        List<? extends OrderTableRow> todasLasFilas = filteredOrders != null
+                ? filteredOrders.getSource()
+                : orderTable.getItems();
         LinkedHashSet<Long> seenOrderIds = new LinkedHashSet<>();
         List<OrdenML> seleccionadas = new ArrayList<>();
-        for (OrderTableRow row : orderTable.getItems()) {
+        for (OrderTableRow row : todasLasFilas) {
             if (row.isSelected()) {
                 for (OrdenML o : row.getOrdenes()) {
                     if (seenOrderIds.add(o.getOrderId())) {
@@ -1463,7 +1473,7 @@ public class MainController {
         final int skuCount = uniqueSkus.size();
 
         Runnable updateStats = () -> {
-            long selected = orderTable.getItems().stream().filter(OrderTableRow::isSelected).count();
+            long selected = rows.stream().filter(OrderTableRow::isSelected).count();
             StringJoiner sj = new StringJoiner("  \u2502  ");
             sj.add("Ordenes: " + ordCount);
             sj.add("Productos: " + prodCount);
@@ -1501,19 +1511,22 @@ public class MainController {
     private static final Pattern UNIT_PATTERN = Pattern.compile(
             "(\\^FO(\\d+),(\\d+)\\^A0N,70,70\\^FB160,1,0,C\\^FD)(\\d+)(\\^FS)");
     private static final Pattern FO_PATTERN = Pattern.compile("\\^FO(\\d+),(\\d+)");
+    private static final Pattern LH_PATTERN = Pattern.compile("\\^LH(\\d+),(\\d+)");
     private static final Pattern FONT_PATTERN = Pattern.compile("\\^A0N,(\\d+),(\\d+)");
     private static final Pattern FB_PATTERN = Pattern.compile("\\^FB(\\d+),(\\d+)");
     private static final Pattern CARROS_SKU_FIELD = Pattern.compile(
             "(\\^FD[^^]*?SKU:\\s*)(\\d+)([^^]*?)(\\^FS)");
 
-    private SortResult injectZplHeaders(SortResult result, ExcelMapping excelMapping) {
-        return injectZplHeaders(result, excelMapping, loadMedidasMap(), new LinkedHashMap<>());
-    }
+    // Anclas de texto que dependen del formato de etiqueta de ML: la inyección de
+    // ZONA se posiciona debajo del campo "Unidad" y la de COD.EXT. debajo del de "SKU:".
+    // Si ML cambia estos textos, la inyección se omite y se registra una advertencia
+    // (en vez de fallar en silencio produciendo etiquetas incompletas).
+    private static final String ANCHOR_UNIDAD = "Unidad";
+    private static final String ANCHOR_SKU = "SKU:";
 
     private SortResult injectZplHeaders(SortResult result, ExcelMapping excelMapping,
                                         Map<String, ar.com.leo.etiquetas.model.MedidaSku> medidas,
                                         Map<String, String> skusPendientesOut) {
-        Map<String, String> skuToZone = excelMapping.skuToZone();
         Map<String, String> skuToExtCode = excelMapping.skuToExternalCode();
         Map<String, ComboProduct> normalizedCombos = loadNormalizedCombos();
         List<SortedLabelGroup> newGroups = new ArrayList<>();
@@ -1578,7 +1591,7 @@ public class MainController {
 
                 // Parsear ^LH original para convertir coordenadas relativas a absolutas
                 int origLhX = 0, origLhY = 0;
-                Matcher lhMatcher = Pattern.compile("\\^LH(\\d+),(\\d+)").matcher(raw);
+                Matcher lhMatcher = LH_PATTERN.matcher(raw);
                 // Buscar el segundo ^LH (el primero es el ^LH0,0 inyectado para #X)
                 if (lhMatcher.find() && lhMatcher.find()) {
                     origLhX = Integer.parseInt(lhMatcher.group(1));
@@ -1586,8 +1599,12 @@ public class MainController {
                 }
 
                 // 1. Inyectar ZONA siempre debajo de "Unidades"
-                int unidadIdx = raw.indexOf("Unidad");
-                if (unidadIdx >= 0) {
+                int unidadIdx = raw.indexOf(ANCHOR_UNIDAD);
+                if (unidadIdx < 0) {
+                    AppLogger.warn("ZPL - No se encontró el ancla '" + ANCHOR_UNIDAD
+                            + "' para inyectar ZONA (sku=" + sku + ", zona=" + zone
+                            + "). ¿Cambió el formato de etiqueta de ML?");
+                } else {
                     int zoneAnchorFsIdx = raw.indexOf("^FS", unidadIdx);
                     int zoneAnchorFoIdx = raw.lastIndexOf("^FO", unidadIdx);
                     if (zoneAnchorFoIdx >= 0 && zoneAnchorFsIdx >= 0) {
@@ -1596,7 +1613,6 @@ public class MainController {
                         Matcher fontMatcher = FONT_PATTERN.matcher(segment);
                         Matcher fbMatcher = FB_PATTERN.matcher(segment);
                         if (foMatcher.find()) {
-                            int x = Integer.parseInt(foMatcher.group(1));
                             int y = Integer.parseInt(foMatcher.group(2));
                             int fontH = fontMatcher.find() ? Integer.parseInt(fontMatcher.group(1)) : 28;
                             int fbLines = fbMatcher.find() ? Integer.parseInt(fbMatcher.group(2)) : 1;
@@ -1615,8 +1631,12 @@ public class MainController {
 
                 // 2. Inyectar COD.EXT. debajo del último SKU (solo para zonas que no son CARROS)
                 if (extCodeText != null) {
-                    int lastSkuIdx = raw.lastIndexOf("SKU:");
-                    if (lastSkuIdx >= 0) {
+                    int lastSkuIdx = raw.lastIndexOf(ANCHOR_SKU);
+                    if (lastSkuIdx < 0) {
+                        AppLogger.warn("ZPL - No se encontró el ancla '" + ANCHOR_SKU
+                                + "' para inyectar COD.EXT. (sku=" + sku + ", zona=" + zone
+                                + "). ¿Cambió el formato de etiqueta de ML?");
+                    } else {
                         int extAnchorFsIdx = raw.indexOf("^FS", lastSkuIdx);
                         int extAnchorFoIdx = raw.lastIndexOf("^FO", lastSkuIdx);
                         if (extAnchorFoIdx >= 0 && extAnchorFsIdx >= 0) {
@@ -1710,39 +1730,6 @@ public class MainController {
         return sb.toString();
     }
 
-    /** Cuenta caracteres renderizados en texto ZPL con ^FH (hex). Secuencias _XX cuentan como parte de un solo carácter UTF-8. */
-    private static int countRenderedChars(String fdText) {
-        int count = 0;
-        int i = 0;
-        while (i < fdText.length()) {
-            if (i + 2 < fdText.length() && fdText.charAt(i) == '_'
-                    && isHexDigit(fdText.charAt(i + 1)) && isHexDigit(fdText.charAt(i + 2))) {
-                // Inicio de secuencia hex UTF-8: _C3_A9 = 1 carácter renderizado
-                int firstByte = Integer.parseInt(fdText.substring(i + 1, i + 3), 16);
-                i += 3; // consumir _XX
-                // Determinar cuántos bytes de continuación esperar según el primer byte UTF-8
-                int extraBytes = 0;
-                if (firstByte >= 0xC0 && firstByte < 0xE0) extraBytes = 1;
-                else if (firstByte >= 0xE0 && firstByte < 0xF0) extraBytes = 2;
-                else if (firstByte >= 0xF0) extraBytes = 3;
-                // Consumir bytes de continuación _XX
-                for (int b = 0; b < extraBytes; b++) {
-                    if (i + 2 < fdText.length() && fdText.charAt(i) == '_'
-                            && isHexDigit(fdText.charAt(i + 1)) && isHexDigit(fdText.charAt(i + 2))) {
-                        i += 3;
-                    } else {
-                        break;
-                    }
-                }
-                count++;
-            } else {
-                count++;
-                i++;
-            }
-        }
-        return count;
-    }
-
     private static boolean isHexDigit(char c) {
         return (c >= '0' && c <= '9') || (c >= 'A' && c <= 'F') || (c >= 'a' && c <= 'f');
     }
@@ -1786,10 +1773,8 @@ public class MainController {
                         }
                         Matcher fbM = FB_PATTERN.matcher(fieldSetup);
                         int fbWidth = 570;
-                        int fbLines = 2;
                         if (fbM.find()) {
                             fbWidth = Integer.parseInt(fbM.group(1));
-                            fbLines = Integer.parseInt(fbM.group(2));
                         }
 
                         // Calcular texto restante (sin " | N u.")

@@ -32,18 +32,27 @@ public class PickitExcelWriter {
     private static final String[] HEADERS = {"SKU", "CANT", "DESCRIPCION", "PROVEEDOR", "SECTOR", "STOCK"};
 
     public static File generar(List<PickitItem> items, List<CarrosOrden> carrosOrdenes, List<SlaOrden> slaOrdenes, boolean soloHoy) throws Exception {
-        return generar(items, carrosOrdenes, slaOrdenes, soloHoy, null);
+        return generar(items, carrosOrdenes, slaOrdenes, soloHoy, null, false);
+    }
+
+    public static File generar(List<PickitItem> items, List<CarrosOrden> carrosOrdenes, List<SlaOrden> slaOrdenes, boolean soloHoy, File outputDir) throws Exception {
+        return generar(items, carrosOrdenes, slaOrdenes, soloHoy, outputDir, false);
     }
 
     /**
-     * Variante con destino configurable: si {@code outputDir} es null, usa la
-     * carpeta {@code Pickits y Carros} adyacente al jar (comportamiento default
-     * de la GUI). Si se pasa un dir, el archivo se escribe ahí.
+     * Variante completa con destino configurable y modo showroom.
      *
-     * <p>Útil para integraciones CLI (showroom-backend) donde el output debe ir
-     * a una carpeta montada vía volumen Docker, no a la carpeta del jar.
+     * <p>{@code outputDir}: si es null, usa la carpeta {@code Pickits y Carros}
+     * adyacente al jar (comportamiento default de la GUI). Si se pasa un dir,
+     * el archivo se escribe ahí — útil para integraciones CLI (showroom-backend)
+     * donde el output debe ir a una carpeta montada vía volumen Docker.
+     *
+     * <p>{@code modoShowroom}: cuando es true (solo lo usa el CLI del showroom),
+     * el header de la hoja PICKIT dice "SHOWROOM" en vez de "Despacho ML: …" y
+     * se omiten las hojas CARROS y SLA. La GUI siempre lo invoca con false para
+     * preservar el comportamiento histórico (PICKIT + CARROS + SLA).
      */
-    public static File generar(List<PickitItem> items, List<CarrosOrden> carrosOrdenes, List<SlaOrden> slaOrdenes, boolean soloHoy, File outputDir) throws Exception {
+    public static File generar(List<PickitItem> items, List<CarrosOrden> carrosOrdenes, List<SlaOrden> slaOrdenes, boolean soloHoy, File outputDir, boolean modoShowroom) throws Exception {
         Path excelDir = outputDir != null
                 ? outputDir.toPath()
                 : Paths.get(Util.getJarFolder(), "Pickits y Carros");
@@ -161,9 +170,12 @@ public class PickitExcelWriter {
 
             Row titleRow = sheet.createRow(0);
             String fechaHora = ahora.format(DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm"));
+            String tituloTexto = modoShowroom
+                    ? "PICKIT KT - " + fechaHora + " | SHOWROOM"
+                    : "PICKIT KT - " + fechaHora + " | Despacho ML: " + (soloHoy ? "Hoy" : "Sin límite");
             for (int i = 0; i < HEADERS.length; i++) {
                 Cell cell = titleRow.createCell(i);
-                if (i == 0) cell.setCellValue("PICKIT KT - " + fechaHora + " | Despacho ML: " + (soloHoy ? "Hoy" : "Sin límite"));
+                if (i == 0) cell.setCellValue(tituloTexto);
                 cell.setCellStyle(titleStyle);
             }
             sheet.addMergedRegion(new CellRangeAddress(0, 0, 0, HEADERS.length - 1));
@@ -255,8 +267,13 @@ public class PickitExcelWriter {
             sheet.setHorizontallyCenter(true);
             sheet.getFooter().setCenter("Página &P de &N");
 
-            generarHojaCarros(workbook, carrosOrdenes, ahora, soloHoy);
-            generarHojaSla(workbook, slaOrdenes, ahora);
+            // Modo showroom: solo la hoja PICKIT. CARROS y SLA son específicas
+            // del flujo ML/Nube (carros agrupan ventas ML, SLA es plazo de
+            // entrega ML); sin sentido para pedidos del showroom interno.
+            if (!modoShowroom) {
+                generarHojaCarros(workbook, carrosOrdenes, ahora, soloHoy);
+                generarHojaSla(workbook, slaOrdenes, ahora);
+            }
 
             try (FileOutputStream fos = new FileOutputStream(outputFile)) {
                 workbook.write(fos);
