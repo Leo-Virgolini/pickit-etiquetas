@@ -20,7 +20,12 @@ public class ExcelManager {
     public static Map<String, List<ComboEntry>> obtenerCombos(File combosExcel) throws Exception {
         Map<String, List<ComboEntry>> combos = new LinkedHashMap<>();
 
-        try (Workbook workbook = WorkbookFactory.create(combosExcel)) {
+        // readOnly=true: los .xls (HSSF) se abren con RandomAccessFile, que por
+        // default es modo read-write y falla con "Permission denied" cuando el
+        // archivo está en un volumen montado :ro (caso del showroom en el VPS,
+        // donde Combos.xls llega read-only vía rclone). Con readOnly se abre en
+        // modo "r". Inocuo para el uso manual (solo se lee el archivo).
+        try (Workbook workbook = WorkbookFactory.create(combosExcel, null, true)) {
             Sheet hoja = workbook.getSheetAt(0);
             if (hoja == null) throw new Exception("No se encontró ninguna hoja en " + combosExcel.getName());
 

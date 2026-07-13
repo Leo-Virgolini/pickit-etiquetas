@@ -156,6 +156,57 @@ public class DuxApi {
         return tokens != null;
     }
 
+    /**
+     * Prueba manual: trae un producto de DUX e imprime el JSON crudo completo
+     * para inspeccionar TODOS los campos que devuelve la API (no solo los que
+     * mapea el modelo Item).
+     *
+     * <p>Uso:
+     * <pre>
+     *   (sin args)          → trae el primer producto del catálogo (offset=0, limit=1)
+     *   &lt;codigoItem&gt;  → trae ese producto puntual por código
+     * </pre>
+     */
+    public static void main(String[] args) throws Exception {
+        if (!inicializar()) {
+            System.err.println("No se pudieron cargar los tokens de DUX desde " + TOKEN_FILE);
+            return;
+        }
+
+        String url;
+        String sku = "1011021";
+
+        String cod = URLEncoder.encode(sku.trim(), StandardCharsets.UTF_8);
+        url = "https://erp.duxsoftware.com.ar/WSERP/rest/services/items?codigoItem=" + cod + "&limit=1";
+        System.out.println(">> Trayendo producto por código: " + sku.trim());
+
+        System.out.println(">> URL: " + url);
+
+        Supplier<HttpRequest> requestBuilder = () -> HttpRequest.newBuilder()
+                .uri(URI.create(url))
+                .GET()
+                .header("accept", "application/json")
+                .header("authorization", tokens.token)
+                .build();
+
+        HttpResponse<String> response = retryHandler.sendWithRetry(requestBuilder);
+
+        if (response == null) {
+            System.err.println("Sin respuesta del servidor.");
+            return;
+        }
+        System.out.println(">> HTTP status: " + response.statusCode());
+
+        String body = response.body();
+        // Intentar prettificar; si falla, imprimir crudo.
+        try {
+            Object json = mapper.readValue(body, Object.class);
+            System.out.println(mapper.writerWithDefaultPrettyPrinter().writeValueAsString(json));
+        } catch (Exception e) {
+            System.out.println(body);
+        }
+    }
+
     private static TokensDux cargarTokens() {
         try {
             File f = TOKEN_FILE.toFile();
