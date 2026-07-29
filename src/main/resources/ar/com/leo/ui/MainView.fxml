@@ -167,6 +167,7 @@
                             <!-- Tabla de etiquetas -->
                             <TableView fx:id="labelTable">
                                 <columns>
+                                    <TableColumn fx:id="printNumCol" maxWidth="70" minWidth="45" prefWidth="55" text="#" />
                                     <TableColumn fx:id="labelOrderCol" minWidth="80" prefWidth="120" text="Orden" />
                                     <TableColumn fx:id="zoneCol" minWidth="60" prefWidth="100" text="Zona" />
                                     <TableColumn fx:id="skuCol" minWidth="70" prefWidth="110" text="SKU" />

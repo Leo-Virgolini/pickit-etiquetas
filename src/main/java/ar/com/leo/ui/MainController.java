@@ -104,6 +104,8 @@ public class MainController {
     @FXML
     private TableView<LabelTableRow> labelTable;
     @FXML
+    private TableColumn<LabelTableRow, String> printNumCol;
+    @FXML
     private TableColumn<LabelTableRow, String> labelOrderCol;
     @FXML
     private TableColumn<LabelTableRow, String> zoneCol;
@@ -229,6 +231,8 @@ public class MainController {
     public void initialize() {
         labelTable.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
         labelTable.getSelectionModel().setSelectionMode(javafx.scene.control.SelectionMode.MULTIPLE);
+        printNumCol.setCellValueFactory(new PropertyValueFactory<>("printNumber"));
+        printNumCol.setCellFactory(col -> centeredCell());
         labelOrderCol.setCellValueFactory(new PropertyValueFactory<>("orderIds"));
         labelOrderCol.setCellFactory(col -> new TableCell<>() {
             private final Label prefixLabel = new Label();
@@ -1981,8 +1985,14 @@ public class MainController {
 
     private void displayResult(SortResult result) {
         ObservableList<LabelTableRow> rows = FXCollections.observableArrayList();
+        List<Integer> groupSizes = result.groups().stream()
+                .map(g -> g.labels().size())
+                .toList();
+        List<String> printNumbers = ar.com.leo.etiquetas.model.PrintNumbering.compute(groupSizes);
+        int i = 0;
         for (SortedLabelGroup group : result.groups()) {
             rows.add(new LabelTableRow(
+                    printNumbers.get(i++),
                     group.orderIds(),
                     group.zone(),
                     group.sku(),
