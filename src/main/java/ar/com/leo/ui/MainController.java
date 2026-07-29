@@ -1397,15 +1397,21 @@ public class MainController {
                 }
             }
 
-            // Detectar si el envío es turbo
+            // Detectar turbo y logistic_type del envío
             boolean esTurbo = false;
+            String logisticType = "";
             for (OrdenML o : group) {
                 Long shipId = o.getShipmentId();
-                if (shipId != null && slaMap.containsKey(shipId) && slaMap.get(shipId).turbo()) {
-                    esTurbo = true;
-                    break;
+                if (shipId != null && slaMap.containsKey(shipId)) {
+                    MercadoLibreAPI.SlaInfo sla = slaMap.get(shipId);
+                    if (sla.turbo()) esTurbo = true;
+                    if (logisticType.isEmpty() && sla.logisticType() != null && !sla.logisticType().isEmpty()) {
+                        logisticType = sla.logisticType();
+                    }
                 }
             }
+            ar.com.leo.api.ml.model.ShippingType shippingType =
+                    ar.com.leo.api.ml.model.ShippingType.from(esTurbo, logisticType);
 
             // Determinar zona: TURBOS si es turbo, CARROS si hay 2+ SKUs distintos
             Set<String> distinctSkus = new HashSet<>();
@@ -1427,7 +1433,7 @@ public class MainController {
             }
 
             rows.add(new OrderTableRow(true, orderIdStr, zone, skuJoiner.toString(),
-                    descJoiner.toString(), qtyJoiner.toString(), status, slaDate, group));
+                    descJoiner.toString(), qtyJoiner.toString(), status, slaDate, group, shippingType));
         }
 
         // Prioridad: J*, T*, COMBOS, CARROS, TURBOS, RETIROS, resto

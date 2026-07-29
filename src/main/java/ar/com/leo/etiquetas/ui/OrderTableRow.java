@@ -1,6 +1,7 @@
 package ar.com.leo.etiquetas.ui;
 
 import ar.com.leo.api.ml.model.OrdenML;
+import ar.com.leo.api.ml.model.ShippingType;
 import javafx.beans.property.*;
 
 import java.util.List;
@@ -16,9 +17,11 @@ public class OrderTableRow {
     private final StringProperty status;
     private final StringProperty slaDate;
     private final List<OrdenML> ordenes;
+    private final ShippingType shippingType;
 
     public OrderTableRow(boolean selected, String orderId, String zone, String sku, String productDescription,
-                         String quantity, String status, String slaDate, List<OrdenML> ordenes) {
+                         String quantity, String status, String slaDate, List<OrdenML> ordenes,
+                         ShippingType shippingType) {
         this.selected = new SimpleBooleanProperty(selected);
         this.orderId = new SimpleStringProperty(orderId);
         this.zone = new SimpleStringProperty(zone);
@@ -28,6 +31,7 @@ public class OrderTableRow {
         this.status = new SimpleStringProperty(status);
         this.slaDate = new SimpleStringProperty(slaDate);
         this.ordenes = ordenes;
+        this.shippingType = shippingType;
     }
 
     public BooleanProperty selectedProperty() { return selected; }
@@ -49,6 +53,7 @@ public class OrderTableRow {
     public String getStatus() { return status.get(); }
     public String getSlaDate() { return slaDate.get(); }
     public List<OrdenML> getOrdenes() { return ordenes; }
+    public ShippingType getShippingType() { return shippingType; }
 
     public int getProductCount() {
         int count = 0;
