@@ -21,6 +21,7 @@ import ar.com.leo.etiquetas.printer.PrinterDiscovery;
 import ar.com.leo.etiquetas.printer.ZplFileSaver;
 import ar.com.leo.etiquetas.printer.ZplPrinterService;
 import ar.com.leo.etiquetas.sorter.LabelSorter;
+import ar.com.leo.etiquetas.sorter.CarrosOrdering;
 import javafx.application.Platform;
 import javafx.geometry.Pos;
 import javafx.collections.FXCollections;
@@ -1438,6 +1439,7 @@ public class MainController {
                     return Integer.MAX_VALUE;
                 })
                 .thenComparing(r -> r.getZone().toUpperCase())
+                .thenComparingInt(r -> CarrosOrdering.bucket(r.getZone(), r.getSku()))
                 .thenComparing(OrderTableRow::getSku));
 
         filteredOrders = new FilteredList<>(rows, p -> true);
