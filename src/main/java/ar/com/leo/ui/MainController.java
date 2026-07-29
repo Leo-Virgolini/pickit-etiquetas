@@ -1478,6 +1478,9 @@ public class MainController {
         sortedOrders.comparatorProperty().bind(orderTable.comparatorProperty());
         orderTable.setItems(sortedOrders);
         searchField.clear();
+        // Se resetea antes de reasignar el updateStats de este lote (evita que el
+        // applyOrderFilters inicial ejecute un actualizador de un lote anterior).
+        orderStatsUpdater = null;
         applyOrderFilters();
 
         if (rows.isEmpty()) {
