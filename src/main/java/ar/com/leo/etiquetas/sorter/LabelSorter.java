@@ -55,6 +55,7 @@ public class LabelSorter {
                 .sorted(Comparator
                         .<SortedLabelGroup>comparingInt(g -> zoneGroupPriority(g.zone()))
                         .thenComparing(g -> g.zone().toUpperCase())
+                        .thenComparingInt(g -> CarrosOrdering.bucket(g.zone(), g.sku()))
                         .thenComparing(g -> {
                             try {
                                 return Long.parseLong(g.sku());
