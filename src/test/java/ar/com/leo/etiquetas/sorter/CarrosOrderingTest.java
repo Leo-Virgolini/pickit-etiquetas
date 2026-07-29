@@ -16,6 +16,13 @@ class CarrosOrderingTest {
     }
 
     @Test
+    void distinctSkuCountIgnoraBlancosYNewlineFinal() {
+        assertEquals(2, CarrosOrdering.distinctSkuCount("10\n20\n"));      // trailing newline
+        assertEquals(2, CarrosOrdering.distinctSkuCount("10\n   \n20"));   // whitespace-only line
+        assertEquals(0, CarrosOrdering.distinctSkuCount("   "));           // all whitespace
+    }
+
+    @Test
     void bucketDevuelve0ParaZonasNoCarros() {
         assertEquals(0, CarrosOrdering.bucket("J1", "10\n20\n30"));
         assertEquals(0, CarrosOrdering.bucket("TURBOS", "10"));

@@ -1464,6 +1464,7 @@ public class MainController {
         sortedOrders.comparatorProperty().bind(orderTable.comparatorProperty());
         orderTable.setItems(sortedOrders);
         searchField.clear();
+        applyOrderFilters();
 
         if (rows.isEmpty()) {
             orderTable.setPlaceholder(new Label("No se encontraron ordenes con los filtros seleccionados"));
