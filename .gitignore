@@ -5,7 +5,7 @@ target/
 .kotlin
 
 .claude
-Etiquetas
+/Etiquetas/
 logs/
 debug/
 
