@@ -167,6 +167,7 @@
                                     <TableColumn fx:id="orderQtyCol" maxWidth="90" minWidth="60" prefWidth="70" text="Cantidad" />
                                     <TableColumn fx:id="orderStatusCol" minWidth="120" prefWidth="150" text="Estado" />
                                     <TableColumn fx:id="orderSlaCol" minWidth="100" prefWidth="140" text="Despacho límite" />
+                                    <TableColumn fx:id="orderShippingCol" minWidth="90" prefWidth="120" text="Tipo envío" />
                                 </columns>
                             </TableView>
 

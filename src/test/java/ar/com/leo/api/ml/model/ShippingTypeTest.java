@@ -37,4 +37,12 @@ class ShippingTypeTest {
         assertFalse(ShippingType.passes(ShippingType.COLECTA, checked));
         assertFalse(ShippingType.passes(ShippingType.OTRO, checked));
     }
+
+    @Test
+    void labelDevuelveIconoYTexto() {
+        assertEquals("📦 Flex", ShippingType.FLEX.label());
+        assertEquals("🚚 Colecta", ShippingType.COLECTA.label());
+        assertEquals("⚡ Turbo", ShippingType.TURBO.label());
+        assertEquals("❓ Otro", ShippingType.OTRO.label());
+    }
 }

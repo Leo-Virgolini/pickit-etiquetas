@@ -3,6 +3,7 @@ package ar.com.leo.ui;
 import ar.com.leo.AppLogger;
 import ar.com.leo.api.ml.MercadoLibreAPI;
 import ar.com.leo.api.ml.model.OrdenML;
+import ar.com.leo.api.ml.model.ShippingType;
 import ar.com.leo.api.ml.model.Venta;
 import ar.com.leo.etiquetas.model.*;
 import ar.com.leo.etiquetas.parser.ComboProduct;
@@ -153,6 +154,8 @@ public class MainController {
     private TableColumn<OrderTableRow, String> orderStatusCol;
     @FXML
     private TableColumn<OrderTableRow, String> orderSlaCol;
+    @FXML
+    private TableColumn<OrderTableRow, ShippingType> orderShippingCol;
 
     // ── Pickit Tab ──
     @FXML
@@ -373,6 +376,15 @@ public class MainController {
         orderSkuCol.setCellFactory(col -> centeredCell());
         orderQtyCol.setCellFactory(col -> centeredCell());
         orderSlaCol.setCellFactory(col -> centeredCell());
+        orderShippingCol.setCellValueFactory(cd -> new javafx.beans.property.ReadOnlyObjectWrapper<>(cd.getValue().getShippingType()));
+        orderShippingCol.setCellFactory(col -> new TableCell<>() {
+            @Override
+            protected void updateItem(ShippingType item, boolean empty) {
+                super.updateItem(item, empty);
+                setAlignment(Pos.CENTER);
+                setText(empty || item == null ? null : item.label());
+            }
+        });
 
         // Centrar headers de ambas tablas
         centerColumnHeaders(orderTable);

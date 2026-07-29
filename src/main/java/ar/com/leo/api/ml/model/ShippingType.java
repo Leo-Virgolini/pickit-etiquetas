@@ -18,4 +18,14 @@ public enum ShippingType {
     public static boolean passes(ShippingType type, Set<ShippingType> checked) {
         return checked.isEmpty() || checked.contains(type);
     }
+
+    /** Ícono + texto para mostrar en la UI (consistente con los checkboxes de filtro). */
+    public String label() {
+        return switch (this) {
+            case FLEX -> "📦 Flex";
+            case COLECTA -> "🚚 Colecta";
+            case TURBO -> "⚡ Turbo";
+            case OTRO -> "❓ Otro";
+        };
+    }
 }
