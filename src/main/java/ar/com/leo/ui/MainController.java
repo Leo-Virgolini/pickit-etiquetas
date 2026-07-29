@@ -92,6 +92,12 @@ public class MainController {
     @FXML
     private ComboBox<String> despachoFilterCombo;
     @FXML
+    private CheckBox filterFlexCheck;
+    @FXML
+    private CheckBox filterColectaCheck;
+    @FXML
+    private CheckBox filterTurboCheck;
+    @FXML
     private Label statsLabel;
     @FXML
     private HBox statsBar;
@@ -396,13 +402,7 @@ public class MainController {
 
         searchField.textProperty().addListener((obs, oldVal, newVal) -> {
             String filter = newVal == null ? "" : newVal.trim().toLowerCase();
-            if (filteredOrders != null) {
-                filteredOrders.setPredicate(row ->
-                        filter.isEmpty() || row.getOrderId().toLowerCase().contains(filter)
-                                || (row.getSku() != null && row.getSku().toLowerCase().contains(filter))
-                                || (row.getZone() != null && row.getZone().toLowerCase().contains(filter))
-                                || (row.getProductDescription() != null && row.getProductDescription().toLowerCase().contains(filter)));
-            }
+            applyOrderFilters();
             if (filteredLabels != null) {
                 filteredLabels.setPredicate(row ->
                         filter.isEmpty() || (row.getOrderIds() != null && row.getOrderIds().toLowerCase().contains(filter))
@@ -425,6 +425,10 @@ public class MainController {
                 "Solo para hoy", "\uD83D\uDCC5",
                 "Hoy + futuro", "\uD83D\uDCC6"
         ));
+
+        filterFlexCheck.selectedProperty().addListener((o, a, b) -> applyOrderFilters());
+        filterColectaCheck.selectedProperty().addListener((o, a, b) -> applyOrderFilters());
+        filterTurboCheck.selectedProperty().addListener((o, a, b) -> applyOrderFilters());
 
         String savedExcelPath = prefs.get(PREF_EXCEL_PATH, "");
         if (!savedExcelPath.isBlank() && new File(savedExcelPath).exists()) {
@@ -1300,6 +1304,9 @@ public class MainController {
         searchField.setDisable(loading);
         estadoFilterCombo.setDisable(loading);
         despachoFilterCombo.setDisable(loading);
+        filterFlexCheck.setDisable(loading);
+        filterColectaCheck.setDisable(loading);
+        filterTurboCheck.setDisable(loading);
         fetchOrdersBtn.setDisable(loading);
     }
 
@@ -1970,6 +1977,27 @@ public class MainController {
             total += label.quantity();
         }
         return total;
+    }
+
+    private void applyOrderFilters() {
+        String filter = searchField.getText() == null ? "" : searchField.getText().trim().toLowerCase();
+
+        java.util.Set<ar.com.leo.api.ml.model.ShippingType> checked = new java.util.HashSet<>();
+        if (filterFlexCheck.isSelected()) checked.add(ar.com.leo.api.ml.model.ShippingType.FLEX);
+        if (filterColectaCheck.isSelected()) checked.add(ar.com.leo.api.ml.model.ShippingType.COLECTA);
+        if (filterTurboCheck.isSelected()) checked.add(ar.com.leo.api.ml.model.ShippingType.TURBO);
+
+        if (filteredOrders != null) {
+            filteredOrders.setPredicate(row -> {
+                boolean matchesSearch = filter.isEmpty()
+                        || row.getOrderId().toLowerCase().contains(filter)
+                        || (row.getSku() != null && row.getSku().toLowerCase().contains(filter))
+                        || (row.getZone() != null && row.getZone().toLowerCase().contains(filter))
+                        || (row.getProductDescription() != null && row.getProductDescription().toLowerCase().contains(filter));
+                boolean matchesType = ar.com.leo.api.ml.model.ShippingType.passes(row.getShippingType(), checked);
+                return matchesSearch && matchesType;
+            });
+        }
     }
 
     private void setupComboIcons(ComboBox<String> combo, Map<String, String> icons) {

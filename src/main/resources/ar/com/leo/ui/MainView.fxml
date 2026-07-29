@@ -115,6 +115,12 @@
                                         <Label text="Despacho ML:" />
                                         <ComboBox fx:id="despachoFilterCombo" prefWidth="200" />
                                     </HBox>
+                                    <HBox alignment="CENTER_LEFT" spacing="15">
+                                        <Label text="Tipo de envío:" />
+                                        <CheckBox fx:id="filterFlexCheck" text="📦 Flex" />
+                                        <CheckBox fx:id="filterColectaCheck" text="🚚 Colecta" />
+                                        <CheckBox fx:id="filterTurboCheck" text="⚡ Turbo" />
+                                    </HBox>
                                 </VBox>
                             </Tab>
 
