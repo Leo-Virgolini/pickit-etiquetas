@@ -226,6 +226,7 @@ public class MainController {
     private List<OrdenML> fetchedOrders;
     private Set<Long> turboShipmentIds = Set.of();
     private FilteredList<OrderTableRow> filteredOrders;
+    private Runnable orderStatsUpdater;
     private FilteredList<LabelTableRow> filteredLabels;
 
     // ── Pickit ──
@@ -298,13 +299,15 @@ public class MainController {
         selectAllCheck.setSelected(true);
         selectAllCheck.setOnAction(e -> {
             boolean val = selectAllCheck.isSelected();
-            // Afectar TODAS las filas (no solo las visibles del filtro del buscador),
-            // para ser consistente con el contador y la generación.
+            // Afectar las filas que pasan el filtro de tipo de envío (ignorando el buscador),
+            // para ser consistente con el contador y la descarga.
             List<? extends OrderTableRow> todasLasFilas = filteredOrders != null
                     ? filteredOrders.getSource()
                     : orderTable.getItems();
             for (OrderTableRow row : todasLasFilas) {
-                row.setSelected(val);
+                if (passesTypeFilter(row)) {
+                    row.setSelected(val);
+                }
             }
         });
         orderSelectCol.setGraphic(selectAllCheck);
@@ -919,16 +922,17 @@ public class MainController {
             return;
         }
 
-        // Filtrar solo las órdenes seleccionadas (deduplicar por orderId).
-        // Importante: iterar la lista completa (no orderTable.getItems(), que solo trae
-        // las filas visibles según el buscador) para no perder selecciones ocultas por el filtro.
+        // Filtrar las órdenes seleccionadas que además pasan el filtro de tipo de envío
+        // (deduplicar por orderId). Se itera la lista completa (no orderTable.getItems(),
+        // que solo trae las filas visibles según el buscador) para no perder selecciones
+        // ocultas por el buscador; el filtro de tipo SÍ se respeta vía passesTypeFilter.
         List<? extends OrderTableRow> todasLasFilas = filteredOrders != null
                 ? filteredOrders.getSource()
                 : orderTable.getItems();
         LinkedHashSet<Long> seenOrderIds = new LinkedHashSet<>();
         List<OrdenML> seleccionadas = new ArrayList<>();
         for (OrderTableRow row : todasLasFilas) {
-            if (row.isSelected()) {
+            if (row.isSelected() && passesTypeFilter(row)) {
                 for (OrdenML o : row.getOrdenes()) {
                     if (seenOrderIds.add(o.getOrderId())) {
                         seleccionadas.add(o);
@@ -1372,8 +1376,6 @@ public class MainController {
             grouped.computeIfAbsent(groupKey, k -> new ArrayList<>()).add(orden);
         }
 
-        int totalOrdenes = grouped.size();
-
         for (var entry : grouped.entrySet()) {
             List<OrdenML> group = entry.getValue();
             OrdenML firstOrden = group.getFirst();
@@ -1483,29 +1485,25 @@ public class MainController {
         }
 
         // Estadísticas
-        int printedCount = 0;
-        int readyCount = 0;
-        int totalProductos = 0;
-        Map<String, Integer> countByZone = new LinkedHashMap<>();
-        Set<String> uniqueSkus = new HashSet<>();
-        for (OrderTableRow r : rows) {
-            if ("printed".equals(r.getStatus())) printedCount++;
-            else readyCount++;
-            totalProductos += r.getProductCount();
-            countByZone.merge(r.getZone(), 1, Integer::sum);
-            for (String s : r.getSku().split("\n")) {
-                String trimmed = s.trim();
-                if (!trimmed.isEmpty()) uniqueSkus.add(trimmed);
-            }
-        }
-        final int printed = printedCount;
-        final int readyToPrint = readyCount;
-        final int ordCount = totalOrdenes;
-        final int prodCount = totalProductos;
-        final int skuCount = uniqueSkus.size();
-
         Runnable updateStats = () -> {
-            long selected = rows.stream().filter(OrderTableRow::isSelected).count();
+            List<OrderTableRow> scoped = rows.stream().filter(this::passesTypeFilter).toList();
+            int ordCount = scoped.size();
+            int prodCount = scoped.stream().mapToInt(OrderTableRow::getProductCount).sum();
+            long selected = scoped.stream().filter(OrderTableRow::isSelected).count();
+            int printed = 0;
+            int readyToPrint = 0;
+            Set<String> uniqueSkus = new HashSet<>();
+            Map<String, Integer> countByZone = new LinkedHashMap<>();
+            for (OrderTableRow r : scoped) {
+                if ("printed".equals(r.getStatus())) printed++;
+                else readyToPrint++;
+                for (String s : r.getSku().split("\n")) {
+                    String trimmed = s.trim();
+                    if (!trimmed.isEmpty()) uniqueSkus.add(trimmed);
+                }
+                countByZone.merge(r.getZone(), 1, Integer::sum);
+            }
+            int skuCount = uniqueSkus.size();
             StringJoiner sj = new StringJoiner("  \u2502  ");
             sj.add("Ordenes: " + ordCount);
             sj.add("Productos: " + prodCount);
@@ -1522,6 +1520,7 @@ public class MainController {
             tip.setShowDelay(Duration.millis(200));
             statsLabel.setTooltip(tip);
         };
+        orderStatsUpdater = updateStats;
 
         if (rows.isEmpty()) {
             statsLabel.setText("No hay ordenes para mostrar");
@@ -1992,13 +1991,22 @@ public class MainController {
         return total;
     }
 
+    private Set<ShippingType> checkedShippingTypes() {
+        Set<ShippingType> checked = new HashSet<>();
+        if (filterFlexCheck.isSelected()) checked.add(ShippingType.FLEX);
+        if (filterColectaCheck.isSelected()) checked.add(ShippingType.COLECTA);
+        if (filterTurboCheck.isSelected()) checked.add(ShippingType.TURBO);
+        return checked;
+    }
+
+    private boolean passesTypeFilter(OrderTableRow row) {
+        return ShippingType.passes(row.getShippingType(), checkedShippingTypes());
+    }
+
     private void applyOrderFilters() {
         String filter = searchField.getText() == null ? "" : searchField.getText().trim().toLowerCase();
 
-        java.util.Set<ar.com.leo.api.ml.model.ShippingType> checked = new java.util.HashSet<>();
-        if (filterFlexCheck.isSelected()) checked.add(ar.com.leo.api.ml.model.ShippingType.FLEX);
-        if (filterColectaCheck.isSelected()) checked.add(ar.com.leo.api.ml.model.ShippingType.COLECTA);
-        if (filterTurboCheck.isSelected()) checked.add(ar.com.leo.api.ml.model.ShippingType.TURBO);
+        Set<ShippingType> checked = checkedShippingTypes();
 
         if (filteredOrders != null) {
             filteredOrders.setPredicate(row -> {
@@ -2007,10 +2015,11 @@ public class MainController {
                         || (row.getSku() != null && row.getSku().toLowerCase().contains(filter))
                         || (row.getZone() != null && row.getZone().toLowerCase().contains(filter))
                         || (row.getProductDescription() != null && row.getProductDescription().toLowerCase().contains(filter));
-                boolean matchesType = ar.com.leo.api.ml.model.ShippingType.passes(row.getShippingType(), checked);
+                boolean matchesType = ShippingType.passes(row.getShippingType(), checked);
                 return matchesSearch && matchesType;
             });
         }
+        if (orderStatsUpdater != null) orderStatsUpdater.run();
     }
 
     private void setupComboIcons(ComboBox<String> combo, Map<String, String> icons) {
