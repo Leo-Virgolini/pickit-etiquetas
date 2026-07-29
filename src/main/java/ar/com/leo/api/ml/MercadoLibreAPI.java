@@ -47,7 +47,7 @@ public class MercadoLibreAPI {
     public record MLOrderResult(List<Venta> ventas, List<OrdenML> ordenes) {
     }
 
-    public record SlaInfo(String status, OffsetDateTime expectedDate, boolean turbo) {
+    public record SlaInfo(String status, OffsetDateTime expectedDate, boolean turbo, String logisticType) {
     }
 
     public record ShipmentInfo(String substatus, OffsetDateTime slaDate) {
@@ -1072,6 +1072,7 @@ public class MercadoLibreAPI {
 
         // 2) Obtener tags del shipment para detectar turbo
         boolean turbo = false;
+        String logisticType = "";
         String shipUrl = "https://api.mercadolibre.com/shipments/" + shipmentId;
         Supplier<HttpRequest> shipReq = () -> HttpRequest.newBuilder()
                 .uri(URI.create(shipUrl))
@@ -1092,12 +1093,13 @@ public class MercadoLibreAPI {
                         }
                     }
                 }
+                logisticType = root.path("logistic_type").asString("");
             } catch (Exception e) {
                 AppLogger.warn("ML - Error al leer tags de shipment " + shipmentId + ": " + e.getMessage());
             }
         }
 
-        return new SlaInfo(status, expectedDate, turbo);
+        return new SlaInfo(status, expectedDate, turbo, logisticType);
     }
 
     public static Map<Long, SlaInfo> obtenerSlasParalelo(List<Long> shipmentIds) {
