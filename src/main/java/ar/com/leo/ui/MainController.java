@@ -1338,6 +1338,7 @@ public class MainController {
         printDirectBtn.setDisable(true);
         backToOrdersBtn.setVisible(false);
         backToOrdersBtn.setManaged(false);
+        setShippingFilterDisabled(false);
     }
 
     private void showLabelTable() {
@@ -1354,6 +1355,9 @@ public class MainController {
         boolean hayOrdenes = !orderTable.getItems().isEmpty();
         backToOrdersBtn.setVisible(hayOrdenes);
         backToOrdersBtn.setManaged(hayOrdenes);
+        // El filtro de tipo de envío es un control de la vista de órdenes (pre-descarga);
+        // en la vista de etiquetas se deshabilita para que no modifique el resumen.
+        setShippingFilterDisabled(true);
     }
 
     @FXML
@@ -2006,6 +2010,12 @@ public class MainController {
         return ShippingType.passes(row.getShippingType(), checkedShippingTypes());
     }
 
+    private void setShippingFilterDisabled(boolean disabled) {
+        filterFlexCheck.setDisable(disabled);
+        filterColectaCheck.setDisable(disabled);
+        filterTurboCheck.setDisable(disabled);
+    }
+
     private void applyOrderFilters() {
         String filter = searchField.getText() == null ? "" : searchField.getText().trim().toLowerCase();
 
@@ -2022,7 +2032,9 @@ public class MainController {
                 return matchesSearch && matchesType;
             });
         }
-        if (orderStatsUpdater != null) orderStatsUpdater.run();
+        // Solo refrescar el resumen de órdenes cuando su tabla está visible: en la vista de
+        // etiquetas el buscador también llama a este método y no debe pisar el resumen de etiquetas.
+        if (orderStatsUpdater != null && orderTable.isVisible()) orderStatsUpdater.run();
     }
 
     private void setupComboIcons(ComboBox<String> combo, Map<String, String> icons) {
