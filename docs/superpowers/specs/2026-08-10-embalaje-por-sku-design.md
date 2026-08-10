@@ -81,6 +81,9 @@ public record Embalaje(String codigo, String tipo, Double anchoCm, Double altoCm
 vacía. No se agrega ningún método derivado: la clasificación la hace `EmbalajeResolver` (§4), que
 necesita distinguir "vacío" de "código que no existe", cosa que un `tieneEmbalaje()` no captura.
 
+`EmbalajeResolver` quedó como clase de utilidad con métodos estáticos (`indexar`, `resolver`,
+`normalizar`) en vez de una instancia: no tiene estado propio.
+
 **`MedidasExcelManager`**: nuevo método público
 
 ```java
@@ -146,9 +149,13 @@ sea visible y no se confunda con un problema de impresión.
 **Si el módulo de medidas está desactivado** (checkbox apagado, ruta vacía o archivo inexistente):
 no se inyecta la línea y no se avisa nada. La etiqueta sale exactamente como hoy.
 
-**Dónde se carga el catálogo:** en `MainController.loadMedidas()`, el método que ya lee el Excel de
-medidas antes de procesar un lote. Devuelve medidas y catálogo juntos, y ambos se pasan a
-`injectZplHeaders`. Así el archivo se abre una sola vez por lote, como hoy.
+**Dónde se carga el catálogo:** en `MainController.loadCatalogoEmbalajes()`, hermano de
+`loadMedidasMap()` y con el mismo criterio de activación (checkbox encendido, ruta válida; si no,
+devuelve `null` y la línea no se inyecta). Ambos se pasan a `injectZplHeaders`.
+
+Esto abre el Excel dos veces por lote en vez de una. Se eligió así por simplicidad: unificar las
+dos lecturas obligaba a refactorizar `leerMedidasInterno` para compartir el `Workbook`, y el costo
+de la segunda apertura de un archivo local chico es despreciable frente a la descarga de etiquetas.
 
 ### 6. Aviso en la app
 

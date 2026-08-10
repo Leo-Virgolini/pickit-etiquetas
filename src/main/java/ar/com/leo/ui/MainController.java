@@ -7,6 +7,7 @@ import ar.com.leo.api.ml.model.ShippingType;
 import ar.com.leo.api.ml.model.Venta;
 import ar.com.leo.etiquetas.model.*;
 import ar.com.leo.etiquetas.parser.ComboProduct;
+import ar.com.leo.etiquetas.parser.EmbalajeResolver;
 import ar.com.leo.etiquetas.parser.ComboExcelReader;
 import ar.com.leo.etiquetas.parser.ExcelMappingReader;
 import ar.com.leo.etiquetas.parser.MedidasExcelManager;
@@ -772,13 +773,17 @@ public class MainController {
             ExcelMapping excelMapping = loadExcelMapping();
             List<ZplLabel> labels = zplParser.parseFile(Path.of(zplPath));
             Map<String, ar.com.leo.etiquetas.model.MedidaSku> medidas = loadMedidasMap();
+            Map<String, ar.com.leo.etiquetas.model.Embalaje> catalogoEmbalajes = loadCatalogoEmbalajes();
             Map<String, String> skusPendientes = new LinkedHashMap<>();
+            Map<String, String> embalajesFaltantes = new LinkedHashMap<>();
             currentResult = injectZplHeaders(
-                    labelSorter.sort(labels, excelMapping.skuToZone()), excelMapping, medidas, skusPendientes);
+                    labelSorter.sort(labels, excelMapping.skuToZone()), excelMapping, medidas, skusPendientes,
+                    catalogoEmbalajes, embalajesFaltantes);
             int agregadosExcel = guardarSkusPendientesMedicion(skusPendientes);
             showLabelTable();
             displayResult(currentResult);
-            mostrarMensajeSkusFaltantes(skusPendientes.size(), agregadosExcel, new ArrayList<>(skusPendientes.keySet()));
+            mostrarMensajeSkusFaltantes(skusPendientes.size(), agregadosExcel,
+                    new ArrayList<>(skusPendientes.keySet()), embalajesFaltantes);
         } catch (Exception e) {
             AlertHelper.showError("Error al procesar", e.getMessage(), e);
         }
@@ -971,6 +976,7 @@ public class MainController {
 
         // Capturar referencias/paths en el hilo UI antes de lanzar el thread background.
         final Map<String, ar.com.leo.etiquetas.model.MedidaSku> medidas = loadMedidasMap();
+        final Map<String, ar.com.leo.etiquetas.model.Embalaje> catalogoEmbalajes = loadCatalogoEmbalajes();
         final String medidasPath = medidasExcelField != null ? medidasExcelField.getText() : null;
 
         setLoading(true);
@@ -979,8 +985,10 @@ public class MainController {
             try {
                 List<ZplLabel> labels = MercadoLibreAPI.descargarEtiquetasZplParaOrdenes(seleccionadas, turboShipmentIds);
                 Map<String, String> skusPendientes = new LinkedHashMap<>();
+                Map<String, String> embalajesFaltantes = new LinkedHashMap<>();
                 SortResult result = injectZplHeaders(
-                        labelSorter.sort(labels, excelMapping.skuToZone()), excelMapping, medidas, skusPendientes);
+                        labelSorter.sort(labels, excelMapping.skuToZone()), excelMapping, medidas, skusPendientes,
+                        catalogoEmbalajes, embalajesFaltantes);
                 int agregadosExcel = guardarSkusPendientesMedicion(skusPendientes, medidasPath);
 
                 // Guardar automáticamente en carpeta "Etiquetas"
@@ -1003,6 +1011,7 @@ public class MainController {
                 final int skusFaltantesCount = skusPendientes.size();
                 final int agregadosCount = agregadosExcel;
                 final List<String> skusFaltantesList = new ArrayList<>(skusPendientes.keySet());
+                final Map<String, String> embalajesFaltantesFinal = new LinkedHashMap<>(embalajesFaltantes);
                 Platform.runLater(() -> {
                     setLoading(false);
                     currentResult = result;
@@ -1017,7 +1026,8 @@ public class MainController {
                     if (finalSaveError != null) {
                         AlertHelper.showError("Error al guardar", "No se pudo guardar el archivo automáticamente:\n" + finalSaveError);
                     }
-                    mostrarMensajeSkusFaltantes(skusFaltantesCount, agregadosCount, skusFaltantesList);
+                    mostrarMensajeSkusFaltantes(skusFaltantesCount, agregadosCount, skusFaltantesList,
+                            embalajesFaltantesFinal);
                 });
             } catch (Exception e) {
                 Platform.runLater(() -> {
@@ -1032,24 +1042,53 @@ public class MainController {
      * Muestra un diálogo informativo con la cantidad de SKU detectados sin medidas completas
      * en el lote de etiquetas recién procesado. Solo se muestra si hay al menos uno.
      */
-    private void mostrarMensajeSkusFaltantes(int faltantesCount, int agregadosExcel, List<String> skus) {
-        if (faltantesCount <= 0) return;
-        int yaExistentes = Math.max(0, faltantesCount - agregadosExcel);
+    private void mostrarMensajeSkusFaltantes(int faltantesCount, int agregadosExcel, List<String> skus,
+                                             Map<String, String> embalajesFaltantes) {
+        boolean hayEmbalajes = embalajesFaltantes != null && !embalajesFaltantes.isEmpty();
+        if (faltantesCount <= 0 && !hayEmbalajes) return;
+
         StringBuilder msg = new StringBuilder();
-        msg.append(faltantesCount).append(" SKU(s) sin medidas detectados en este lote.\n\n");
-        if (agregadosExcel > 0) {
-            msg.append("• ").append(agregadosExcel).append(" nuevo(s) agregado(s) al Excel de medidas.\n");
-        }
-        if (yaExistentes > 0) {
-            msg.append("• ").append(yaExistentes).append(" ya figuraba(n) en el Excel.\n");
-        }
-        if (skus != null && !skus.isEmpty()) {
-            msg.append("\nSKUs:\n");
-            for (String sku : skus) {
-                msg.append("  ").append(sku).append("\n");
+        if (faltantesCount > 0) {
+            int yaExistentes = Math.max(0, faltantesCount - agregadosExcel);
+            msg.append(faltantesCount).append(" SKU(s) sin medidas detectados en este lote.\n\n");
+            if (agregadosExcel > 0) {
+                msg.append("• ").append(agregadosExcel).append(" nuevo(s) agregado(s) al Excel de medidas.\n");
+            }
+            if (yaExistentes > 0) {
+                msg.append("• ").append(yaExistentes).append(" ya figuraba(n) en el Excel.\n");
+            }
+            if (skus != null && !skus.isEmpty()) {
+                msg.append("\nSKUs:\n");
+                for (String sku : skus) {
+                    msg.append("  ").append(sku).append("\n");
+                }
             }
         }
-        AlertHelper.showInfoScrollable("Medidas pendientes", msg.toString());
+
+        if (hayEmbalajes) {
+            // Sin asignar: la celda EMBALAJE está vacía. Inválidos: tiene un código que no figura
+            // en el catálogo, casi siempre un typo — por eso se muestra qué se escribió.
+            List<String> sinAsignar = new ArrayList<>();
+            List<String> invalidos = new ArrayList<>();
+            for (Map.Entry<String, String> e : embalajesFaltantes.entrySet()) {
+                if (e.getValue() == null || e.getValue().isBlank()) sinAsignar.add(e.getKey());
+                else invalidos.add(e.getKey() + " → \"" + e.getValue() + "\"");
+            }
+            if (!msg.isEmpty()) msg.append("\n");
+            if (!sinAsignar.isEmpty()) {
+                msg.append(sinAsignar.size()).append(" SKU(s) sin embalaje asignado en este lote:\n");
+                for (String s : sinAsignar) msg.append("  ").append(s).append("\n");
+            }
+            if (!invalidos.isEmpty()) {
+                if (!sinAsignar.isEmpty()) msg.append("\n");
+                msg.append(invalidos.size())
+                        .append(" SKU(s) con un código de embalaje que no existe en el catálogo:\n");
+                for (String s : invalidos) msg.append("  ").append(s).append("\n");
+            }
+        }
+
+        String titulo = faltantesCount > 0 ? "Medidas pendientes" : "Embalajes pendientes";
+        AlertHelper.showInfoScrollable(titulo, msg.toString());
     }
 
 
@@ -1562,9 +1601,18 @@ public class MainController {
     private static final String ANCHOR_UNIDAD = "Unidad";
     private static final String ANCHOR_SKU = "SKU:";
 
+    /**
+     * @param catalogoEmbalajes catálogo de la hoja EMBALAJES, o null si el módulo está apagado
+     *                          (en ese caso no se inyecta la línea EMBALAJE).
+     * @param embalajesFaltantesOut se completa con sku → código crudo cargado en el Excel:
+     *                              cadena vacía si el SKU no tiene embalaje asignado, o el código
+     *                              escrito si no figura en el catálogo (typo).
+     */
     private SortResult injectZplHeaders(SortResult result, ExcelMapping excelMapping,
                                         Map<String, ar.com.leo.etiquetas.model.MedidaSku> medidas,
-                                        Map<String, String> skusPendientesOut) {
+                                        Map<String, String> skusPendientesOut,
+                                        Map<String, ar.com.leo.etiquetas.model.Embalaje> catalogoEmbalajes,
+                                        Map<String, String> embalajesFaltantesOut) {
         Map<String, String> skuToExtCode = excelMapping.skuToExternalCode();
         Map<String, ComboProduct> normalizedCombos = loadNormalizedCombos();
         List<SortedLabelGroup> newGroups = new ArrayList<>();
@@ -1597,6 +1645,21 @@ public class MainController {
                 skuPendienteMedicion = (m == null || !m.estaMedido());
             }
 
+            // Embalaje asignado al SKU. Se resuelve una vez por grupo: la línea es igual en todas
+            // las etiquetas del grupo. No aplica a CARROS (esas etiquetas listan varios productos).
+            String embalajeTexto = null;
+            if (catalogoEmbalajes != null && !"CARROS".equals(zone)
+                    && sku != null && !sku.isBlank() && !sku.contains("\n")) {
+                ar.com.leo.etiquetas.model.MedidaSku m = medidas == null ? null : medidas.get(sku);
+                String codigoCrudo = m == null ? "" : m.embalaje();
+                EmbalajeResolver.ResultadoEmbalaje resultado =
+                        EmbalajeResolver.resolver(codigoCrudo, catalogoEmbalajes);
+                embalajeTexto = "EMBALAJE: " + resultado.textoEtiqueta();
+                if (resultado.estado() != EmbalajeResolver.Estado.OK && embalajesFaltantesOut != null) {
+                    embalajesFaltantesOut.putIfAbsent(sku, codigoCrudo == null ? "" : codigoCrudo.trim());
+                }
+            }
+
             List<ZplLabel> newLabels = new ArrayList<>();
             for (ZplLabel label : group.labels()) {
                 String raw = label.rawZpl();
@@ -1624,7 +1687,15 @@ public class MainController {
                             "^FO200,15^GB580,65,65^FS\n"
                             + "^FO200,22^A0N,50,50^FB580,1,0,C^FR^FD" + medirText + "^FS\n";
                 }
-                raw = raw.substring(0, insertIdx) + "^LH0,0\n" + posField1 + "\n" + posField2 + "\n" + posField3 + "\n" + medirPrefix + raw.substring(insertIdx);
+                // Línea de embalaje: debajo del #X (que termina en y=65) y del banner MEDIR
+                // (que llega hasta y=80), por encima del "Pack ID:" del formato de ML (y=130).
+                // Doble pasada con 1px de offset para simular negrita, igual que ZONA y COD.EXT.
+                String embalajeField = "";
+                if (embalajeTexto != null) {
+                    embalajeField = "^FO45,85^A0N,30,30^FD" + embalajeTexto + "^FS\n"
+                            + "^FO46,85^A0N,30,30^FD" + embalajeTexto + "^FS\n";
+                }
+                raw = raw.substring(0, insertIdx) + "^LH0,0\n" + posField1 + "\n" + posField2 + "\n" + posField3 + "\n" + embalajeField + medirPrefix + raw.substring(insertIdx);
                 labelPosition++;
 
                 // Parsear ^LH original para convertir coordenadas relativas a absolutas
@@ -1918,6 +1989,23 @@ public class MainController {
             return medidasManager.leerMedidas(Path.of(path));
         } catch (Exception e) {
             AppLogger.warn("No se pudo leer el Excel de medidas: " + e.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * Catálogo de embalajes de la hoja EMBALAJES. Devuelve null con el mismo criterio que
+     * loadMedidasMap: si el módulo de medidas está apagado o el archivo no es usable, la línea
+     * EMBALAJE simplemente no se inyecta y la etiqueta sale como antes de esta función.
+     */
+    private Map<String, ar.com.leo.etiquetas.model.Embalaje> loadCatalogoEmbalajes() {
+        if (medidasEnabledCheck == null || !medidasEnabledCheck.isSelected()) return null;
+        String path = medidasExcelField == null ? null : medidasExcelField.getText();
+        if (path == null || path.isBlank()) return null;
+        try {
+            return medidasManager.leerCatalogoEmbalajes(Path.of(path));
+        } catch (Exception e) {
+            AppLogger.warn("No se pudo leer el catálogo de embalajes: " + e.getMessage());
             return null;
         }
     }

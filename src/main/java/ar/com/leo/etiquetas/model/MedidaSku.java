@@ -12,7 +12,8 @@ public record MedidaSku(
         Double profundidadMasCm,
         Double pesoMasKg,
         boolean subido,
-        String error
+        String error,
+        String embalaje
 ) {
 
     public boolean estaMedido() {
