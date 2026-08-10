@@ -18,6 +18,8 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -181,6 +183,96 @@ class MedidasExcelManagerTest {
     }
 
     // -------------------------------------------------------------------------------------------
+    // Migración de la estructura (columna + hoja + desplegable)
+    // -------------------------------------------------------------------------------------------
+
+    @Test
+    void sinSkusNuevosIgualSeCreaLaEstructura() throws Exception {
+        // Estado estacionario: todos los SKU del lote ya figuran en el Excel. Es el camino habitual,
+        // así que la migración no puede depender de que aparezca un SKU nuevo.
+        Path excel = crearExcelViejo("estacionario.xlsx", List.<String[]>of(new String[]{"1241212", "Producto A"}));
+
+        manager.asegurarEstructuraEmbalajes(excel);
+
+        assertEquals("EMBALAJE", leerHeader(excel, 12));
+        try (Workbook wb = WorkbookFactory.create(excel.toFile(), null, true)) {
+            assertNotNull(wb.getSheet("EMBALAJES"));
+        }
+    }
+
+    @Test
+    void asegurarEstructuraEsIdempotenteYNoAcumulaValidaciones() throws Exception {
+        Path excel = crearExcelViejo("idempotente.xlsx", List.<String[]>of(new String[]{"1241212", "Producto A"}));
+
+        manager.asegurarEstructuraEmbalajes(excel);
+        manager.asegurarEstructuraEmbalajes(excel);
+        manager.asegurarEstructuraEmbalajes(excel);
+
+        try (Workbook wb = WorkbookFactory.create(excel.toFile(), null, true)) {
+            assertEquals(1, wb.getSheetAt(0).getDataValidations().size());
+        }
+    }
+
+    @Test
+    void elDesplegableQuedaVisible() throws Exception {
+        Path excel = crearExcelViejo("desplegable.xlsx", List.<String[]>of(new String[]{"1241212", "Producto A"}));
+
+        manager.asegurarEstructuraEmbalajes(excel);
+
+        try (Workbook wb = WorkbookFactory.create(excel.toFile(), null, true)) {
+            assertFalse(wb.getSheetAt(0).getDataValidations().get(0).getSuppressDropDownArrow());
+        }
+    }
+
+    @Test
+    void noPisaUnaColumnaPropiaDelUsuario() throws Exception {
+        Path excel = crearExcelViejo("columna-propia.xlsx", List.<String[]>of(new String[]{"1241212", "Producto A"}));
+        escribirHeader(excel, 12, "OBSERVACIONES");
+
+        manager.asegurarEstructuraEmbalajes(excel);
+
+        assertEquals("OBSERVACIONES", leerHeader(excel, 12));
+        assertEquals("EMBALAJE", leerHeader(excel, 13));
+    }
+
+    @Test
+    void reusaLaColumnaEmbalajeAunqueNoEsteEnElIndiceEsperado() throws Exception {
+        Path excel = crearExcelViejo("columna-corrida.xlsx", List.<String[]>of(new String[]{"1241212", "Producto A"}));
+        escribirHeader(excel, 12, "OBSERVACIONES");
+        escribirHeader(excel, 13, "EMBALAJE");
+
+        manager.asegurarEstructuraEmbalajes(excel);
+
+        assertEquals("EMBALAJE", leerHeader(excel, 13));
+        assertNull(leerHeader(excel, 14));
+    }
+
+    @Test
+    void laHojaDeMedidasSeResuelvePorNombreNoPorPosicion() throws Exception {
+        // El usuario puede arrastrar EMBALAJES al primer lugar en Excel.
+        Path excel = crearExcelConCatalogo("hojas-invertidas.xlsx", List.<Object[]>of(
+                new Object[]{"CAJA 3", "CAJA", 30.0, 20.0, 15.0}
+        ));
+        moverHojaAlPrincipio(excel, "EMBALAJES");
+
+        Map<String, MedidaSku> medidas = manager.leerMedidas(excel);
+
+        assertNotNull(medidas.get("1241212"), "la hoja de medidas debe seguir siendo la de SKUs");
+    }
+
+    @Test
+    void leerMedidasYCatalogoDevuelveAmbosEnUnaSolaLectura() throws Exception {
+        Path excel = crearExcelConCatalogo("una-lectura.xlsx", List.<Object[]>of(
+                new Object[]{"CAJA 3", "CAJA", 30.0, 20.0, 15.0}
+        ));
+
+        MedidasExcelManager.DatosMedidas datos = manager.leerMedidasYCatalogo(excel);
+
+        assertNotNull(datos.medidas().get("1241212"));
+        assertNotNull(datos.catalogo().get("CAJA 3"));
+    }
+
+    // -------------------------------------------------------------------------------------------
     // Helpers
     // -------------------------------------------------------------------------------------------
 
@@ -259,6 +351,24 @@ class MedidasExcelManagerTest {
     private Workbook abrirParaEditar(Path excel) throws Exception {
         try (java.io.InputStream in = java.nio.file.Files.newInputStream(excel)) {
             return new XSSFWorkbook(in);
+        }
+    }
+
+    private void escribirHeader(Path excel, int col, String valor) throws Exception {
+        try (Workbook wb = abrirParaEditar(excel)) {
+            wb.getSheetAt(0).getRow(0).createCell(col, CellType.STRING).setCellValue(valor);
+            try (FileOutputStream fos = new FileOutputStream(excel.toFile())) {
+                wb.write(fos);
+            }
+        }
+    }
+
+    private void moverHojaAlPrincipio(Path excel, String nombre) throws Exception {
+        try (Workbook wb = abrirParaEditar(excel)) {
+            wb.setSheetOrder(nombre, 0);
+            try (FileOutputStream fos = new FileOutputStream(excel.toFile())) {
+                wb.write(fos);
+            }
         }
     }
 

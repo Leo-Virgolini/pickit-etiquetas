@@ -6,6 +6,7 @@ import ar.com.leo.etiquetas.model.MedidaSku;
 import org.apache.poi.openxml4j.opc.OPCPackage;
 import org.apache.poi.openxml4j.opc.PackageAccess;
 import org.apache.poi.ss.usermodel.*;
+import org.apache.poi.ss.util.CellRangeAddress;
 import org.apache.poi.ss.util.CellRangeAddressList;
 import org.apache.poi.xssf.usermodel.XSSFCellStyle;
 import org.apache.poi.xssf.usermodel.XSSFColor;
@@ -16,7 +17,9 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.List;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -89,9 +92,30 @@ public class MedidasExcelManager {
     // cuando el procesamiento de un lote y la subida asincrónica del anterior se solapan.
     private final Object fileLock = new Object();
 
+    /** Medidas por SKU y catálogo de embalajes, leídos del mismo archivo en una sola pasada. */
+    public record DatosMedidas(Map<String, MedidaSku> medidas, Map<String, Embalaje> catalogo) {
+    }
+
     public Map<String, MedidaSku> leerMedidas(Path excelPath) throws Exception {
         synchronized (fileLock) {
             return leerMedidasInterno(excelPath);
+        }
+    }
+
+    /**
+     * Abre el archivo una sola vez y devuelve las medidas y el catálogo. Es lo que usa la app antes
+     * de procesar un lote: leer dos veces el mismo Excel congelaba la UI el doble de tiempo.
+     */
+    public DatosMedidas leerMedidasYCatalogo(Path excelPath) throws Exception {
+        synchronized (fileLock) {
+            if (!Files.exists(excelPath)) {
+                crearArchivoVacio(excelPath);
+                return new DatosMedidas(new LinkedHashMap<>(), new LinkedHashMap<>());
+            }
+            try (OPCPackage pkg = OPCPackage.open(excelPath.toFile(), PackageAccess.READ);
+                 Workbook workbook = new XSSFWorkbook(pkg)) {
+                return new DatosMedidas(leerMedidasDe(workbook), leerCatalogoDe(workbook));
+            }
         }
     }
 
@@ -101,78 +125,81 @@ public class MedidasExcelManager {
             return new LinkedHashMap<>();
         }
 
-        Map<String, MedidaSku> medidas = new LinkedHashMap<>();
         try (OPCPackage pkg = OPCPackage.open(excelPath.toFile(), PackageAccess.READ);
              Workbook workbook = new XSSFWorkbook(pkg)) {
+            return leerMedidasDe(workbook);
+        }
+    }
 
-            Sheet sheet = workbook.getSheetAt(0);
-            if (sheet == null) return medidas;
+    private Map<String, MedidaSku> leerMedidasDe(Workbook workbook) {
+        Map<String, MedidaSku> medidas = new LinkedHashMap<>();
+        Sheet sheet = hojaMedidas(workbook);
+        if (sheet == null) return medidas;
 
-            Row header = sheet.getRow(0);
-            if (header == null) return medidas;
+        Row header = sheet.getRow(0);
+        if (header == null) return medidas;
 
-            int skuCol = -1, productoCol = -1;
-            int anchoCol = -1, altoCol = -1, profundidadCol = -1, pesoCol = -1;
-            int anchoMasCol = -1, altoMasCol = -1, profundidadMasCol = -1, pesoMasCol = -1;
-            int subidoCol = -1, errorCol = -1, embalajeCol = -1;
+        int skuCol = -1, productoCol = -1;
+        int anchoCol = -1, altoCol = -1, profundidadCol = -1, pesoCol = -1;
+        int anchoMasCol = -1, altoMasCol = -1, profundidadMasCol = -1, pesoMasCol = -1;
+        int subidoCol = -1, errorCol = -1, embalajeCol = -1;
 
-            for (int i = 0; i < header.getLastCellNum(); i++) {
-                Cell cell = header.getCell(i);
-                if (cell == null) continue;
-                String h = normalizarHeader(getCellString(cell));
-                boolean mas20 = h.contains("+20");
+        for (int i = 0; i < header.getLastCellNum(); i++) {
+            Cell cell = header.getCell(i);
+            if (cell == null) continue;
+            String h = normalizarHeader(getCellString(cell));
+            boolean mas20 = h.contains("+20");
 
-                if (h.equals("SKU")) skuCol = i;
-                else if (h.startsWith("PRODUCTO")) productoCol = i;
-                else if (h.equals("SUBIDO")) subidoCol = i;
-                else if (h.equals("ERROR")) errorCol = i;
-                else if (h.equals("EMBALAJE")) embalajeCol = i;
-                else if (h.startsWith("ANCHO")) {
-                    if (mas20) anchoMasCol = i; else anchoCol = i;
-                }
-                else if (h.startsWith("ALTO")) {
-                    if (mas20) altoMasCol = i; else altoCol = i;
-                }
-                else if (h.startsWith("PROFUN") || h.startsWith("LARGO")) {
-                    if (mas20) profundidadMasCol = i; else profundidadCol = i;
-                }
-                else if (h.startsWith("PESO")) {
-                    if (mas20) pesoMasCol = i; else pesoCol = i;
-                }
+            if (h.equals("SKU")) skuCol = i;
+            else if (h.startsWith("PRODUCTO")) productoCol = i;
+            else if (h.equals("SUBIDO")) subidoCol = i;
+            else if (h.equals("ERROR")) errorCol = i;
+            else if (h.equals("EMBALAJE")) embalajeCol = i;
+            else if (h.startsWith("ANCHO")) {
+                if (mas20) anchoMasCol = i; else anchoCol = i;
             }
-
-            if (skuCol == -1) {
-                throw new IllegalArgumentException(
-                        "El Excel de medidas no tiene columna 'SKU'. Revise el archivo: " + excelPath);
+            else if (h.startsWith("ALTO")) {
+                if (mas20) altoMasCol = i; else altoCol = i;
             }
-
-            for (int r = 1; r <= sheet.getLastRowNum(); r++) {
-                Row row = sheet.getRow(r);
-                if (row == null) continue;
-
-                Cell skuCell = row.getCell(skuCol);
-                if (skuCell == null) continue;
-                String sku = getCellString(skuCell).trim();
-                if (sku.isEmpty()) continue;
-
-                String producto = productoCol != -1 ? getCellString(row.getCell(productoCol)).trim() : "";
-                Double ancho = anchoCol != -1 ? getCellDouble(row.getCell(anchoCol)) : null;
-                Double alto = altoCol != -1 ? getCellDouble(row.getCell(altoCol)) : null;
-                Double profundidad = profundidadCol != -1 ? getCellDouble(row.getCell(profundidadCol)) : null;
-                Double peso = pesoCol != -1 ? getCellDouble(row.getCell(pesoCol)) : null;
-                Double anchoMas = anchoMasCol != -1 ? getCellDouble(row.getCell(anchoMasCol)) : null;
-                Double altoMas = altoMasCol != -1 ? getCellDouble(row.getCell(altoMasCol)) : null;
-                Double profundidadMas = profundidadMasCol != -1 ? getCellDouble(row.getCell(profundidadMasCol)) : null;
-                Double pesoMas = pesoMasCol != -1 ? getCellDouble(row.getCell(pesoMasCol)) : null;
-                boolean subido = subidoCol != -1 && esSubido(getCellString(row.getCell(subidoCol)));
-                String error = errorCol != -1 ? getCellString(row.getCell(errorCol)).trim() : "";
-                String embalaje = embalajeCol != -1 ? getCellString(row.getCell(embalajeCol)).trim() : "";
-
-                medidas.put(sku, new MedidaSku(sku, producto,
-                        ancho, alto, profundidad, peso,
-                        anchoMas, altoMas, profundidadMas, pesoMas,
-                        subido, error, embalaje));
+            else if (h.startsWith("PROFUN") || h.startsWith("LARGO")) {
+                if (mas20) profundidadMasCol = i; else profundidadCol = i;
             }
+            else if (h.startsWith("PESO")) {
+                if (mas20) pesoMasCol = i; else pesoCol = i;
+            }
+        }
+
+        if (skuCol == -1) {
+            throw new IllegalArgumentException(
+                    "El Excel de medidas no tiene columna 'SKU'. Revise el archivo.");
+        }
+
+        for (int r = 1; r <= sheet.getLastRowNum(); r++) {
+            Row row = sheet.getRow(r);
+            if (row == null) continue;
+
+            Cell skuCell = row.getCell(skuCol);
+            if (skuCell == null) continue;
+            String sku = getCellString(skuCell).trim();
+            if (sku.isEmpty()) continue;
+
+            String producto = productoCol != -1 ? getCellString(row.getCell(productoCol)).trim() : "";
+            Double ancho = anchoCol != -1 ? getCellDouble(row.getCell(anchoCol)) : null;
+            Double alto = altoCol != -1 ? getCellDouble(row.getCell(altoCol)) : null;
+            Double profundidad = profundidadCol != -1 ? getCellDouble(row.getCell(profundidadCol)) : null;
+            Double peso = pesoCol != -1 ? getCellDouble(row.getCell(pesoCol)) : null;
+            Double anchoMas = anchoMasCol != -1 ? getCellDouble(row.getCell(anchoMasCol)) : null;
+            Double altoMas = altoMasCol != -1 ? getCellDouble(row.getCell(altoMasCol)) : null;
+            Double profundidadMas = profundidadMasCol != -1 ? getCellDouble(row.getCell(profundidadMasCol)) : null;
+            Double pesoMas = pesoMasCol != -1 ? getCellDouble(row.getCell(pesoMasCol)) : null;
+            boolean subido = subidoCol != -1 && esSubido(getCellString(row.getCell(subidoCol)));
+            String error = errorCol != -1 ? getCellString(row.getCell(errorCol)).trim() : "";
+            String embalaje = embalajeCol != -1 ? getCellString(row.getCell(embalajeCol)).trim() : "";
+
+            medidas.put(sku, new MedidaSku(sku, producto,
+                    ancho, alto, profundidad, peso,
+                    anchoMas, altoMas, profundidadMas, pesoMas,
+                    subido, error, embalaje));
         }
         return medidas;
     }
@@ -187,34 +214,37 @@ public class MedidasExcelManager {
      */
     public Map<String, Embalaje> leerCatalogoEmbalajes(Path excelPath) throws Exception {
         synchronized (fileLock) {
-            Map<String, Embalaje> catalogo = new LinkedHashMap<>();
-            if (!Files.exists(excelPath)) return catalogo;
+            if (!Files.exists(excelPath)) return new LinkedHashMap<>();
 
             try (OPCPackage pkg = OPCPackage.open(excelPath.toFile(), PackageAccess.READ);
                  Workbook workbook = new XSSFWorkbook(pkg)) {
-
-                Sheet sheet = workbook.getSheet(HOJA_EMBALAJES);
-                if (sheet == null) return catalogo;
-
-                for (int r = 1; r <= sheet.getLastRowNum(); r++) {
-                    Row row = sheet.getRow(r);
-                    if (row == null) continue;
-
-                    String codigoCrudo = getCellString(row.getCell(COL_EMB_CODIGO));
-                    if (codigoCrudo.isBlank()) continue;
-                    // El código se guarda ya colapsado para que la etiqueta no herede espacios de más.
-                    String codigo = codigoCrudo.replace('\n', ' ').replaceAll("\\s+", " ").trim();
-
-                    catalogo.putIfAbsent(EmbalajeResolver.normalizar(codigo), new Embalaje(
-                            codigo,
-                            getCellString(row.getCell(COL_EMB_TIPO)).trim(),
-                            getCellDouble(row.getCell(COL_EMB_ANCHO)),
-                            getCellDouble(row.getCell(COL_EMB_ALTO)),
-                            getCellDouble(row.getCell(COL_EMB_PROFUNDIDAD))));
-                }
+                return leerCatalogoDe(workbook);
             }
-            return catalogo;
         }
+    }
+
+    private Map<String, Embalaje> leerCatalogoDe(Workbook workbook) {
+        Sheet sheet = workbook.getSheet(HOJA_EMBALAJES);
+        if (sheet == null) return new LinkedHashMap<>();
+
+        List<Embalaje> embalajes = new ArrayList<>();
+        for (int r = 1; r <= sheet.getLastRowNum(); r++) {
+            Row row = sheet.getRow(r);
+            if (row == null) continue;
+
+            String codigoCrudo = getCellString(row.getCell(COL_EMB_CODIGO));
+            if (codigoCrudo.isBlank()) continue;
+            // El código se guarda ya colapsado para que la etiqueta no herede espacios de más.
+            String codigo = codigoCrudo.replace('\n', ' ').replaceAll("\\s+", " ").trim();
+
+            embalajes.add(new Embalaje(
+                    codigo,
+                    getCellString(row.getCell(COL_EMB_TIPO)).trim(),
+                    getCellDouble(row.getCell(COL_EMB_ANCHO)),
+                    getCellDouble(row.getCell(COL_EMB_ALTO)),
+                    getCellDouble(row.getCell(COL_EMB_PROFUNDIDAD))));
+        }
+        return EmbalajeResolver.indexar(embalajes);
     }
 
     /**
@@ -236,13 +266,19 @@ public class MedidasExcelManager {
                     .distinct()
                     .toList();
 
-            if (aAgregar.isEmpty()) return 0;
+            // Sin SKUs nuevos no hay filas que escribir, pero la estructura de embalajes puede
+            // seguir faltando: en régimen normal este es el camino habitual.
+            if (aAgregar.isEmpty()) {
+                asegurarEstructuraEmbalajes(excelPath);
+                return 0;
+            }
 
             try (XSSFWorkbook workbook = abrirOCrear(excelPath)) {
-                Sheet sheet = workbook.getSheetAt(0);
+                Sheet sheet = hojaMedidas(workbook);
                 if (sheet == null) sheet = workbook.createSheet("MEDIDAS");
 
                 asegurarHeaders(workbook, sheet);
+                int colEmbalaje = asegurarColumnaEmbalaje(workbook, sheet);
 
                 CellStyle skuPendienteStyle = crearEstiloPendiente(workbook);
                 CellStyle celdaFaltanteStyle = crearEstiloCeldaFaltante(workbook);
@@ -301,9 +337,9 @@ public class MedidasExcelManager {
 
                     // EMBALAJE vacío, resaltado como pendiente de cargar. Si la celda ya traía algo
                     // (fila reusada con el dato precargado), se respeta.
-                    Cell embalajeCell = row.getCell(COL_EMBALAJE);
+                    Cell embalajeCell = row.getCell(colEmbalaje);
                     if (embalajeCell == null) {
-                        embalajeCell = row.createCell(COL_EMBALAJE, CellType.BLANK);
+                        embalajeCell = row.createCell(colEmbalaje, CellType.BLANK);
                         embalajeCell.setCellStyle(celdaFaltanteStyle);
                     } else if (getCellString(embalajeCell).isBlank()
                             && embalajeCell.getCellType() != CellType.FORMULA) {
@@ -317,9 +353,8 @@ public class MedidasExcelManager {
                 workbook.setForceFormulaRecalculation(true);
 
                 asegurarColumnaError(workbook, sheet);
-                asegurarColumnaEmbalaje(workbook, sheet);
                 asegurarHojaEmbalajes(workbook);
-                aplicarValidacionEmbalaje(sheet);
+                aplicarValidacionEmbalaje(sheet, colEmbalaje);
                 autoSizeColumns(sheet);
                 escribirWorkbook(excelPath, workbook);
             }
@@ -345,12 +380,10 @@ public class MedidasExcelManager {
         synchronized (fileLock) {
             int actualizados = 0;
             try (XSSFWorkbook workbook = abrirOCrear(excelPath)) {
-                Sheet sheet = workbook.getSheetAt(0);
+                Sheet sheet = hojaMedidas(workbook);
                 if (sheet == null) return 0;
 
                 asegurarColumnaError(workbook, sheet);
-                asegurarColumnaEmbalaje(workbook, sheet);
-                asegurarHojaEmbalajes(workbook);
 
                 int skuCol = -1, subidoCol = -1, errorCol = -1;
                 Row header = sheet.getRow(0);
@@ -528,26 +561,66 @@ public class MedidasExcelManager {
         errorHeaderCell.setCellStyle(headerStyle);
     }
 
-    private void asegurarColumnaEmbalaje(Workbook workbook, Sheet sheet) {
-        Row header = sheet.getRow(0);
-        if (header == null) return;
-        Cell headerCell = header.getCell(COL_EMBALAJE);
-        if (headerCell != null && normalizarHeader(getCellString(headerCell)).equals("EMBALAJE")) return;
+    /**
+     * Hoja de SKUs. Se resuelve por descarte y no por posición: al agregarse la hoja catálogo el
+     * workbook tiene dos hojas y el usuario puede reordenarlas en Excel.
+     */
+    private Sheet hojaMedidas(Workbook workbook) {
+        for (int i = 0; i < workbook.getNumberOfSheets(); i++) {
+            Sheet sheet = workbook.getSheetAt(i);
+            if (sheet != null && !HOJA_EMBALAJES.equalsIgnoreCase(sheet.getSheetName())) return sheet;
+        }
+        return null;
+    }
 
-        if (headerCell == null) headerCell = header.createCell(COL_EMBALAJE, CellType.STRING);
+    /** Índice de la columna EMBALAJE buscándola por su header, o -1 si todavía no existe. */
+    private int buscarColumnaEmbalaje(Sheet sheet) {
+        Row header = sheet.getRow(0);
+        if (header == null) return -1;
+        for (int i = 0; i < header.getLastCellNum(); i++) {
+            Cell cell = header.getCell(i);
+            if (cell == null) continue;
+            if (normalizarHeader(getCellString(cell)).equals("EMBALAJE")) return i;
+        }
+        return -1;
+    }
+
+    /**
+     * Devuelve el índice de la columna EMBALAJE, creándola si hace falta. Si ya existe se reusa
+     * esté donde esté. Si no, se busca la primera columna con header vacío desde COL_EMBALAJE:
+     * el usuario puede haber agregado columnas propias a la derecha de ERROR y no hay que pisarlas.
+     */
+    private int asegurarColumnaEmbalaje(Workbook workbook, Sheet sheet) {
+        int existente = buscarColumnaEmbalaje(sheet);
+        if (existente != -1) return existente;
+
+        Row header = sheet.getRow(0);
+        if (header == null) header = sheet.createRow(0);
+
+        int destino = COL_EMBALAJE;
+        while (destino < header.getLastCellNum()) {
+            Cell cell = header.getCell(destino);
+            if (cell == null || getCellString(cell).trim().isEmpty()) break;
+            destino++;
+        }
+
+        Cell headerCell = header.getCell(destino);
+        if (headerCell == null) headerCell = header.createCell(destino, CellType.STRING);
         headerCell.setCellValue("EMBALAJE");
         headerCell.setCellStyle(crearEstiloHeader(workbook));
+        return destino;
     }
 
     /** Crea la hoja catálogo con solo los encabezados. Nunca toca las filas ya cargadas. */
-    private void asegurarHojaEmbalajes(Workbook workbook) {
+    private boolean asegurarHojaEmbalajes(Workbook workbook) {
         Sheet sheet = workbook.getSheet(HOJA_EMBALAJES);
-        if (sheet == null) sheet = workbook.createSheet(HOJA_EMBALAJES);
+        boolean creada = sheet == null;
+        if (creada) sheet = workbook.createSheet(HOJA_EMBALAJES);
 
         Row header = sheet.getRow(0);
         if (header != null && header.getCell(0) != null
                 && !getCellString(header.getCell(0)).trim().isEmpty()) {
-            return;
+            return creada;
         }
         if (header == null) header = sheet.createRow(0);
 
@@ -556,31 +629,73 @@ public class MedidasExcelManager {
             Cell c = header.createCell(i, CellType.STRING);
             c.setCellValue(HEADERS_EMBALAJES[i]);
             c.setCellStyle(headerStyle);
-        }
-        for (int i = 0; i < HEADERS_EMBALAJES.length; i++) {
             sheet.autoSizeColumn(i);
         }
+        return true;
     }
 
     /**
      * Desplegable en la columna EMBALAJE con los códigos del catálogo. Se declara como advertencia
      * y no como bloqueo: el usuario tiene que poder editar el archivo a mano si hace falta.
+     *
+     * POI appendea cada validación sin deduplicar, así que si ya hay una sobre esta columna no se
+     * agrega otra: acumularlas corrompía el .xlsx corrida tras corrida.
      */
-    private void aplicarValidacionEmbalaje(Sheet sheet) {
+    private boolean aplicarValidacionEmbalaje(Sheet sheet, int colEmbalaje) {
         int ultimaFila = sheet.getLastRowNum();
-        if (ultimaFila < 1) return;
+        if (ultimaFila < 1) return false;
+        if (yaTieneValidacion(sheet, colEmbalaje)) return false;
 
         DataValidationHelper helper = sheet.getDataValidationHelper();
         DataValidationConstraint constraint = helper.createFormulaListConstraint(
                 HOJA_EMBALAJES + "!$A$2:$A$" + MAX_FILAS_CATALOGO);
-        CellRangeAddressList rango = new CellRangeAddressList(1, ultimaFila, COL_EMBALAJE, COL_EMBALAJE);
+        CellRangeAddressList rango = new CellRangeAddressList(1, ultimaFila, colEmbalaje, colEmbalaje);
         DataValidation validation = helper.createValidation(constraint, rango);
-        validation.setSuppressDropDownArrow(true);
+        // false = la flecha del desplegable se muestra. En POI el flag es "suprimir".
+        validation.setSuppressDropDownArrow(false);
         validation.setShowErrorBox(true);
         validation.setErrorStyle(DataValidation.ErrorStyle.WARNING);
         validation.createErrorBox("Embalaje desconocido",
                 "Ese código no figura en la hoja EMBALAJES. Revisá el catálogo o dejá la celda vacía.");
         sheet.addValidationData(validation);
+        return true;
+    }
+
+    private boolean yaTieneValidacion(Sheet sheet, int col) {
+        for (DataValidation dv : sheet.getDataValidations()) {
+            for (CellRangeAddress rango : dv.getRegions().getCellRangeAddresses()) {
+                if (col >= rango.getFirstColumn() && col <= rango.getLastColumn()) return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Garantiza que el Excel tenga la columna EMBALAJE, la hoja catálogo y el desplegable, y guarda
+     * solo si faltaba algo. Se llama al leer el archivo porque en régimen normal no aparecen SKUs
+     * nuevos: si la migración dependiera de agregarPendientes, un Excel ya completo no se migraría
+     * nunca. Devuelve true si el archivo se modificó.
+     */
+    public boolean asegurarEstructuraEmbalajes(Path excelPath) throws Exception {
+        if (!Files.exists(excelPath)) return false;
+
+        synchronized (fileLock) {
+            try (XSSFWorkbook workbook = abrirOCrear(excelPath)) {
+                Sheet sheet = hojaMedidas(workbook);
+                if (sheet == null) return false;
+
+                boolean faltabaColumna = buscarColumnaEmbalaje(sheet) == -1;
+                int colEmbalaje = asegurarColumnaEmbalaje(workbook, sheet);
+                boolean hojaCreada = asegurarHojaEmbalajes(workbook);
+                boolean validacionCreada = aplicarValidacionEmbalaje(sheet, colEmbalaje);
+
+                if (!faltabaColumna && !hojaCreada && !validacionCreada) return false;
+
+                escribirWorkbook(excelPath, workbook);
+                AppLogger.info("MEDIDAS - Estructura de embalajes asegurada en el Excel de medidas.");
+                return true;
+            }
+        }
     }
 
     private CellStyle crearEstiloHeader(Workbook workbook) {
@@ -651,12 +766,9 @@ public class MedidasExcelManager {
         AppLogger.info("MEDIDAS - Archivo creado: " + excelPath);
     }
 
+    /** Misma normalización que se usa para los códigos de embalaje: mayúsculas y espacios colapsados. */
     private static String normalizarHeader(String raw) {
-        if (raw == null) return "";
-        return raw.replace('\n', ' ')
-                .replaceAll("\\s+", " ")
-                .trim()
-                .toUpperCase();
+        return EmbalajeResolver.normalizar(raw);
     }
 
     private static boolean esSubido(String raw) {

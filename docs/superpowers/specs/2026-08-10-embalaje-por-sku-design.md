@@ -36,14 +36,17 @@ El alcance es **informativo para el operario**. Explícitamente **fuera de alcan
 
 ### 1. Excel: hoja de SKUs
 
-Se agrega la columna **`EMBALAJE`** al final, en el índice 12 (después de `ERROR`).
+Se agrega la columna **`EMBALAJE`** al final, después de `ERROR`.
+
+La columna se busca **por su header**, no por índice: si ya existe se reusa esté donde esté, y si
+falta se crea en la primera columna libre a partir de la 12. Un usuario puede haber agregado
+columnas propias a la derecha de `ERROR` y no hay que pisárselas.
 
 Va al final —y no junto a las columnas de dimensiones— para no correr los índices existentes ni
 romper las fórmulas que el usuario ya tiene cargadas (`BUSCARX` en PRODUCTO, `base*1.2` en las +20%).
 
-- `HEADERS` suma `"EMBALAJE"`; nueva constante `COL_EMBALAJE = 12`.
-- `asegurarColumnaEmbalaje(workbook, sheet)`, análogo al `asegurarColumnaError` existente: si el
-  header no está, lo escribe. Se llama desde `agregarPendientes` y desde `marcarResultados`.
+- `HEADERS` suma `"EMBALAJE"`; `COL_EMBALAJE = 12` es solo el punto de partida de la búsqueda.
+- `asegurarColumnaEmbalaje(workbook, sheet)` devuelve el índice de la columna, creándola si falta.
 - En `agregarPendientes`, la celda `EMBALAJE` de un SKU nuevo se deja vacía con el estilo amarillo
   tenue de "falta cargar" (`crearEstiloCeldaFaltante`), igual que las celdas de medidas.
 - Se aplica **validación de datos** sobre la columna `EMBALAJE`, desde la fila 2 hasta la última
@@ -52,7 +55,8 @@ romper las fórmulas que el usuario ya tiene cargadas (`BUSCARX` en PRODUCTO, `b
   El `$A$100` es un tope holgado fijo: si el catálogo creciera más allá de 99 filas, las de más
   no aparecerían en el desplegable, pero sí serían válidas al leerlas.
   La validación se declara como advertencia, no como bloqueo, para no impedir editar el archivo
-  a mano si hiciera falta.
+  a mano si hiciera falta. Antes de agregarla se comprueba que no haya ya una sobre esa columna:
+  POI appendea sin deduplicar y acumularlas corrompe el `.xlsx` corrida tras corrida.
 - La lectura en `leerMedidas` reconoce el header `EMBALAJE` por nombre normalizado, como el resto.
 
 ### 2. Excel: hoja `EMBALAJES` (catálogo)
@@ -64,6 +68,8 @@ Hoja nueva creada **solo con encabezados**, sin filas de ejemplo. El usuario car
 
 - Se crea si no existe, al mismo tiempo que se asegura la columna `EMBALAJE`. Nunca se pisan filas
   existentes.
+- Con dos hojas en el workbook, la hoja de SKUs ya no puede resolverse como "la primera": se toma
+  la primera que **no** sea `EMBALAJES`, porque el usuario puede reordenarlas en Excel.
 - `CÓDIGO` es el texto que se imprime en la etiqueta (ej. `CAJA 3`, `BOLSA CHICA`).
 - `TIPO` y las medidas son documentación del catálogo: **la app no las usa**. Existen para que el
   catálogo esté descrito en un solo lugar.
@@ -84,19 +90,23 @@ necesita distinguir "vacío" de "código que no existe", cosa que un `tieneEmbal
 `EmbalajeResolver` quedó como clase de utilidad con métodos estáticos (`indexar`, `resolver`,
 `normalizar`) en vez de una instancia: no tiene estado propio.
 
-**`MedidasExcelManager`**: nuevo método público
+**`MedidasExcelManager`**: métodos públicos nuevos
 
 ```java
 public Map<String, Embalaje> leerCatalogoEmbalajes(Path excelPath) throws Exception
+public DatosMedidas leerMedidasYCatalogo(Path excelPath) throws Exception   // record (medidas, catalogo)
+public boolean asegurarEstructuraEmbalajes(Path excelPath) throws Exception
 ```
 
-- Devuelve mapa `código normalizado → Embalaje`, preservando el código tal como fue escrito dentro
-  del record (es lo que se imprime).
+- El catálogo se devuelve indexado por `código normalizado → Embalaje`, preservando el código tal
+  como fue escrito dentro del record (es lo que se imprime).
 - Si el archivo o la hoja no existen, devuelve mapa vacío sin lanzar excepción.
-- Toma el `fileLock` existente, como el resto de las operaciones sobre el archivo.
+- Todos toman el `fileLock` existente, como el resto de las operaciones sobre el archivo.
 
 **Normalización de códigos**: para comparar SKU↔catálogo se usa `trim` + mayúsculas + colapso de
-espacios internos (la misma `normalizarHeader` ya existente sirve). Así `caja 3`, `CAJA  3` y
+espacios internos. Es la misma regla que ya usaban los headers del Excel, así que
+`MedidasExcelManager.normalizarHeader` pasa a delegar en `EmbalajeResolver.normalizar` en vez de
+duplicarla. Así `caja 3`, `CAJA  3` y
 `Caja 3` resuelven al mismo embalaje. En la etiqueta se imprime el código tal como figura en el
 **catálogo**, no como lo escribió el usuario en la fila del SKU, para que la impresión sea uniforme.
 
@@ -127,8 +137,8 @@ Se agrega la línea `EMBALAJE: <texto>` **debajo del `#N`**, en el mismo bloque 
 inyecta al inicio de cada etiqueta, con coordenadas absolutas:
 
 ```
-^FO45,85^A0N,30,30^FDEMBALAJE: CAJA 3^FS
-^FO46,85^A0N,30,30^FDEMBALAJE: CAJA 3^FS
+^FO45,85^A0N,30,30^FB735,1,0,L^FDEMBALAJE: CAJA 3^FS
+^FO46,85^A0N,30,30^FB735,1,0,L^FDEMBALAJE: CAJA 3^FS
 ```
 
 Doble pasada con 1px de offset para simular negrita, igual que `ZONA` y `COD.EXT.`.
@@ -140,8 +150,18 @@ margen superior izquierdo está libre: el `#N` termina en y=65, el banner `MEDIR
 tocar nada. Además, al ir en el bloque de coordenadas absolutas ya inyectado, **no depende de las
 anclas de texto de ML** ("Unidad", "SKU:"), a diferencia de `ZONA` y `COD.EXT.`.
 
-**Alcance:** solo zonas distintas de `CARROS`. Las etiquetas de carro listan varios productos y
-quedan sin cambios.
+El texto se construye en `EmbalajeResolver.campoZpl`, que además:
+
+- Acota el ancho con `^FB735,1,0,L`, para que un código largo no se derrame fuera del área
+  imprimible en vez de recortarse.
+- Neutraliza `^` y `~` en el código. Son los prefijos de comando de ZPL: dentro de un `^FD`
+  cortarían el campo y el resto de la etiqueta se interpretaría como comandos. El código lo tipea
+  el usuario en el Excel, así que no es texto confiable.
+
+**Alcance:** solo zonas distintas de `CARROS`, y solo SKU numéricos — la misma guarda que usa el
+banner MEDIR. Los SKU no numéricos son sentinelas del parser (`SKU INVALIDO: ...`) que nunca llegan
+al Excel de medidas: reclamarlos sería pedir algo que el usuario no puede resolver. Las etiquetas
+de carro listan varios productos y quedan sin cambios.
 
 **Siempre presente:** la línea se imprime siempre (con `-` si falta el dato), para que la ausencia
 sea visible y no se confunda con un problema de impresión.
@@ -149,13 +169,18 @@ sea visible y no se confunda con un problema de impresión.
 **Si el módulo de medidas está desactivado** (checkbox apagado, ruta vacía o archivo inexistente):
 no se inyecta la línea y no se avisa nada. La etiqueta sale exactamente como hoy.
 
-**Dónde se carga el catálogo:** en `MainController.loadCatalogoEmbalajes()`, hermano de
-`loadMedidasMap()` y con el mismo criterio de activación (checkbox encendido, ruta válida; si no,
-devuelve `null` y la línea no se inyecta). Ambos se pasan a `injectZplHeaders`.
+**Dónde se carga el catálogo:** en `MainController.loadDatosMedidas()`, que llama a
+`MedidasExcelManager.leerMedidasYCatalogo()` y devuelve medidas y catálogo de una sola apertura del
+archivo. Leerlo dos veces duplicaba el congelamiento de la UI en cada lote.
 
-Esto abre el Excel dos veces por lote en vez de una. Se eligió así por simplicidad: unificar las
-dos lecturas obligaba a refactorizar `leerMedidasInterno` para compartir el `Workbook`, y el costo
-de la segunda apertura de un archivo local chico es despreciable frente a la descarga de etiquetas.
+Ese mismo método asegura antes la estructura del archivo (`asegurarEstructuraEmbalajes`), que
+escribe solo si faltaba algo. **La migración tiene que colgar de la lectura, no de
+`agregarPendientes`**: en régimen normal no aparecen SKUs nuevos, así que un Excel ya completo
+nunca se migraría.
+
+**Catálogo vacío = función desactivada.** Si la hoja `EMBALAJES` no existe o no tiene filas, el
+catálogo se trata como `null`: si no, todas las etiquetas saldrían con `EMBALAJE: -` y el aviso
+reclamaría el lote entero sin que el usuario pueda hacer nada todavía.
 
 ### 6. Aviso en la app
 
@@ -192,11 +217,13 @@ diálogo se muestra igual.
 **`EmbalajeResolverTest`** (nuevo): los tres estados, más normalización (`caja 3` ≡ `CAJA 3`) y la
 regla de imprimir el código del catálogo y no el escrito por el usuario.
 
-La inyección ZPL en sí no se testea: vive en un método privado de `MainController` (~1900 líneas) y
-extraerla completa excede este cambio. Lo que se extrae y sí queda cubierto es la resolución
-`SKU → texto`, que es donde está la lógica. La construcción del string ZPL es una concatenación de
-coordenadas fijas, verificable a ojo en el archivo `Etiquetas/etiquetas_ordenadas_*.txt` que la app
-guarda en cada corrida.
+**`EmbalajeResolverTest`** cubre también `campoZpl`: las dos pasadas con el `^FB`, el sanitizado de
+`^`/`~` y el caso sin texto.
+
+Lo único sin test automatizado es el punto donde ese fragmento se concatena dentro de
+`injectZplHeaders`: vive en un método privado de `MainController` (~1900 líneas) que necesita
+JavaFX inicializado. Las coordenadas se verifican a ojo en el archivo
+`Etiquetas/etiquetas_ordenadas_*.txt` que la app guarda en cada corrida.
 
 ## Archivos afectados
 
@@ -207,8 +234,9 @@ guarda en cada corrida.
 | `etiquetas/parser/EmbalajeResolver.java` | **Nuevo** — resolución SKU → texto/estado |
 | `etiquetas/parser/MedidasExcelManager.java` | Columna `EMBALAJE`, hoja `EMBALAJES`, validación de datos, `leerCatalogoEmbalajes` |
 | `ui/MainController.java` | Lee el catálogo, inyecta la línea ZPL, acumula y reporta los faltantes |
-| `test/.../MedidasExcelManagerTest.java` | **Nuevo** |
-| `test/.../EmbalajeResolverTest.java` | **Nuevo** |
+| `test/.../MedidasExcelManagerTest.java` | **Nuevo** — 19 tests |
+| `test/.../EmbalajeResolverTest.java` | **Nuevo** — 10 tests |
+| `README.md` | Columna `EMBALAJE`, hoja `EMBALAJES` y línea en la etiqueta |
 
 ## Compatibilidad
 

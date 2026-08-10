@@ -54,6 +54,31 @@ public final class EmbalajeResolver {
         return new ResultadoEmbalaje(embalaje.codigo(), Estado.OK);
     }
 
+    /**
+     * Fragmento ZPL con la línea "EMBALAJE: <código>", listo para inyectar en el bloque de
+     * coordenadas absolutas (^LH0,0) del inicio de la etiqueta. Cadena vacía si no hay texto.
+     *
+     * Va en y=85: debajo del #N (que termina en y=65) y del banner MEDIR (que llega a y=80), y por
+     * encima del "Pack ID:" del formato de ML (y=130). El ^FB acota el ancho para que un código
+     * largo no se derrame fuera del área imprimible, y la doble pasada con 1px de offset simula
+     * negrita igual que ZONA y COD.EXT.
+     */
+    public static String campoZpl(String codigo) {
+        if (codigo == null || codigo.isBlank()) return "";
+        String texto = "EMBALAJE: " + sanitizar(codigo);
+        return "^FO45,85^A0N,30,30^FB735,1,0,L^FD" + texto + "^FS\n"
+                + "^FO46,85^A0N,30,30^FB735,1,0,L^FD" + texto + "^FS\n";
+    }
+
+    /**
+     * ^ y ~ son los prefijos de comando de ZPL: dentro de un ^FD cortarían el campo y el resto de
+     * la etiqueta se interpretaría como comandos. El código lo tipea el usuario en el Excel, así
+     * que se neutralizan antes de inyectarlo.
+     */
+    private static String sanitizar(String codigo) {
+        return codigo.replace('^', ' ').replace('~', ' ');
+    }
+
     /** Mayúsculas, sin espacios en los extremos y con los espacios internos colapsados. */
     public static String normalizar(String raw) {
         if (raw == null) return "";

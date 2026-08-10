@@ -772,8 +772,9 @@ public class MainController {
         try {
             ExcelMapping excelMapping = loadExcelMapping();
             List<ZplLabel> labels = zplParser.parseFile(Path.of(zplPath));
-            Map<String, ar.com.leo.etiquetas.model.MedidaSku> medidas = loadMedidasMap();
-            Map<String, ar.com.leo.etiquetas.model.Embalaje> catalogoEmbalajes = loadCatalogoEmbalajes();
+            DatosMedidasUI datosMedidas = loadDatosMedidas();
+            Map<String, ar.com.leo.etiquetas.model.MedidaSku> medidas = datosMedidas.medidas();
+            Map<String, ar.com.leo.etiquetas.model.Embalaje> catalogoEmbalajes = datosMedidas.catalogo();
             Map<String, String> skusPendientes = new LinkedHashMap<>();
             Map<String, String> embalajesFaltantes = new LinkedHashMap<>();
             currentResult = injectZplHeaders(
@@ -975,8 +976,9 @@ public class MainController {
         if (confirmResult.isEmpty() || confirmResult.get() != ButtonType.OK) return;
 
         // Capturar referencias/paths en el hilo UI antes de lanzar el thread background.
-        final Map<String, ar.com.leo.etiquetas.model.MedidaSku> medidas = loadMedidasMap();
-        final Map<String, ar.com.leo.etiquetas.model.Embalaje> catalogoEmbalajes = loadCatalogoEmbalajes();
+        final DatosMedidasUI datosMedidas = loadDatosMedidas();
+        final Map<String, ar.com.leo.etiquetas.model.MedidaSku> medidas = datosMedidas.medidas();
+        final Map<String, ar.com.leo.etiquetas.model.Embalaje> catalogoEmbalajes = datosMedidas.catalogo();
         final String medidasPath = medidasExcelField != null ? medidasExcelField.getText() : null;
 
         setLoading(true);
@@ -1981,33 +1983,45 @@ public class MainController {
         return sb.toString();
     }
 
-    private Map<String, ar.com.leo.etiquetas.model.MedidaSku> loadMedidasMap() {
-        if (medidasEnabledCheck == null || !medidasEnabledCheck.isSelected()) return null;
+    /**
+     * Medidas y catálogo de embalajes en una sola apertura del Excel. Ambos campos quedan en null
+     * si el módulo está apagado o el archivo no es usable, y en ese caso ni el banner MEDIR ni la
+     * línea EMBALAJE se inyectan. También aprovecha para migrar la estructura del archivo: en
+     * régimen normal no aparecen SKUs nuevos, así que no se puede depender de agregarPendientes.
+     */
+    private DatosMedidasUI loadDatosMedidas() {
+        if (medidasEnabledCheck == null || !medidasEnabledCheck.isSelected()) return DatosMedidasUI.VACIO;
         String path = medidasExcelField == null ? null : medidasExcelField.getText();
-        if (path == null || path.isBlank()) return null;
+        if (path == null || path.isBlank()) return DatosMedidasUI.VACIO;
         try {
-            return medidasManager.leerMedidas(Path.of(path));
+            medidasManager.asegurarEstructuraEmbalajes(Path.of(path));
+        } catch (Exception e) {
+            // No es fatal: sin columna el usuario no puede asignar embalajes, pero las medidas sí
+            // se leen. Suele pasar cuando el Excel está abierto en Excel y el archivo está tomado.
+            AppLogger.warn("No se pudo preparar la columna de embalajes: " + e.getMessage());
+        }
+        try {
+            MedidasExcelManager.DatosMedidas datos = medidasManager.leerMedidasYCatalogo(Path.of(path));
+            return new DatosMedidasUI(datos.medidas(), catalogoUsable(datos.catalogo()));
         } catch (Exception e) {
             AppLogger.warn("No se pudo leer el Excel de medidas: " + e.getMessage());
-            return null;
+            return DatosMedidasUI.VACIO;
         }
     }
 
+    private record DatosMedidasUI(Map<String, ar.com.leo.etiquetas.model.MedidaSku> medidas,
+                                  Map<String, ar.com.leo.etiquetas.model.Embalaje> catalogo) {
+        static final DatosMedidasUI VACIO = new DatosMedidasUI(null, null);
+    }
+
     /**
-     * Catálogo de embalajes de la hoja EMBALAJES. Devuelve null con el mismo criterio que
-     * loadMedidasMap: si el módulo de medidas está apagado o el archivo no es usable, la línea
-     * EMBALAJE simplemente no se inyecta y la etiqueta sale como antes de esta función.
+     * Un catálogo vacío (hoja EMBALAJES inexistente o sin filas) equivale a la función apagada:
+     * devolver el mapa vacío haría que todas las etiquetas salieran con "EMBALAJE: -" y que el
+     * aviso reclamara el lote entero sin que el usuario pueda hacer nada al respecto todavía.
      */
-    private Map<String, ar.com.leo.etiquetas.model.Embalaje> loadCatalogoEmbalajes() {
-        if (medidasEnabledCheck == null || !medidasEnabledCheck.isSelected()) return null;
-        String path = medidasExcelField == null ? null : medidasExcelField.getText();
-        if (path == null || path.isBlank()) return null;
-        try {
-            return medidasManager.leerCatalogoEmbalajes(Path.of(path));
-        } catch (Exception e) {
-            AppLogger.warn("No se pudo leer el catálogo de embalajes: " + e.getMessage());
-            return null;
-        }
+    private Map<String, ar.com.leo.etiquetas.model.Embalaje> catalogoUsable(
+            Map<String, ar.com.leo.etiquetas.model.Embalaje> catalogo) {
+        return catalogo == null || catalogo.isEmpty() ? null : catalogo;
     }
 
     private int guardarSkusPendientesMedicion(Map<String, String> skusPendientes) {

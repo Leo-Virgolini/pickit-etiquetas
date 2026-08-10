@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Test;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class EmbalajeResolverTest {
 
@@ -60,5 +61,30 @@ class EmbalajeResolverTest {
     void conCatalogoVacioCualquierCodigoEsInvalido() {
         ResultadoEmbalaje r = EmbalajeResolver.resolver("CAJA 3", Map.of());
         assertEquals(Estado.CODIGO_INVALIDO, r.estado());
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // Campo ZPL
+    // ---------------------------------------------------------------------------------------
+
+    @Test
+    void elCampoZplLlevaDosPasadasYAncholimitado() {
+        String zpl = EmbalajeResolver.campoZpl("CAJA 3");
+        assertEquals("^FO45,85^A0N,30,30^FB735,1,0,L^FDEMBALAJE: CAJA 3^FS\n"
+                        + "^FO46,85^A0N,30,30^FB735,1,0,L^FDEMBALAJE: CAJA 3^FS\n",
+                zpl);
+    }
+
+    @Test
+    void elCampoZplNeutralizaLosCaracteresDeControlDeZpl() {
+        // ^ y ~ cortarían el campo y el resto del ZPL se interpretaría como comandos.
+        String zpl = EmbalajeResolver.campoZpl("CAJA ^3~A");
+        assertTrue(zpl.contains("^FDEMBALAJE: CAJA  3 A^FS"), zpl);
+    }
+
+    @Test
+    void sinTextoNoHayCampo() {
+        assertEquals("", EmbalajeResolver.campoZpl(null));
+        assertEquals("", EmbalajeResolver.campoZpl("  "));
     }
 }
