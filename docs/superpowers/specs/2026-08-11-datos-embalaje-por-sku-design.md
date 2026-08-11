@@ -1,0 +1,204 @@
+# Datos de embalaje por SKU en la etiqueta — Diseño
+
+**Fecha:** 2026-08-11
+**Autor:** Leo (con asistencia de Claude)
+
+Reemplaza a [2026-08-10-embalaje-por-sku-design.md](2026-08-10-embalaje-por-sku-design.md), que
+modelaba el embalaje como un único código elegido de un catálogo.
+
+## Resumen
+
+El embalaje deja de ser un código de catálogo y pasa a ser un conjunto de datos que el usuario carga
+a mano en el Excel de medidas: qué caja o bolsa va, si lleva pluribol, si lleva rollo inflado y
+cuántos paños, más observaciones libres. La etiqueta muestra solo los datos que ese SKU tenga.
+
+**La app solo lee.** No crea columnas, no inserta, no valida, no genera hojas. Eso elimina la hoja
+catálogo, el desplegable, la validación de datos y toda la migración de estructura introducidos por
+el diseño anterior — que es de donde salieron los defectos de las rondas de review.
+
+Fuera de alcance: las dimensiones y el peso que se suben a MercadoLibre no cambian.
+
+## Columnas
+
+Van después de `SUBIDO` y **las crea y carga el usuario**:
+
+| Columna | Contenido |
+|---|---|
+| `N° Bolsa` | Número de bolsa |
+| `Nombre Caja` | Nombre de la caja (ej. `GRANDE`) |
+| `N° Caja` | Número de caja |
+| `PLURIBOL` | `SI` / vacío |
+| `CANT PLURIBOL` | Vueltas de pluribol |
+| `ROLLO INFLABLE` | Tipo de rollo (ej. `DIAMANTE`, `CUADRADO`) |
+| `CANT PAÑOS` | Cantidad de paños |
+| `OBSERVACIONES` | Texto libre |
+
+Se ubican **por su encabezado**, no por índice: el usuario puede reordenarlas o intercalar columnas
+propias. Si una falta, ese dato no se muestra y el resto sigue funcionando.
+
+Reconocimiento sobre el header normalizado (mayúsculas, espacios colapsados), en este orden —
+el orden importa porque los patrones se solapan:
+
+1. contiene `CANT` y `PLURIBOL` → cantidad de pluribol
+2. contiene `PLURIBOL` → pluribol
+3. contiene `NOMBRE` y `CAJA` → nombre de caja
+4. contiene `CAJA` → número de caja
+5. contiene `BOLSA` → número de bolsa
+6. contiene `ROLLO` → tipo de rollo
+7. contiene `PAÑO` o `PANO` → cantidad de paños
+8. contiene `OBSERV` → observaciones
+
+`PAÑO`/`PANO` se aceptan ambos porque el encabezado puede escribirse sin la eñe.
+
+## Modelo
+
+**`ar.com.leo.etiquetas.model.DatosEmbalaje`** (record nuevo), con los ocho campos como `String` —
+son texto que se imprime tal cual, no se opera con ellos:
+
+```java
+public record DatosEmbalaje(String nroBolsa, String nombreCaja, String nroCaja,
+                            String pluribol, String cantPluribol,
+                            String rollo, String cantPanos, String observaciones) {
+    public static final DatosEmbalaje VACIO = ...;
+    public boolean tieneCajaOBolsa();
+}
+```
+
+**`MedidaSku`**: el campo `String embalaje` pasa a `DatosEmbalaje embalaje`, nunca null (`VACIO`
+cuando el SKU no tiene ninguna columna cargada).
+
+## Render de las líneas
+
+**`ar.com.leo.etiquetas.parser.EmbalajeRenderer`** (reemplaza a `EmbalajeResolver`), lógica pura:
+
+```java
+public static List<String> lineas(DatosEmbalaje datos)
+public static String campoZpl(List<String> lineas)
+```
+
+| Condición | Línea |
+|---|---|
+| N° Caja y Nombre Caja cargados | `CAJA 3 - GRANDE` |
+| solo uno de los dos | `CAJA 3` / `CAJA GRANDE` |
+| N° Bolsa cargado | `BOLSA 5` |
+| PLURIBOL cargado, con cantidad | `PLURIBOL: SI - 2 vueltas` |
+| PLURIBOL cargado, sin cantidad | `PLURIBOL: SI` |
+| ROLLO cargado, con cantidad | `ROLLO DIAMANTE - 3 paños` |
+| ROLLO cargado, sin cantidad | `ROLLO DIAMANTE` |
+| OBSERVACIONES cargado | `Obs: Colchon + Tapa` |
+
+El orden es siempre ese, y caja y bolsa no coinciden nunca en el mismo SKU, así que el máximo es de
+4 líneas.
+
+`campoZpl` neutraliza `^` y `~` en todos los valores: son prefijos de comando de ZPL y dentro de un
+`^FD` cortarían el campo, haciendo que el resto de la etiqueta se interprete como comandos. El texto
+lo tipea el usuario en el Excel, así que no es confiable.
+
+## Inyección en la etiqueta
+
+Bloque de hasta 4 líneas en el margen superior derecho, dentro del mismo bloque `^LH0,0` que ya se
+inyecta al inicio de cada etiqueta:
+
+```
+^FO450,85^A0N,18,18^FB340,1,0,L^FDCAJA 3 - GRANDE^FS
+^FO450,107^A0N,18,18^FB340,1,0,L^FDPLURIBOL: SI - 2 vueltas^FS
+^FO450,129^A0N,18,18^FB340,1,0,L^FDROLLO DIAMANTE - 3 paños^FS
+^FO450,151^A0N,18,18^FB340,1,0,L^FDObs: Colchon + Tapa^FS
+```
+
+`x=450`, primera línea en `y=85`, paso de 22px, fuente 18. El `^FB340,1` acota cada línea al ancho
+disponible: un valor largo se recorta en vez de derramarse fuera del área imprimible.
+
+**Por qué ahí.** El banner `MEDIR` termina en y=80 y el separador de la zona de picking está en
+y=180, así que la franja y 85–178 queda libre a la derecha de x=450 — salvo por un texto de ML.
+Cuatro líneas ocupan hasta y≈169.
+
+**Hay que borrar el texto de ML** *"Recortá esta parte de la etiqueta para que tu paquete viaje
+seguro"* (`^FO450,30` bajo `^LH0,90`, o sea y≈120–160), que cae justo en esa zona y no le sirve al
+operario. Se elimina localizando el campo por el fragmento `ecort` —sin acentos ni mayúsculas, para
+que no dependa de cómo ML codifique la tilde— y cortando desde su `^FO` hasta su `^FS`.
+
+Si ML cambia ese texto y el ancla no aparece, se registra una advertencia en el log y las líneas se
+dibujan igual, superpuestas a ese texto. Es visible y no silencioso: preferible a no mostrar el
+embalaje.
+
+**Alcance:** solo zonas distintas de `CARROS` y solo SKU numéricos, la misma guarda que usa el banner
+MEDIR. Los SKU no numéricos son sentinelas del parser (`SKU INVALIDO: ...`) que nunca llegan al Excel
+de medidas, así que no se les puede cargar un embalaje.
+
+## Aviso de pendientes
+
+Un SKU se reporta como pendiente cuando **no tiene ni caja ni bolsa**; pluribol, rollo y
+observaciones no cuentan. El diálogo post-proceso suma:
+
+```
+3 SKU(s) sin caja ni bolsa asignada en este lote:
+  1241212, 1241255, 998877
+```
+
+Desaparece la categoría de "código inexistente": existía solo por el catálogo.
+
+Si el módulo de medidas está apagado, la ruta está vacía o el archivo no es usable, no se inyecta
+nada y no se avisa nada — la etiqueta sale como antes de esta función.
+
+## Qué se elimina
+
+Del diseño anterior desaparecen por completo:
+
+- `Embalaje` (record del catálogo) y `EmbalajeResolver`.
+- Hoja `EMBALAJES`: `HOJA_EMBALAJES`, `HEADERS_EMBALAJES`, `asegurarHojaEmbalajes`,
+  `crearEstiloHeaderCatalogo`, `leerCatalogoDe`.
+- Validación y desplegable: `aplicarValidacionEmbalaje`, `yaTieneValidacion`, `quitarValidaciones`,
+  `MAX_FILAS_CATALOGO`, `MAX_FILAS_VALIDACION`.
+- Migración de estructura: `asegurarEstructuraEmbalajes`, `desplazarColumnasALaDerecha`,
+  `copiarCelda`, `asegurarColumnaEmbalaje`, `hojaMedidasParaEscribir`, `tieneEstructuraCompleta`,
+  y el campo `estructuraCompleta` de `DatosMedidas`.
+- La columna `EMBALAJE` y su constante `COL_EMBALAJE`.
+
+`normalizarHeader` deja de delegar en `EmbalajeResolver` y recupera su implementación propia.
+
+**El usuario limpia su Excel a mano**: borra la columna `EMBALAJE`, la hoja `EMBALAJES` y la
+validación, y agrega las 8 columnas nuevas. La app no lo hace por él.
+
+Al crear un Excel **desde cero** (archivo inexistente), `HEADERS` incluye las 8 columnas nuevas
+entre `SUBIDO` y `ERROR`, para que el archivo salga completo y en el orden pedido. `COL_ERROR` pasa
+a 19 en consecuencia. No es migración: no toca archivos existentes, y como `ERROR` se ubica por su
+encabezado, un archivo donde quedó en otra posición sigue funcionando.
+
+`agregarPendientes` **no escribe nada** en las 8 columnas al insertar la fila de un SKU nuevo: son
+de carga manual. Las celdas quedan vacías, sin estilo de "falta cargar", para no ensuciar el archivo
+con formato sobre columnas que la app no administra.
+
+## Testing
+
+**`EmbalajeRendererTest`** (nuevo): cada línea por separado, caja con y sin nombre, cantidades
+vacías, orden de las líneas, SKU sin ningún dato (lista vacía), sanitizado de `^`/`~`, y el `^FB` en
+el campo ZPL.
+
+**`MedidasExcelManagerTest`** (se reescribe la parte de embalaje): lectura de las ocho columnas,
+archivo sin ninguna de ellas (`DatosEmbalaje.VACIO`), columnas en orden distinto, y variantes de
+encabezado (`PAÑOS`/`PANOS`, mayúsculas y espacios).
+
+Se eliminan los tests de migración, validación, desplegable, hoja catálogo y desplazamiento de
+columnas.
+
+Como antes, el punto donde el fragmento ZPL se concatena dentro de `injectZplHeaders` no queda
+cubierto: vive en un método privado de `MainController` que necesita JavaFX inicializado. Lo que sí
+se cubre es la generación del fragmento. El borrado del texto de ML tampoco: depende del mismo
+método.
+
+## Archivos afectados
+
+| Archivo | Cambio |
+|---|---|
+| `etiquetas/model/DatosEmbalaje.java` | **Nuevo** |
+| `etiquetas/model/Embalaje.java` | **Se elimina** |
+| `etiquetas/model/MedidaSku.java` | `embalaje` pasa de `String` a `DatosEmbalaje` |
+| `etiquetas/parser/EmbalajeRenderer.java` | **Nuevo** — reemplaza a `EmbalajeResolver` |
+| `etiquetas/parser/EmbalajeResolver.java` | **Se elimina** |
+| `etiquetas/parser/MedidasExcelManager.java` | Lee las 8 columnas; se le quita toda la escritura de estructura |
+| `ui/MainController.java` | Inyecta el bloque, borra el texto de ML, reporta los SKU sin caja ni bolsa |
+| `test/.../EmbalajeRendererTest.java` | **Nuevo** |
+| `test/.../EmbalajeResolverTest.java` | **Se elimina** |
+| `test/.../MedidasExcelManagerTest.java` | Se reescribe la parte de embalaje |
+| `README.md` | Columnas nuevas, líneas en la etiqueta, se quita la hoja `EMBALAJES` |
