@@ -9,6 +9,7 @@ import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.ss.util.CellRangeAddress;
 import org.apache.poi.ss.util.CellRangeAddressList;
 import org.apache.poi.xssf.usermodel.XSSFCellStyle;
+import org.apache.poi.xssf.usermodel.XSSFSheet;
 import org.apache.poi.xssf.usermodel.XSSFColor;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 
@@ -84,6 +85,9 @@ public class MedidasExcelManager {
     /** Tope holgado del rango que alimenta el desplegable de EMBALAJE. */
     private static final int MAX_FILAS_CATALOGO = 100;
 
+    /** Hasta qué fila se extiende el desplegable, para que cubra también las filas futuras. */
+    private static final int MAX_FILAS_VALIDACION = 5000;
+
     // Retry para sharing violation (Excel abierto por el usuario).
     private static final int MAX_WRITE_RETRIES = 5;
     private static final long WRITE_RETRY_BASE_MS = 500;
@@ -92,8 +96,15 @@ public class MedidasExcelManager {
     // cuando el procesamiento de un lote y la subida asincrónica del anterior se solapan.
     private final Object fileLock = new Object();
 
-    /** Medidas por SKU y catálogo de embalajes, leídos del mismo archivo en una sola pasada. */
-    public record DatosMedidas(Map<String, MedidaSku> medidas, Map<String, Embalaje> catalogo) {
+    /**
+     * Medidas por SKU y catálogo de embalajes, leídos del mismo archivo en una sola pasada.
+     *
+     * @param estructuraCompleta false si al archivo le falta la columna EMBALAJE, la hoja catálogo
+     *                           o el desplegable. Permite disparar la migración —que abre el archivo
+     *                           en modo escritura— solo cuando hace falta, y no en cada corrida.
+     */
+    public record DatosMedidas(Map<String, MedidaSku> medidas, Map<String, Embalaje> catalogo,
+                               boolean estructuraCompleta) {
     }
 
     public Map<String, MedidaSku> leerMedidas(Path excelPath) throws Exception {
@@ -110,13 +121,23 @@ public class MedidasExcelManager {
         synchronized (fileLock) {
             if (!Files.exists(excelPath)) {
                 crearArchivoVacio(excelPath);
-                return new DatosMedidas(new LinkedHashMap<>(), new LinkedHashMap<>());
+                return new DatosMedidas(new LinkedHashMap<>(), new LinkedHashMap<>(), true);
             }
             try (OPCPackage pkg = OPCPackage.open(excelPath.toFile(), PackageAccess.READ);
                  Workbook workbook = new XSSFWorkbook(pkg)) {
-                return new DatosMedidas(leerMedidasDe(workbook), leerCatalogoDe(workbook));
+                return new DatosMedidas(leerMedidasDe(workbook), leerCatalogoDe(workbook),
+                        tieneEstructuraCompleta(workbook));
             }
         }
+    }
+
+    private boolean tieneEstructuraCompleta(Workbook workbook) {
+        if (workbook.getSheet(HOJA_EMBALAJES) == null) return false;
+        Sheet sheet = hojaMedidasParaEscribir(workbook);
+        if (sheet == null) return true; // No hay nada que migrar: no es un Excel de medidas.
+        int colEmbalaje = buscarColumna(sheet, "EMBALAJE");
+        if (colEmbalaje == -1 || buscarColumna(sheet, "ERROR") == -1) return false;
+        return yaTieneValidacion(sheet, colEmbalaje, Math.max(sheet.getLastRowNum(), MAX_FILAS_VALIDACION));
     }
 
     private Map<String, MedidaSku> leerMedidasInterno(Path excelPath) throws Exception {
@@ -204,25 +225,6 @@ public class MedidasExcelManager {
         return medidas;
     }
 
-    /**
-     * Lee la hoja catálogo EMBALAJES. Devuelve un mapa indexado por código normalizado
-     * (mayúsculas, sin espacios sobrantes) preservando el código original dentro del record,
-     * que es el que se imprime en la etiqueta.
-     *
-     * Si el archivo o la hoja no existen devuelve un mapa vacío: el catálogo es opcional y su
-     * ausencia no debe romper el procesamiento de etiquetas.
-     */
-    public Map<String, Embalaje> leerCatalogoEmbalajes(Path excelPath) throws Exception {
-        synchronized (fileLock) {
-            if (!Files.exists(excelPath)) return new LinkedHashMap<>();
-
-            try (OPCPackage pkg = OPCPackage.open(excelPath.toFile(), PackageAccess.READ);
-                 Workbook workbook = new XSSFWorkbook(pkg)) {
-                return leerCatalogoDe(workbook);
-            }
-        }
-    }
-
     private Map<String, Embalaje> leerCatalogoDe(Workbook workbook) {
         Sheet sheet = workbook.getSheet(HOJA_EMBALAJES);
         if (sheet == null) return new LinkedHashMap<>();
@@ -274,7 +276,7 @@ public class MedidasExcelManager {
             }
 
             try (XSSFWorkbook workbook = abrirOCrear(excelPath)) {
-                Sheet sheet = hojaMedidas(workbook);
+                Sheet sheet = hojaMedidasParaEscribir(workbook);
                 if (sheet == null) sheet = workbook.createSheet("MEDIDAS");
 
                 asegurarHeaders(workbook, sheet);
@@ -382,7 +384,7 @@ public class MedidasExcelManager {
         synchronized (fileLock) {
             int actualizados = 0;
             try (XSSFWorkbook workbook = abrirOCrear(excelPath)) {
-                Sheet sheet = hojaMedidas(workbook);
+                Sheet sheet = hojaMedidasParaEscribir(workbook);
                 if (sheet == null) return 0;
 
                 asegurarColumnaError(workbook, sheet);
@@ -549,7 +551,11 @@ public class MedidasExcelManager {
         return style;
     }
 
-    /** Índice de la columna ERROR, creándola en COL_ERROR si el archivo es anterior a ella. */
+    /**
+     * Índice de la columna ERROR, creándola si el archivo es anterior a ella. Se agrega pegada a la
+     * última columna existente y no en COL_ERROR a secas: en un archivo que tampoco tiene EMBALAJE
+     * quedaría un hueco sin encabezado entre SUBIDO y ERROR.
+     */
     private int asegurarColumnaError(Workbook workbook, Sheet sheet) {
         int existente = buscarColumna(sheet, "ERROR");
         if (existente != -1) return existente;
@@ -557,21 +563,40 @@ public class MedidasExcelManager {
         Row header = sheet.getRow(0);
         if (header == null) header = sheet.createRow(0);
 
-        Cell errorHeaderCell = header.getCell(COL_ERROR);
-        if (errorHeaderCell == null) errorHeaderCell = header.createCell(COL_ERROR, CellType.STRING);
+        int destino = Math.min(COL_ERROR, Math.max(0, header.getLastCellNum()));
+        Cell errorHeaderCell = header.getCell(destino);
+        if (errorHeaderCell == null) errorHeaderCell = header.createCell(destino, CellType.STRING);
         errorHeaderCell.setCellValue("ERROR");
         errorHeaderCell.setCellStyle(crearEstiloHeader(workbook));
-        return COL_ERROR;
+        return destino;
     }
 
     /**
-     * Hoja de SKUs. Se resuelve por descarte y no por posición: al agregarse la hoja catálogo el
-     * workbook tiene dos hojas y el usuario puede reordenarlas en Excel.
+     * Hoja de SKUs para leer. Se prefiere la que tenga un header SKU; si ninguna lo tiene se cae a
+     * la primera hoja que no sea el catálogo, para que el error de "falta la columna SKU" siga
+     * saliendo con un mensaje entendible en vez de devolver vacío en silencio.
      */
     private Sheet hojaMedidas(Workbook workbook) {
+        Sheet conSku = hojaMedidasParaEscribir(workbook);
+        if (conSku != null) return conSku;
         for (int i = 0; i < workbook.getNumberOfSheets(); i++) {
             Sheet sheet = workbook.getSheetAt(i);
             if (sheet != null && !HOJA_EMBALAJES.equalsIgnoreCase(sheet.getSheetName())) return sheet;
+        }
+        return null;
+    }
+
+    /**
+     * Hoja de SKUs para escribir: solo la que realmente tiene un header SKU. La migración inserta
+     * columnas y desplaza celdas, así que equivocarse de hoja destruye datos; el usuario puede
+     * tener hojas propias ("Resumen", "Notas") antes de la de medidas. Si ninguna califica devuelve
+     * null y no se migra nada.
+     */
+    private Sheet hojaMedidasParaEscribir(Workbook workbook) {
+        for (int i = 0; i < workbook.getNumberOfSheets(); i++) {
+            Sheet sheet = workbook.getSheetAt(i);
+            if (sheet == null || HOJA_EMBALAJES.equalsIgnoreCase(sheet.getSheetName())) continue;
+            if (buscarColumna(sheet, "SKU") != -1) return sheet;
         }
         return null;
     }
@@ -678,9 +703,12 @@ public class MedidasExcelManager {
      * agrega otra: acumularlas corrompía el .xlsx corrida tras corrida.
      */
     private boolean aplicarValidacionEmbalaje(Sheet sheet, int colEmbalaje) {
-        int ultimaFila = sheet.getLastRowNum();
-        if (ultimaFila < 1) return false;
-        if (yaTieneValidacion(sheet, colEmbalaje)) return false;
+        // El rango se fija de entrada hasta MAX_FILAS_VALIDACION en vez de hasta la última fila
+        // cargada: así las filas que agregue una corrida posterior ya nacen con el desplegable,
+        // sin tener que reescribir la validación (y sin acumular una nueva en cada corrida).
+        int ultimaFila = Math.max(sheet.getLastRowNum(), MAX_FILAS_VALIDACION);
+        if (yaTieneValidacion(sheet, colEmbalaje, ultimaFila)) return false;
+        quitarValidaciones(sheet, colEmbalaje);
 
         DataValidationHelper helper = sheet.getDataValidationHelper();
         DataValidationConstraint constraint = helper.createFormulaListConstraint(
@@ -697,13 +725,41 @@ public class MedidasExcelManager {
         return true;
     }
 
-    private boolean yaTieneValidacion(Sheet sheet, int col) {
+    /** Hay validación utilizable si ya cubre la columna hasta {@code ultimaFila}. */
+    private boolean yaTieneValidacion(Sheet sheet, int col, int ultimaFila) {
         for (DataValidation dv : sheet.getDataValidations()) {
             for (CellRangeAddress rango : dv.getRegions().getCellRangeAddresses()) {
-                if (col >= rango.getFirstColumn() && col <= rango.getLastColumn()) return true;
+                if (col >= rango.getFirstColumn() && col <= rango.getLastColumn()
+                        && rango.getLastRow() >= ultimaFila) {
+                    return true;
+                }
             }
         }
         return false;
+    }
+
+    /**
+     * Borra las validaciones que toquen esa columna, para poder recrearla con un rango más amplio
+     * sin dejar la anterior dando vueltas (POI appendea sin deduplicar y acumularlas corrompe
+     * el archivo). Solo XSSF permite quitarlas, que es el único formato que maneja esta clase.
+     */
+    private void quitarValidaciones(Sheet sheet, int col) {
+        if (!(sheet instanceof XSSFSheet xssfSheet)) return;
+        org.openxmlformats.schemas.spreadsheetml.x2006.main.CTWorksheet ct = xssfSheet.getCTWorksheet();
+        if (!ct.isSetDataValidations()) return;
+
+        var validations = ct.getDataValidations();
+        for (int i = validations.sizeOfDataValidationArray() - 1; i >= 0; i--) {
+            for (Object ref : validations.getDataValidationArray(i).getSqref()) {
+                CellRangeAddress rango = CellRangeAddress.valueOf(ref.toString());
+                if (col >= rango.getFirstColumn() && col <= rango.getLastColumn()) {
+                    validations.removeDataValidation(i);
+                    break;
+                }
+            }
+        }
+        validations.setCount(validations.sizeOfDataValidationArray());
+        if (validations.sizeOfDataValidationArray() == 0) ct.unsetDataValidations();
     }
 
     /**
@@ -717,17 +773,28 @@ public class MedidasExcelManager {
 
         synchronized (fileLock) {
             try (XSSFWorkbook workbook = abrirOCrear(excelPath)) {
-                Sheet sheet = hojaMedidas(workbook);
-                if (sheet == null) return false;
+                // Estricto a propósito: insertar columnas en la hoja equivocada destruiría datos.
+                Sheet sheet = hojaMedidasParaEscribir(workbook);
+                if (sheet == null) {
+                    AppLogger.warn("MEDIDAS - Ninguna hoja tiene columna SKU; no se migra la estructura de embalajes.");
+                    return false;
+                }
 
                 boolean faltabaColumna = buscarColumna(sheet, "EMBALAJE") == -1;
+                boolean faltabaError = buscarColumna(sheet, "ERROR") == -1;
                 asegurarColumnaError(workbook, sheet);
                 int colEmbalaje = asegurarColumnaEmbalaje(workbook, sheet);
                 boolean hojaCreada = asegurarHojaEmbalajes(workbook);
                 boolean validacionCreada = aplicarValidacionEmbalaje(sheet, colEmbalaje);
 
-                if (!faltabaColumna && !hojaCreada && !validacionCreada) return false;
+                if (!faltabaColumna && !faltabaError && !hojaCreada && !validacionCreada) return false;
 
+                if (faltabaColumna) {
+                    // Insertar la columna corre las celdas a la derecha; las fórmulas se mueven con
+                    // su texto original, así que hay que forzar el recálculo al abrir.
+                    workbook.setForceFormulaRecalculation(true);
+                    autoSizeColumns(sheet);
+                }
                 escribirWorkbook(excelPath, workbook);
                 AppLogger.info("MEDIDAS - Estructura de embalajes asegurada en el Excel de medidas.");
                 return true;
@@ -763,8 +830,11 @@ public class MedidasExcelManager {
         style.setBorderRight(BorderStyle.THIN);
     }
 
+    /** Dimensiona las columnas que la hoja tiene de verdad, no solo las que la app conoce. */
     private void autoSizeColumns(Sheet sheet) {
-        for (int i = 0; i < HEADERS.length; i++) {
+        Row header = sheet.getRow(0);
+        int columnas = header == null ? HEADERS.length : Math.max(HEADERS.length, header.getLastCellNum());
+        for (int i = 0; i < columnas; i++) {
             sheet.autoSizeColumn(i);
         }
     }

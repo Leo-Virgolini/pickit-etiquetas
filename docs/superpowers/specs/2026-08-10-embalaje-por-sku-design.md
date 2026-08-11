@@ -44,6 +44,24 @@ usuario tenga después— se desplaza un lugar a la derecha con su contenido y s
 desplazamiento se hace celda por celda (`desplazarColumnasALaDerecha`) y no con `Sheet#shiftColumns`,
 que no movía los estilos ni dejaba vacía la celda de origen.
 
+**Limitación conocida:** las fórmulas se mueven con su texto original, sin reescribir referencias.
+Si el usuario tuviera una fórmula que apunta a la columna `ERROR` o a una posterior (`=CONTARA(L:L)`,
+`=SI(L2<>"";...)`), después de la migración seguiría apuntando al índice viejo, que ahora es
+`EMBALAJE`. Las fórmulas que el Excel usa hoy —`BUSCARX` en PRODUCTO y `base*1.2` en las +20%— viven
+en columnas anteriores a `ERROR` y referencian columnas que no se mueven, así que no se ven
+afectadas. Tras insertar se llama `setForceFormulaRecalculation(true)` para que Excel recalcule al
+abrir.
+
+**Migración estricta en la elección de hoja:** insertar columnas en la hoja equivocada destruiría
+datos, así que para escribir solo se acepta una hoja que tenga header `SKU`
+(`hojaMedidasParaEscribir`). Si el usuario tiene hojas propias antes de la de medidas, quedan
+intactas. Para leer se usa un criterio más laxo, para conservar el mensaje de error cuando falta
+la columna `SKU`.
+
+**Cuándo corre la migración:** `leerMedidasYCatalogo` devuelve `estructuraCompleta`, y solo si es
+`false` se abre el archivo en modo escritura. En régimen normal la app hace una única lectura por
+lote y nunca vuelve a escribir.
+
 Tanto `EMBALAJE` como `ERROR` se ubican **por su header**, no por índice: si ya existen se reusan
 estén donde estén. Las constantes `COL_EMBALAJE = 11` y `COL_ERROR = 12` solo definen dónde van en
 un archivo nuevo.
@@ -61,8 +79,10 @@ Las columnas anteriores no se mueven, así que las fórmulas cargadas (`BUSCARX`
   El `$A$100` es un tope holgado fijo: si el catálogo creciera más allá de 99 filas, las de más
   no aparecerían en el desplegable, pero sí serían válidas al leerlas.
   La validación se declara como advertencia, no como bloqueo, para no impedir editar el archivo
-  a mano si hiciera falta. Antes de agregarla se comprueba que no haya ya una sobre esa columna:
-  POI appendea sin deduplicar y acumularlas corrompe el `.xlsx` corrida tras corrida.
+  a mano si hiciera falta. El rango de filas va fijo hasta `MAX_FILAS_VALIDACION = 5000` para que
+  las filas que agreguen las corridas siguientes ya nazcan con el desplegable. Si ya existe una
+  validación sobre esa columna que cubra ese rango no se toca nada; si existe una más estrecha se
+  elimina y se recrea. Nunca se appendea encima: POI no deduplica y acumularlas corrompe el `.xlsx`.
 - La lectura en `leerMedidas` reconoce el header `EMBALAJE` por nombre normalizado, como el resto.
 
 ### 2. Excel: hoja `EMBALAJES` (catálogo)

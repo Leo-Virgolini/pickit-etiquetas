@@ -11,6 +11,7 @@ import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.usermodel.Workbook;
 import org.apache.poi.ss.usermodel.WorkbookFactory;
+import org.apache.poi.ss.util.CellRangeAddress;
 import org.apache.poi.xssf.usermodel.XSSFCellStyle;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.junit.jupiter.api.Test;
@@ -50,14 +51,14 @@ class MedidasExcelManagerTest {
     void catalogoDeUnArchivoSinHojaEmbalajesEsVacio() throws Exception {
         Path excel = crearExcelViejo("medidas.xlsx", List.<String[]>of(new String[]{"1241212", "Producto A"}));
 
-        Map<String, Embalaje> catalogo = manager.leerCatalogoEmbalajes(excel);
+        Map<String, Embalaje> catalogo = manager.leerMedidasYCatalogo(excel).catalogo();
 
         assertTrue(catalogo.isEmpty());
     }
 
     @Test
     void catalogoDeUnArchivoInexistenteEsVacio() throws Exception {
-        Map<String, Embalaje> catalogo = manager.leerCatalogoEmbalajes(tempDir.resolve("no-existe.xlsx"));
+        Map<String, Embalaje> catalogo = manager.leerMedidasYCatalogo(tempDir.resolve("no-existe.xlsx")).catalogo();
 
         assertTrue(catalogo.isEmpty());
     }
@@ -68,7 +69,7 @@ class MedidasExcelManagerTest {
                 new Object[]{"CAJA 3", "CAJA", 30.0, 20.0, 15.0}
         ));
 
-        Map<String, Embalaje> catalogo = manager.leerCatalogoEmbalajes(excel);
+        Map<String, Embalaje> catalogo = manager.leerMedidasYCatalogo(excel).catalogo();
 
         Embalaje caja = catalogo.get("CAJA 3");
         assertNotNull(caja);
@@ -85,7 +86,7 @@ class MedidasExcelManagerTest {
                 new Object[]{"  Bolsa   Chica ", "BOLSA", null, null, null}
         ));
 
-        Map<String, Embalaje> catalogo = manager.leerCatalogoEmbalajes(excel);
+        Map<String, Embalaje> catalogo = manager.leerMedidasYCatalogo(excel).catalogo();
 
         assertEquals("Bolsa Chica", catalogo.get("BOLSA CHICA").codigo());
     }
@@ -98,7 +99,7 @@ class MedidasExcelManagerTest {
                 new Object[]{"CAJA 2", "CAJA", 30.0, 30.0, 30.0}
         ));
 
-        Map<String, Embalaje> catalogo = manager.leerCatalogoEmbalajes(excel);
+        Map<String, Embalaje> catalogo = manager.leerMedidasYCatalogo(excel).catalogo();
 
         assertEquals(2, catalogo.size());
     }
@@ -160,7 +161,7 @@ class MedidasExcelManagerTest {
 
         manager.agregarPendientes(excel, List.of("999999"));
 
-        assertEquals("CAJA 3", manager.leerCatalogoEmbalajes(excel).get("CAJA 3").codigo());
+        assertEquals("CAJA 3", manager.leerMedidasYCatalogo(excel).catalogo().get("CAJA 3").codigo());
     }
 
     @Test
@@ -307,9 +308,120 @@ class MedidasExcelManagerTest {
         assertNotNull(datos.catalogo().get("CAJA 3"));
     }
 
+    @Test
+    void noTocaHojasAjenasAunqueEstenPrimeras() throws Exception {
+        // El usuario puede tener hojas propias ("Resumen", "Notas") antes de la de medidas.
+        Path excel = crearExcelViejo("hoja-ajena.xlsx", List.<String[]>of(new String[]{"1241212", "Producto A"}));
+        agregarHojaAjenaAlPrincipio(excel, "Resumen");
+
+        manager.asegurarEstructuraEmbalajes(excel);
+
+        try (Workbook wb = WorkbookFactory.create(excel.toFile(), null, true)) {
+            Sheet ajena = wb.getSheet("Resumen");
+            assertEquals("dato propio", ajena.getRow(0).getCell(0).getStringCellValue());
+            assertEquals(1, ajena.getRow(0).getLastCellNum(), "no se le deben agregar columnas");
+            assertEquals("EMBALAJE", wb.getSheet("MEDIDAS").getRow(0).getCell(11).getStringCellValue());
+        }
+    }
+
+    @Test
+    void enUnArchivoSinColumnaErrorNoQuedaHuecoDeColumnas() throws Exception {
+        Path excel = crearExcelConHeaders("sin-error.xlsx", java.util.Arrays.copyOf(HEADERS_VIEJOS, 11));
+
+        manager.asegurarEstructuraEmbalajes(excel);
+
+        assertEquals("SUBIDO", leerHeader(excel, 10));
+        assertEquals("EMBALAJE", leerHeader(excel, 11));
+        assertEquals("ERROR", leerHeader(excel, 12));
+    }
+
+    @Test
+    void elDesplegableCubreLasFilasQueSeAgreganDespues() throws Exception {
+        Path excel = crearExcelViejo("desplegable-crece.xlsx", List.<String[]>of(new String[]{"1241212", "Producto A"}));
+
+        manager.asegurarEstructuraEmbalajes(excel);
+        manager.agregarPendientes(excel, List.of("999999", "888888", "777777"));
+
+        try (Workbook wb = WorkbookFactory.create(excel.toFile(), null, true)) {
+            Sheet sheet = wb.getSheet("MEDIDAS");
+            assertEquals(1, sheet.getDataValidations().size());
+            CellRangeAddress rango = sheet.getDataValidations().get(0).getRegions().getCellRangeAddresses()[0];
+            assertTrue(rango.getLastRow() >= sheet.getLastRowNum(),
+                    "el rango debe cubrir las filas nuevas: " + rango.formatAsString());
+        }
+    }
+
+    @Test
+    void seGuardaLaColumnaErrorRecreadaAunqueElRestoYaExista() throws Exception {
+        Path excel = crearExcelViejo("error-borrada.xlsx", List.<String[]>of(new String[]{"1241212", "Producto A"}));
+        manager.asegurarEstructuraEmbalajes(excel);
+        borrarHeader(excel, 12);
+
+        manager.asegurarEstructuraEmbalajes(excel);
+
+        assertEquals("ERROR", leerHeader(excel, 12));
+    }
+
+    @Test
+    void unArchivoSinMigrarSeReportaComoEstructuraIncompleta() throws Exception {
+        Path excel = crearExcelViejo("incompleta.xlsx", List.<String[]>of(new String[]{"1241212", "Producto A"}));
+
+        assertFalse(manager.leerMedidasYCatalogo(excel).estructuraCompleta());
+    }
+
+    @Test
+    void despuesDeMigrarLaEstructuraSeReportaCompleta() throws Exception {
+        Path excel = crearExcelViejo("completa.xlsx", List.<String[]>of(new String[]{"1241212", "Producto A"}));
+
+        manager.asegurarEstructuraEmbalajes(excel);
+
+        assertTrue(manager.leerMedidasYCatalogo(excel).estructuraCompleta(),
+                "una segunda corrida no debe volver a abrir el archivo para escribir");
+    }
+
     // -------------------------------------------------------------------------------------------
     // Helpers
     // -------------------------------------------------------------------------------------------
+
+    private Path crearExcelConHeaders(String nombre, String[] headers) throws Exception {
+        Path excel = tempDir.resolve(nombre);
+        try (XSSFWorkbook wb = new XSSFWorkbook()) {
+            Sheet sheet = wb.createSheet("MEDIDAS");
+            Row header = sheet.createRow(0);
+            for (int i = 0; i < headers.length; i++) {
+                header.createCell(i, CellType.STRING).setCellValue(headers[i]);
+            }
+            Row row = sheet.createRow(1);
+            row.createCell(0, CellType.STRING).setCellValue("1241212");
+            row.createCell(1, CellType.STRING).setCellValue("Producto A");
+            try (FileOutputStream fos = new FileOutputStream(excel.toFile())) {
+                wb.write(fos);
+            }
+        }
+        return excel;
+    }
+
+    private void agregarHojaAjenaAlPrincipio(Path excel, String nombre) throws Exception {
+        try (Workbook wb = abrirParaEditar(excel)) {
+            Sheet ajena = wb.createSheet(nombre);
+            ajena.createRow(0).createCell(0, CellType.STRING).setCellValue("dato propio");
+            wb.setSheetOrder(nombre, 0);
+            try (FileOutputStream fos = new FileOutputStream(excel.toFile())) {
+                wb.write(fos);
+            }
+        }
+    }
+
+    private void borrarHeader(Path excel, int col) throws Exception {
+        try (Workbook wb = abrirParaEditar(excel)) {
+            Row header = wb.getSheet("MEDIDAS").getRow(0);
+            Cell cell = header.getCell(col);
+            if (cell != null) header.removeCell(cell);
+            try (FileOutputStream fos = new FileOutputStream(excel.toFile())) {
+                wb.write(fos);
+            }
+        }
+    }
 
     private Path crearExcelViejo(String nombre, List<String[]> filas) throws Exception {
         Path excel = tempDir.resolve(nombre);

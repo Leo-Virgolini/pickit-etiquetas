@@ -1649,14 +1649,17 @@ public class MainController {
 
             // Embalaje asignado al SKU. Se resuelve una vez por grupo: la línea es igual en todas
             // las etiquetas del grupo. No aplica a CARROS (esas etiquetas listan varios productos).
-            String embalajeTexto = null;
-            if (catalogoEmbalajes != null && !"CARROS".equals(zone)
-                    && sku != null && !sku.isBlank() && !sku.contains("\n")) {
+            // Misma guarda que el bloque MEDIR: los SKU no numéricos son sentinelas del parser
+            // ("SKU INVALIDO: ...") que nunca llegan al Excel de medidas, así que no se les puede
+            // asignar un embalaje y no tiene sentido reclamarlos en cada lote.
+            String embalajeZpl = "";
+            if (catalogoEmbalajes != null && !"CARROS".equals(zone) && sku != null && !sku.isBlank()
+                    && !sku.contains("\n") && sku.matches("\\d+")) {
                 ar.com.leo.etiquetas.model.MedidaSku m = medidas == null ? null : medidas.get(sku);
                 String codigoCrudo = m == null ? "" : m.embalaje();
                 EmbalajeResolver.ResultadoEmbalaje resultado =
                         EmbalajeResolver.resolver(codigoCrudo, catalogoEmbalajes);
-                embalajeTexto = "EMBALAJE: " + resultado.textoEtiqueta();
+                embalajeZpl = EmbalajeResolver.campoZpl(resultado.textoEtiqueta());
                 if (resultado.estado() != EmbalajeResolver.Estado.OK && embalajesFaltantesOut != null) {
                     embalajesFaltantesOut.putIfAbsent(sku, codigoCrudo == null ? "" : codigoCrudo.trim());
                 }
@@ -1689,15 +1692,7 @@ public class MainController {
                             "^FO200,15^GB580,65,65^FS\n"
                             + "^FO200,22^A0N,50,50^FB580,1,0,C^FR^FD" + medirText + "^FS\n";
                 }
-                // Línea de embalaje: debajo del #X (que termina en y=65) y del banner MEDIR
-                // (que llega hasta y=80), por encima del "Pack ID:" del formato de ML (y=130).
-                // Doble pasada con 1px de offset para simular negrita, igual que ZONA y COD.EXT.
-                String embalajeField = "";
-                if (embalajeTexto != null) {
-                    embalajeField = "^FO45,85^A0N,30,30^FD" + embalajeTexto + "^FS\n"
-                            + "^FO46,85^A0N,30,30^FD" + embalajeTexto + "^FS\n";
-                }
-                raw = raw.substring(0, insertIdx) + "^LH0,0\n" + posField1 + "\n" + posField2 + "\n" + posField3 + "\n" + embalajeField + medirPrefix + raw.substring(insertIdx);
+                raw = raw.substring(0, insertIdx) + "^LH0,0\n" + posField1 + "\n" + posField2 + "\n" + posField3 + "\n" + embalajeZpl + medirPrefix + raw.substring(insertIdx);
                 labelPosition++;
 
                 // Parsear ^LH original para convertir coordenadas relativas a absolutas
@@ -1994,14 +1989,21 @@ public class MainController {
         String path = medidasExcelField == null ? null : medidasExcelField.getText();
         if (path == null || path.isBlank()) return DatosMedidasUI.VACIO;
         try {
-            medidasManager.asegurarEstructuraEmbalajes(Path.of(path));
-        } catch (Exception e) {
-            // No es fatal: sin columna el usuario no puede asignar embalajes, pero las medidas sí
-            // se leen. Suele pasar cuando el Excel está abierto en Excel y el archivo está tomado.
-            AppLogger.warn("No se pudo preparar la columna de embalajes: " + e.getMessage());
-        }
-        try {
             MedidasExcelManager.DatosMedidas datos = medidasManager.leerMedidasYCatalogo(Path.of(path));
+
+            // La migración abre el archivo en modo escritura, así que solo se dispara cuando la
+            // lectura detecta que falta algo. En régimen normal esto no vuelve a correr nunca.
+            if (!datos.estructuraCompleta()) {
+                try {
+                    if (medidasManager.asegurarEstructuraEmbalajes(Path.of(path))) {
+                        datos = medidasManager.leerMedidasYCatalogo(Path.of(path));
+                    }
+                } catch (Exception e) {
+                    // No es fatal: sin columna no se pueden asignar embalajes, pero las medidas sí
+                    // se leen. Suele pasar con el archivo abierto en Excel, que lo deja tomado.
+                    AppLogger.warn("No se pudo preparar la columna de embalajes: " + e.getMessage());
+                }
+            }
             return new DatosMedidasUI(datos.medidas(), catalogoUsable(datos.catalogo()));
         } catch (Exception e) {
             AppLogger.warn("No se pudo leer el Excel de medidas: " + e.getMessage());
