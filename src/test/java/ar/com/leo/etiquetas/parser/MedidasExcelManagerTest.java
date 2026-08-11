@@ -13,6 +13,7 @@ import org.apache.poi.ss.usermodel.Workbook;
 import org.apache.poi.ss.usermodel.WorkbookFactory;
 import org.apache.poi.ss.util.CellRangeAddress;
 import org.apache.poi.xssf.usermodel.XSSFCellStyle;
+import org.apache.poi.xssf.usermodel.XSSFSheet;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -225,8 +226,14 @@ class MedidasExcelManagerTest {
 
         manager.asegurarEstructuraEmbalajes(excel);
 
+        // Se comprueba el atributo del XML y no getSuppressDropDownArrow() porque en OOXML
+        // showDropDown está invertido respecto de su nombre: true = ocultar la flecha. Es lo que
+        // Excel lee, y la única forma de que el test falle si la flecha desaparece.
         try (Workbook wb = WorkbookFactory.create(excel.toFile(), null, true)) {
-            assertFalse(wb.getSheetAt(0).getDataValidations().get(0).getSuppressDropDownArrow());
+            XSSFSheet sheet = (XSSFSheet) wb.getSheet("MEDIDAS");
+            assertFalse(sheet.getCTWorksheet().getDataValidations()
+                            .getDataValidationArray(0).getShowDropDown(),
+                    "showDropDown=true oculta la lista desplegable en Excel");
         }
     }
 

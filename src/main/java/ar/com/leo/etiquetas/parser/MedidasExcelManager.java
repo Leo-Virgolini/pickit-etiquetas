@@ -715,8 +715,10 @@ public class MedidasExcelManager {
                 HOJA_EMBALAJES + "!$A$2:$A$" + MAX_FILAS_CATALOGO);
         CellRangeAddressList rango = new CellRangeAddressList(1, ultimaFila, colEmbalaje, colEmbalaje);
         DataValidation validation = helper.createValidation(constraint, rango);
-        // false = la flecha del desplegable se muestra. En POI el flag es "suprimir".
-        validation.setSuppressDropDownArrow(false);
+        // Sí, va en true para que la flecha SE VEA. En OOXML el atributo se llama showDropDown pero
+        // su semántica es la inversa (true = ocultar), y POI lo mapea por el nombre: pasar false
+        // acá escribe showDropDown="true" y Excel no dibuja la lista.
+        validation.setSuppressDropDownArrow(true);
         validation.setShowErrorBox(true);
         validation.setErrorStyle(DataValidation.ErrorStyle.WARNING);
         validation.createErrorBox("Embalaje desconocido",
