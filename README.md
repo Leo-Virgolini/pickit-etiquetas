@@ -8,7 +8,7 @@ Tres selectores de archivo persistentes (guardados en `Preferences`) disponibles
 
 - **Excel de stock** (`Stock.xlsx`): mapea SKU a zona de almacen (J1, J2, T1, T2, etc.) y opcionalmente codigo externo. Lee desde fila 3 las columnas "Codigo Producto", "Unidad" y "Codigo Externo".
 - **Excel de combos**: define productos compuestos y sus componentes. Columnas: "Codigo Compuesto", "Codigo Componente", "Cantidad".
-- **Excel de medidas ML** (opcional, se activa con checkbox): base "madre" de medidas de embalaje por SKU, usada para marcar etiquetas pendientes de medir y para cargar las dimensiones de paquete en ML (atributos `SELLER_PACKAGE_*`) y para indicar en la etiqueta que embalaje usar. 13 columnas en fila 1:
+- **Excel de medidas ML** (opcional, se activa con checkbox): base "madre" de medidas de embalaje por SKU, usada para marcar etiquetas pendientes de medir y para cargar las dimensiones de paquete en ML (atributos `SELLER_PACKAGE_*`) y para indicar en la etiqueta con que embalar. 20 columnas en fila 1:
 
   | # | Columna | Uso |
   |---|---|---|
@@ -23,17 +23,22 @@ Tres selectores de archivo persistentes (guardados en `Preferences`) disponibles
   | 8 | `Profunidad +20%` | Valor que se sube a ML. |
   | 9 | `Peso físico (empaque + producto) +20%` | Valor que se sube a ML. |
   | 10 | `SUBIDO` | `NO` al agregar (rojo tenue), `SI` al subir OK (verde tenue). |
-  | 11 | `EMBALAJE` | Codigo del embalaje asignado al SKU, elegido de la hoja `EMBALAJES`. Solo informativo: se imprime en la etiqueta y no afecta lo que se sube a ML. |
-  | 12 | `ERROR` | Mensaje de ML en rojo cuando falla la subida. Se limpia al pasar a `SUBIDO=SI` en un reintento exitoso. |
+  | 11 | `N° Bolsa` | Numero de bolsa. |
+  | 12 | `Nombre Caja` | Nombre de la caja (ej. `GRANDE`). |
+  | 13 | `N° Caja` | Numero de caja. |
+  | 14 | `PLURIBOL` | `SI` o vacio. |
+  | 15 | `CANT PLURIBOL` | Vueltas de pluribol. |
+  | 16 | `ROLLO INFLABLE` | Tipo de rollo (ej. `DIAMANTE`, `CUADRADO`). |
+  | 17 | `CANT PAÑOS` | Cantidad de paños. |
+  | 18 | `OBSERVACIONES` | Texto libre. |
+  | 19 | `ERROR` | Mensaje de ML en rojo cuando falla la subida. Se limpia al pasar a `SUBIDO=SI` en un reintento exitoso. |
 
   - Las 4 columnas base cm/kg son los valores reales medidos por el deposito. Las `+20%` son los valores efectivos declarados a ML (margen por variaciones de armado).
   - Si el archivo no existe se crea automaticamente con headers en la primera ejecucion. Los SKUs nuevos se insertan primero en filas con SKU vacio (reutilizando slots pre-cargados con formulas) y si se agotan se appendean al final. En ambos casos las celdas de medidas faltantes quedan en amarillo y `SUBIDO=NO`. Las celdas que contengan una formula se preservan intactas.
   - El lector tolera variantes: "Largo" o "Profundidad", espacios y saltos de linea dentro del header, y el typo "Profunidad" en la columna +20%.
   - Si el archivo existente no tiene columna `ERROR`, se agrega automaticamente en la primera escritura (migracion silenciosa).
-  - Lo mismo con `EMBALAJE` y la hoja `EMBALAJES`: se crean al leer el archivo si faltan, y solo entonces se reescribe (la lectura detecta si falta algo, asi que en regimen normal no se vuelve a abrir en modo escritura). Solo se migra una hoja que tenga columna `SKU`: las hojas propias del usuario no se tocan. En un archivo existente `EMBALAJE` se **inserta antes de `ERROR`**, desplazando un lugar a la derecha esa columna y cualquier otra que el usuario tenga despues (con su contenido y formato). Las formulas se mueven con su texto original: si tenias una formula que apunta a la columna `ERROR` o a una posterior, revisa su referencia despues de la migracion. Si ya existe se reusa este donde este: ambas columnas se ubican por header, no por indice.
-  - Con el checkbox desactivado se saltea el marcado MEDIR, la linea EMBALAJE y la subida a ML.
-
-- **Hoja `EMBALAJES`** (dentro del mismo archivo de medidas): catalogo de los embalajes disponibles. Columnas: `CODIGO`, `TIPO`, `Ancho cm`, `Alto cm`, `Profundidad cm`, con el header en gris, bordes y ancho automatico. Solo `CODIGO` lo usa la app (es lo que se imprime y lo que alimenta el desplegable de la columna `EMBALAJE`); el resto documenta el embalaje. La app crea la hoja con los encabezados y sin filas: el contenido lo carga el usuario. Si el catalogo esta vacio, la funcion se comporta como desactivada.
+  - Las 8 columnas de embalaje (11 a 18) **las crea y carga el usuario a mano**: la app solo las lee. Se ubican por su encabezado, no por posicion, asi que se pueden reordenar o intercalar columnas propias. Si alguna falta, ese dato no se muestra y el resto sigue funcionando. Solo se crean automaticamente cuando la app genera el archivo desde cero.  Si ya existe se reusa este donde este: ambas columnas se ubican por header, no por indice.
+  - Con el checkbox desactivado se saltea el marcado MEDIR, las lineas de embalaje y la subida a ML.
   - Escritura serializada con lock interno y reintentos con backoff (500/1000/1500/2000 ms) si el archivo esta abierto en Excel (sharing violation).
   - Los decimales con coma ("3,006" = 3.006 kg) se leen correctamente tanto si la celda es numerica (POI devuelve el valor crudo) como si es texto (se normaliza `,` → `.`).
 
@@ -87,8 +92,18 @@ Dos sub-pestañas para obtener etiquetas ZPL, procesarlas y enviarlas a la impre
 - **Marcado MEDIR y autocarga al Excel** (durante la descarga/procesamiento de etiquetas): si esta configurado el Excel de medidas:
   1. **Banner MEDIR en la etiqueta**: cada etiqueta individual (no CARROS) con SKU numerico, **de pedido de 1 unidad**, cuyo SKU no tenga las 4 columnas base cm/kg cargadas, recibe un banner "MEDIR: [SKU]" en negro invertido sobre el encabezado. Las ordenes de 2+ unidades no se marcan (esos embalajes se miden aparte).
   2. **Autocarga al Excel**: los SKU detectados como pendientes se insertan en el Excel con SUBIDO=NO. El inserter primero **reusa filas pre-existentes con SKU vacio** (tipicamente filas con formulas pre-cargadas, ej: `=BUSCARX(...)` en PRODUCTO o `=base*1.2` en las +20%) y recien appendea al final cuando se agotan. Preserva todas las formulas existentes (celdas tipo FORMULA se dejan intactas; Excel las recalcula al abrir gracias a `setForceFormulaRecalculation(true)`). **No escribe la columna PRODUCTO**: queda delegada a la formula que el usuario tenga configurada. No se duplican si el SKU ya existe.
-  3. **Linea EMBALAJE en la etiqueta**: cada etiqueta individual (no CARROS) con SKU numerico lleva la linea "EMBALAJE: [codigo]" debajo del numero de posicion, tomada de la columna `EMBALAJE` del SKU y validada contra la hoja `EMBALAJES`. Si el SKU no tiene embalaje asignado, o el codigo cargado no figura en el catalogo, se imprime "EMBALAJE: -".
-  4. **Mensaje de pendientes al finalizar**: al terminar la descarga se abre un dialogo scrollable con la cantidad de SKUs sin medidas detectados en el lote, cuantos se agregaron efectivamente al Excel y cuantos ya figuraban, ademas del listado de SKUs. Se suman ahi los SKU sin embalaje asignado y los que tienen un codigo inexistente (mostrando que se escribio).
+  3. **Datos de embalaje en la etiqueta**: cada etiqueta individual (no CARROS) con SKU numerico lleva, en el margen superior derecho, hasta 4 lineas segun lo cargado en el Excel:
+
+     | Condicion | Linea |
+     |---|---|
+     | `N° Caja` y/o `Nombre Caja` | `CAJA 3 - GRANDE` |
+     | `N° Bolsa` | `BOLSA 5` |
+     | `PLURIBOL` | `PLURIBOL: SI - 2 vueltas` (sin cantidad: `PLURIBOL: SI`) |
+     | `ROLLO INFLABLE` | `ROLLO DIAMANTE - 3 paños` (sin cantidad: `ROLLO DIAMANTE`) |
+     | `OBSERVACIONES` | `Obs: Colchon + Tapa` |
+
+     Caja y bolsa no se combinan, asi que el maximo es de 4 lineas. Para hacerles lugar se elimina el texto de ML "Recorta esta parte de la etiqueta...", que ocupa esa franja. Si ML cambiara ese texto y no se encontrara, queda una advertencia en el log y los textos se encimarian.
+  4. **Mensaje de pendientes al finalizar**: al terminar la descarga se abre un dialogo scrollable con la cantidad de SKUs sin medidas detectados en el lote, cuantos se agregaron efectivamente al Excel y cuantos ya figuraban, ademas del listado de SKUs. Se suman ahi los SKU **sin caja ni bolsa** cargada (el pluribol, el rollo y las observaciones no cuentan).
   - Durante la descarga **no** se sube nada a ML: el flujo de descarga solo marca y escribe en el Excel.
 
 - **Subida manual a ML** (boton "⬆ Subir Medidas" al lado del selector del Excel de medidas): la subida a ML es una accion independiente, disparada a demanda. Requisitos para que el boton este habilitado: checkbox activo + archivo existente. El handler valida ademas que la sesion ML este inicializada.

@@ -13,7 +13,7 @@ public record MedidaSku(
         Double pesoMasKg,
         boolean subido,
         String error,
-        String embalaje
+        DatosEmbalaje embalaje
 ) {
 
     public boolean estaMedido() {

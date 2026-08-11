@@ -1,33 +1,27 @@
 package ar.com.leo.etiquetas.parser;
 
-import ar.com.leo.etiquetas.model.Embalaje;
+import ar.com.leo.etiquetas.model.DatosEmbalaje;
 import ar.com.leo.etiquetas.model.MedidaSku;
-import org.apache.poi.ss.usermodel.BorderStyle;
 import org.apache.poi.ss.usermodel.Cell;
-import org.apache.poi.ss.usermodel.CellStyle;
-import org.apache.poi.ss.usermodel.FillPatternType;
 import org.apache.poi.ss.usermodel.CellType;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.usermodel.Workbook;
 import org.apache.poi.ss.usermodel.WorkbookFactory;
-import org.apache.poi.ss.util.CellRangeAddress;
-import org.apache.poi.xssf.usermodel.XSSFCellStyle;
-import org.apache.poi.xssf.usermodel.XSSFSheet;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.FileOutputStream;
+import java.io.InputStream;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertSame;
 
 class MedidasExcelManagerTest {
 
@@ -36,139 +30,143 @@ class MedidasExcelManagerTest {
 
     private final MedidasExcelManager manager = new MedidasExcelManager();
 
-    /** Headers del Excel de medidas tal como existían antes de agregar la columna EMBALAJE. */
-    private static final String[] HEADERS_VIEJOS = {
+    /** Columnas base, sin ninguna de las de embalaje. */
+    private static final String[] HEADERS_BASE = {
             "SKU", "PRODUCTO", "Ancho\ncm", "Alto\ncm", "Profundidad\ncm",
             "Peso físico\n(empaque + producto)\nkg",
             "Ancho +20%", "Alto +20%", "Profunidad +20%",
             "Peso físico (empaque + producto) +20%", "SUBIDO", "ERROR"
     };
 
-    // -------------------------------------------------------------------------------------------
-    // Catálogo de embalajes
-    // -------------------------------------------------------------------------------------------
-
-    @Test
-    void catalogoDeUnArchivoSinHojaEmbalajesEsVacio() throws Exception {
-        Path excel = crearExcelViejo("medidas.xlsx", List.<String[]>of(new String[]{"1241212", "Producto A"}));
-
-        Map<String, Embalaje> catalogo = manager.leerMedidasYCatalogo(excel).catalogo();
-
-        assertTrue(catalogo.isEmpty());
-    }
-
-    @Test
-    void catalogoDeUnArchivoInexistenteEsVacio() throws Exception {
-        Map<String, Embalaje> catalogo = manager.leerMedidasYCatalogo(tempDir.resolve("no-existe.xlsx")).catalogo();
-
-        assertTrue(catalogo.isEmpty());
-    }
-
-    @Test
-    void catalogoLeeCodigoTipoYMedidas() throws Exception {
-        Path excel = crearExcelConCatalogo("con-catalogo.xlsx", List.<Object[]>of(
-                new Object[]{"CAJA 3", "CAJA", 30.0, 20.0, 15.0}
-        ));
-
-        Map<String, Embalaje> catalogo = manager.leerMedidasYCatalogo(excel).catalogo();
-
-        Embalaje caja = catalogo.get("CAJA 3");
-        assertNotNull(caja);
-        assertEquals("CAJA 3", caja.codigo());
-        assertEquals("CAJA", caja.tipo());
-        assertEquals(30.0, caja.anchoCm());
-        assertEquals(20.0, caja.altoCm());
-        assertEquals(15.0, caja.profundidadCm());
-    }
-
-    @Test
-    void catalogoIndexaPorCodigoNormalizadoPreservandoElOriginal() throws Exception {
-        Path excel = crearExcelConCatalogo("normalizado.xlsx", List.<Object[]>of(
-                new Object[]{"  Bolsa   Chica ", "BOLSA", null, null, null}
-        ));
-
-        Map<String, Embalaje> catalogo = manager.leerMedidasYCatalogo(excel).catalogo();
-
-        assertEquals("Bolsa Chica", catalogo.get("BOLSA CHICA").codigo());
-    }
-
-    @Test
-    void catalogoIgnoraFilasSinCodigo() throws Exception {
-        Path excel = crearExcelConCatalogo("con-vacias.xlsx", List.<Object[]>of(
-                new Object[]{"CAJA 1", "CAJA", 10.0, 10.0, 10.0},
-                new Object[]{"   ", "CAJA", 20.0, 20.0, 20.0},
-                new Object[]{"CAJA 2", "CAJA", 30.0, 30.0, 30.0}
-        ));
-
-        Map<String, Embalaje> catalogo = manager.leerMedidasYCatalogo(excel).catalogo();
-
-        assertEquals(2, catalogo.size());
-    }
+    /** Columnas base más las ocho de embalaje entre SUBIDO y ERROR, como las carga el usuario. */
+    private static final String[] HEADERS_CON_EMBALAJE = {
+            "SKU", "PRODUCTO", "Ancho\ncm", "Alto\ncm", "Profundidad\ncm",
+            "Peso físico\n(empaque + producto)\nkg",
+            "Ancho +20%", "Alto +20%", "Profunidad +20%",
+            "Peso físico (empaque + producto) +20%", "SUBIDO",
+            "N° Bolsa", "Nombre Caja", "N° Caja", "PLURIBOL", "CANT PLURIBOL",
+            "ROLLO INFLABLE", "CANT PAÑOS", "OBSERVACIONES",
+            "ERROR"
+    };
 
     // -------------------------------------------------------------------------------------------
-    // Columna EMBALAJE en la hoja de SKUs
+    // Lectura de las columnas de embalaje
     // -------------------------------------------------------------------------------------------
 
     @Test
-    void leerMedidasDeUnArchivoViejoDejaElEmbalajeVacio() throws Exception {
-        Path excel = crearExcelViejo("viejo.xlsx", List.<String[]>of(new String[]{"1241212", "Producto A"}));
+    void leeLasOchoColumnasDeEmbalaje() throws Exception {
+        Path excel = crearExcel("completo.xlsx", HEADERS_CON_EMBALAJE,
+                new String[]{"1241212", "Producto A", "", "", "", "", "", "", "", "", "NO",
+                        "5", "GRANDE", "3", "SI", "2", "DIAMANTE", "4", "Colchon + Tapa"});
+
+        DatosEmbalaje datos = manager.leerMedidas(excel).get("1241212").embalaje();
+
+        assertEquals("5", datos.nroBolsa());
+        assertEquals("GRANDE", datos.nombreCaja());
+        assertEquals("3", datos.nroCaja());
+        assertEquals("SI", datos.pluribol());
+        assertEquals("2", datos.cantPluribol());
+        assertEquals("DIAMANTE", datos.rollo());
+        assertEquals("4", datos.cantPanos());
+        assertEquals("Colchon + Tapa", datos.observaciones());
+    }
+
+    @Test
+    void unArchivoSinLasColumnasDeEmbalajeDevuelveDatosVacios() throws Exception {
+        Path excel = crearExcel("sin-embalaje.xlsx", HEADERS_BASE,
+                new String[]{"1241212", "Producto A"});
 
         MedidaSku medida = manager.leerMedidas(excel).get("1241212");
 
-        assertEquals("", medida.embalaje());
-        assertEquals("Producto A", medida.producto());
+        assertSame(DatosEmbalaje.VACIO, medida.embalaje());
+        assertEquals("Producto A", medida.producto(), "el resto de la fila se sigue leyendo");
     }
 
     @Test
-    void leerMedidasDevuelveElCodigoDeEmbalajeCargado() throws Exception {
-        Path excel = crearExcelViejo("con-embalaje.xlsx", List.<String[]>of(new String[]{"1241212", "Producto A"}));
-        escribirCeldaEnFilaDeSku(excel, 12, "CAJA 3");
+    void lasColumnasSeUbicanPorHeaderNoPorPosicion() throws Exception {
+        // Mismo contenido pero con las columnas de embalaje en otro orden y al final.
+        String[] headers = {
+                "SKU", "PRODUCTO", "Ancho\ncm", "Alto\ncm", "Profundidad\ncm",
+                "Peso físico\n(empaque + producto)\nkg",
+                "Ancho +20%", "Alto +20%", "Profunidad +20%",
+                "Peso físico (empaque + producto) +20%", "SUBIDO", "ERROR",
+                "OBSERVACIONES", "N° Caja", "Nombre Caja"
+        };
+        Path excel = crearExcel("desordenado.xlsx", headers,
+                new String[]{"1241212", "Producto A", "", "", "", "", "", "", "", "", "NO", "",
+                        "Colchon", "3", "GRANDE"});
 
-        MedidaSku medida = manager.leerMedidas(excel).get("1241212");
+        DatosEmbalaje datos = manager.leerMedidas(excel).get("1241212").embalaje();
 
-        assertEquals("CAJA 3", medida.embalaje());
+        assertEquals("3", datos.nroCaja());
+        assertEquals("GRANDE", datos.nombreCaja());
+        assertEquals("Colchon", datos.observaciones());
     }
 
     @Test
-    void agregarPendientesCreaElHeaderEmbalajeEnUnArchivoViejo() throws Exception {
-        Path excel = crearExcelViejo("sin-header.xlsx", List.<String[]>of(new String[]{"1241212", "Producto A"}));
+    void aceptaPanosEscritoSinEnie() throws Exception {
+        String[] headers = {"SKU", "PRODUCTO", "SUBIDO", "ROLLO INFLABLE", "CANT PANOS"};
+        Path excel = crearExcel("sin-enie.xlsx", headers,
+                new String[]{"1241212", "Producto A", "NO", "DIAMANTE", "4"});
+
+        DatosEmbalaje datos = manager.leerMedidas(excel).get("1241212").embalaje();
+
+        assertEquals("4", datos.cantPanos());
+    }
+
+    @Test
+    void distingueCantPluribolDePluribol() throws Exception {
+        String[] headers = {"SKU", "PRODUCTO", "SUBIDO", "PLURIBOL", "CANT PLURIBOL"};
+        Path excel = crearExcel("pluribol.xlsx", headers,
+                new String[]{"1241212", "Producto A", "NO", "SI", "2"});
+
+        DatosEmbalaje datos = manager.leerMedidas(excel).get("1241212").embalaje();
+
+        assertEquals("SI", datos.pluribol());
+        assertEquals("2", datos.cantPluribol());
+    }
+
+    @Test
+    void distingueNombreCajaDeNumeroDeCaja() throws Exception {
+        String[] headers = {"SKU", "PRODUCTO", "SUBIDO", "Nombre Caja", "N° Caja"};
+        Path excel = crearExcel("cajas.xlsx", headers,
+                new String[]{"1241212", "Producto A", "NO", "GRANDE", "3"});
+
+        DatosEmbalaje datos = manager.leerMedidas(excel).get("1241212").embalaje();
+
+        assertEquals("GRANDE", datos.nombreCaja());
+        assertEquals("3", datos.nroCaja());
+    }
+
+    @Test
+    void unNumeroDeCajaNumericoSeLeeSinDecimales() throws Exception {
+        Path excel = crearExcel("numerico.xlsx", HEADERS_CON_EMBALAJE,
+                new String[]{"1241212", "Producto A"});
+        escribirNumero(excel, 1, 13, 3);
+
+        assertEquals("3", manager.leerMedidas(excel).get("1241212").embalaje().nroCaja());
+    }
+
+    // -------------------------------------------------------------------------------------------
+    // El resto del Excel sigue funcionando
+    // -------------------------------------------------------------------------------------------
+
+    @Test
+    void agregarPendientesNoEscribeEnLasColumnasDeEmbalaje() throws Exception {
+        Path excel = crearExcel("pendientes.xlsx", HEADERS_CON_EMBALAJE,
+                new String[]{"1241212", "Producto A"});
 
         manager.agregarPendientes(excel, List.of("999999"));
 
-        assertEquals("EMBALAJE", leerHeader(excel, 11));
-        assertEquals("ERROR", leerHeader(excel, 12));
-    }
-
-    @Test
-    void agregarPendientesCreaLaHojaCatalogoConHeaders() throws Exception {
-        Path excel = crearExcelViejo("sin-hoja.xlsx", List.<String[]>of(new String[]{"1241212", "Producto A"}));
-
-        manager.agregarPendientes(excel, List.of("999999"));
-
-        try (Workbook wb = WorkbookFactory.create(excel.toFile(), null, true)) {
-            Sheet catalogo = wb.getSheet("EMBALAJES");
-            assertNotNull(catalogo);
-            assertEquals("CÓDIGO", catalogo.getRow(0).getCell(0).getStringCellValue());
-            // Solo headers: sin filas de ejemplo.
-            assertEquals(0, catalogo.getLastRowNum());
-        }
-    }
-
-    @Test
-    void agregarPendientesNoPisaLasFilasDelCatalogoExistente() throws Exception {
-        Path excel = crearExcelConCatalogo("catalogo-existente.xlsx", List.<Object[]>of(
-                new Object[]{"CAJA 3", "CAJA", 30.0, 20.0, 15.0}
-        ));
-
-        manager.agregarPendientes(excel, List.of("999999"));
-
-        assertEquals("CAJA 3", manager.leerMedidasYCatalogo(excel).catalogo().get("CAJA 3").codigo());
+        DatosEmbalaje datos = manager.leerMedidas(excel).get("999999").embalaje();
+        assertSame(DatosEmbalaje.VACIO, datos);
     }
 
     @Test
     void agregarPendientesPreservaLasFormulasExistentes() throws Exception {
-        Path excel = crearExcelViejo("con-formula.xlsx", List.<String[]>of(new String[]{"1241212", "Producto A"}));
-        escribirFormulaEnFilaDeSku(excel, 6, "C2*1.2");
+        Path excel = crearExcel("con-formula.xlsx", HEADERS_CON_EMBALAJE,
+                new String[]{"1241212", "Producto A"});
+        escribirFormula(excel, 1, 6, "C2*1.2");
 
         manager.agregarPendientes(excel, List.of("999999"));
 
@@ -180,217 +178,48 @@ class MedidasExcelManagerTest {
     }
 
     @Test
-    void marcarResultadosNoBorraElEmbalajeCargado() throws Exception {
-        Path excel = crearExcelViejo("marcar.xlsx", List.<String[]>of(new String[]{"1241212", "Producto A"}));
-        escribirCeldaEnFilaDeSku(excel, 12, "CAJA 3");
+    void marcarResultadosNoBorraLosDatosDeEmbalaje() throws Exception {
+        Path excel = crearExcel("marcar.xlsx", HEADERS_CON_EMBALAJE,
+                new String[]{"1241212", "Producto A", "", "", "", "", "", "", "", "", "NO",
+                        "", "GRANDE", "3"});
 
         manager.marcarResultados(excel, List.of("1241212"), Map.of());
 
-        assertEquals("CAJA 3", manager.leerMedidas(excel).get("1241212").embalaje());
+        assertEquals("GRANDE", manager.leerMedidas(excel).get("1241212").embalaje().nombreCaja());
     }
 
-    // -------------------------------------------------------------------------------------------
-    // Migración de la estructura (columna + hoja + desplegable)
-    // -------------------------------------------------------------------------------------------
-
     @Test
-    void sinSkusNuevosIgualSeCreaLaEstructura() throws Exception {
-        // Estado estacionario: todos los SKU del lote ya figuran en el Excel. Es el camino habitual,
-        // así que la migración no puede depender de que aparezca un SKU nuevo.
-        Path excel = crearExcelViejo("estacionario.xlsx", List.<String[]>of(new String[]{"1241212", "Producto A"}));
+    void unArchivoNuevoSeCreaConLasColumnasDeEmbalaje() throws Exception {
+        Path excel = tempDir.resolve("nuevo.xlsx");
 
-        manager.asegurarEstructuraEmbalajes(excel);
+        manager.leerMedidas(excel);
 
-        assertEquals("EMBALAJE", leerHeader(excel, 11));
         try (Workbook wb = WorkbookFactory.create(excel.toFile(), null, true)) {
-            assertNotNull(wb.getSheet("EMBALAJES"));
+            Row header = wb.getSheetAt(0).getRow(0);
+            assertEquals("SUBIDO", header.getCell(10).getStringCellValue());
+            assertEquals("N° Bolsa", header.getCell(11).getStringCellValue());
+            assertEquals("OBSERVACIONES", header.getCell(18).getStringCellValue());
+            assertEquals("ERROR", header.getCell(19).getStringCellValue());
         }
     }
 
     @Test
-    void asegurarEstructuraEsIdempotenteYNoAcumulaValidaciones() throws Exception {
-        Path excel = crearExcelViejo("idempotente.xlsx", List.<String[]>of(new String[]{"1241212", "Producto A"}));
+    void noSeCreaLaHojaCatalogoDeEmbalajes() throws Exception {
+        Path excel = tempDir.resolve("sin-catalogo.xlsx");
 
-        manager.asegurarEstructuraEmbalajes(excel);
-        manager.asegurarEstructuraEmbalajes(excel);
-        manager.asegurarEstructuraEmbalajes(excel);
+        manager.leerMedidas(excel);
 
         try (Workbook wb = WorkbookFactory.create(excel.toFile(), null, true)) {
-            assertEquals(1, wb.getSheetAt(0).getDataValidations().size());
+            assertEquals(1, wb.getNumberOfSheets());
+            assertNotNull(wb.getSheet("MEDIDAS"));
         }
-    }
-
-    @Test
-    void elDesplegableQuedaVisible() throws Exception {
-        Path excel = crearExcelViejo("desplegable.xlsx", List.<String[]>of(new String[]{"1241212", "Producto A"}));
-
-        manager.asegurarEstructuraEmbalajes(excel);
-
-        // Se comprueba el atributo del XML y no getSuppressDropDownArrow() porque en OOXML
-        // showDropDown está invertido respecto de su nombre: true = ocultar la flecha. Es lo que
-        // Excel lee, y la única forma de que el test falle si la flecha desaparece.
-        try (Workbook wb = WorkbookFactory.create(excel.toFile(), null, true)) {
-            XSSFSheet sheet = (XSSFSheet) wb.getSheet("MEDIDAS");
-            assertFalse(sheet.getCTWorksheet().getDataValidations()
-                            .getDataValidationArray(0).getShowDropDown(),
-                    "showDropDown=true oculta la lista desplegable en Excel");
-        }
-    }
-
-    @Test
-    void noPisaUnaColumnaPropiaDelUsuario() throws Exception {
-        Path excel = crearExcelViejo("columna-propia.xlsx", List.<String[]>of(new String[]{"1241212", "Producto A"}));
-        escribirHeader(excel, 12, "OBSERVACIONES");
-
-        manager.asegurarEstructuraEmbalajes(excel);
-
-        // EMBALAJE se inserta antes de ERROR: todo lo que estaba a la derecha corre un lugar.
-        assertEquals("EMBALAJE", leerHeader(excel, 11));
-        assertEquals("ERROR", leerHeader(excel, 12));
-        assertEquals("OBSERVACIONES", leerHeader(excel, 13));
-    }
-
-    @Test
-    void insertarLaColumnaNoPierdeElContenidoDeError() throws Exception {
-        Path excel = crearExcelViejo("con-error.xlsx", List.<String[]>of(new String[]{"1241212", "Producto A"}));
-        escribirCelda(excel, 1, 11, "Item no encontrado");
-
-        manager.asegurarEstructuraEmbalajes(excel);
-
-        assertEquals("Item no encontrado", leerCelda(excel, 1, 12));
-        assertEquals("", leerCelda(excel, 1, 11));
-    }
-
-    @Test
-    void elHeaderDelCatalogoTieneFondoGrisYBordes() throws Exception {
-        Path excel = crearExcelViejo("estilo-catalogo.xlsx", List.<String[]>of(new String[]{"1241212", "Producto A"}));
-
-        manager.asegurarEstructuraEmbalajes(excel);
-
-        try (Workbook wb = WorkbookFactory.create(excel.toFile(), null, true)) {
-            CellStyle estilo = wb.getSheet("EMBALAJES").getRow(0).getCell(0).getCellStyle();
-            assertEquals(FillPatternType.SOLID_FOREGROUND, estilo.getFillPattern());
-            assertNotNull(((XSSFCellStyle) estilo).getFillForegroundColorColor());
-            assertEquals(BorderStyle.THIN, estilo.getBorderTop());
-            assertEquals(BorderStyle.THIN, estilo.getBorderBottom());
-        }
-    }
-
-    @Test
-    void reusaLaColumnaEmbalajeAunqueNoEsteEnElIndiceEsperado() throws Exception {
-        Path excel = crearExcelViejo("columna-corrida.xlsx", List.<String[]>of(new String[]{"1241212", "Producto A"}));
-        escribirHeader(excel, 12, "OBSERVACIONES");
-        escribirHeader(excel, 13, "EMBALAJE");
-
-        manager.asegurarEstructuraEmbalajes(excel);
-
-        // Ya existe: se reusa donde está, sin mover nada.
-        assertEquals("EMBALAJE", leerHeader(excel, 13));
-        assertEquals("OBSERVACIONES", leerHeader(excel, 12));
-        assertNull(leerHeader(excel, 14));
-    }
-
-    @Test
-    void laHojaDeMedidasSeResuelvePorNombreNoPorPosicion() throws Exception {
-        // El usuario puede arrastrar EMBALAJES al primer lugar en Excel.
-        Path excel = crearExcelConCatalogo("hojas-invertidas.xlsx", List.<Object[]>of(
-                new Object[]{"CAJA 3", "CAJA", 30.0, 20.0, 15.0}
-        ));
-        moverHojaAlPrincipio(excel, "EMBALAJES");
-
-        Map<String, MedidaSku> medidas = manager.leerMedidas(excel);
-
-        assertNotNull(medidas.get("1241212"), "la hoja de medidas debe seguir siendo la de SKUs");
-    }
-
-    @Test
-    void leerMedidasYCatalogoDevuelveAmbosEnUnaSolaLectura() throws Exception {
-        Path excel = crearExcelConCatalogo("una-lectura.xlsx", List.<Object[]>of(
-                new Object[]{"CAJA 3", "CAJA", 30.0, 20.0, 15.0}
-        ));
-
-        MedidasExcelManager.DatosMedidas datos = manager.leerMedidasYCatalogo(excel);
-
-        assertNotNull(datos.medidas().get("1241212"));
-        assertNotNull(datos.catalogo().get("CAJA 3"));
-    }
-
-    @Test
-    void noTocaHojasAjenasAunqueEstenPrimeras() throws Exception {
-        // El usuario puede tener hojas propias ("Resumen", "Notas") antes de la de medidas.
-        Path excel = crearExcelViejo("hoja-ajena.xlsx", List.<String[]>of(new String[]{"1241212", "Producto A"}));
-        agregarHojaAjenaAlPrincipio(excel, "Resumen");
-
-        manager.asegurarEstructuraEmbalajes(excel);
-
-        try (Workbook wb = WorkbookFactory.create(excel.toFile(), null, true)) {
-            Sheet ajena = wb.getSheet("Resumen");
-            assertEquals("dato propio", ajena.getRow(0).getCell(0).getStringCellValue());
-            assertEquals(1, ajena.getRow(0).getLastCellNum(), "no se le deben agregar columnas");
-            assertEquals("EMBALAJE", wb.getSheet("MEDIDAS").getRow(0).getCell(11).getStringCellValue());
-        }
-    }
-
-    @Test
-    void enUnArchivoSinColumnaErrorNoQuedaHuecoDeColumnas() throws Exception {
-        Path excel = crearExcelConHeaders("sin-error.xlsx", java.util.Arrays.copyOf(HEADERS_VIEJOS, 11));
-
-        manager.asegurarEstructuraEmbalajes(excel);
-
-        assertEquals("SUBIDO", leerHeader(excel, 10));
-        assertEquals("EMBALAJE", leerHeader(excel, 11));
-        assertEquals("ERROR", leerHeader(excel, 12));
-    }
-
-    @Test
-    void elDesplegableCubreLasFilasQueSeAgreganDespues() throws Exception {
-        Path excel = crearExcelViejo("desplegable-crece.xlsx", List.<String[]>of(new String[]{"1241212", "Producto A"}));
-
-        manager.asegurarEstructuraEmbalajes(excel);
-        manager.agregarPendientes(excel, List.of("999999", "888888", "777777"));
-
-        try (Workbook wb = WorkbookFactory.create(excel.toFile(), null, true)) {
-            Sheet sheet = wb.getSheet("MEDIDAS");
-            assertEquals(1, sheet.getDataValidations().size());
-            CellRangeAddress rango = sheet.getDataValidations().get(0).getRegions().getCellRangeAddresses()[0];
-            assertTrue(rango.getLastRow() >= sheet.getLastRowNum(),
-                    "el rango debe cubrir las filas nuevas: " + rango.formatAsString());
-        }
-    }
-
-    @Test
-    void seGuardaLaColumnaErrorRecreadaAunqueElRestoYaExista() throws Exception {
-        Path excel = crearExcelViejo("error-borrada.xlsx", List.<String[]>of(new String[]{"1241212", "Producto A"}));
-        manager.asegurarEstructuraEmbalajes(excel);
-        borrarHeader(excel, 12);
-
-        manager.asegurarEstructuraEmbalajes(excel);
-
-        assertEquals("ERROR", leerHeader(excel, 12));
-    }
-
-    @Test
-    void unArchivoSinMigrarSeReportaComoEstructuraIncompleta() throws Exception {
-        Path excel = crearExcelViejo("incompleta.xlsx", List.<String[]>of(new String[]{"1241212", "Producto A"}));
-
-        assertFalse(manager.leerMedidasYCatalogo(excel).estructuraCompleta());
-    }
-
-    @Test
-    void despuesDeMigrarLaEstructuraSeReportaCompleta() throws Exception {
-        Path excel = crearExcelViejo("completa.xlsx", List.<String[]>of(new String[]{"1241212", "Producto A"}));
-
-        manager.asegurarEstructuraEmbalajes(excel);
-
-        assertTrue(manager.leerMedidasYCatalogo(excel).estructuraCompleta(),
-                "una segunda corrida no debe volver a abrir el archivo para escribir");
     }
 
     // -------------------------------------------------------------------------------------------
     // Helpers
     // -------------------------------------------------------------------------------------------
 
-    private Path crearExcelConHeaders(String nombre, String[] headers) throws Exception {
+    private Path crearExcel(String nombre, String[] headers, String[] fila) throws Exception {
         Path excel = tempDir.resolve(nombre);
         try (XSSFWorkbook wb = new XSSFWorkbook()) {
             Sheet sheet = wb.createSheet("MEDIDAS");
@@ -399,51 +228,8 @@ class MedidasExcelManagerTest {
                 header.createCell(i, CellType.STRING).setCellValue(headers[i]);
             }
             Row row = sheet.createRow(1);
-            row.createCell(0, CellType.STRING).setCellValue("1241212");
-            row.createCell(1, CellType.STRING).setCellValue("Producto A");
-            try (FileOutputStream fos = new FileOutputStream(excel.toFile())) {
-                wb.write(fos);
-            }
-        }
-        return excel;
-    }
-
-    private void agregarHojaAjenaAlPrincipio(Path excel, String nombre) throws Exception {
-        try (Workbook wb = abrirParaEditar(excel)) {
-            Sheet ajena = wb.createSheet(nombre);
-            ajena.createRow(0).createCell(0, CellType.STRING).setCellValue("dato propio");
-            wb.setSheetOrder(nombre, 0);
-            try (FileOutputStream fos = new FileOutputStream(excel.toFile())) {
-                wb.write(fos);
-            }
-        }
-    }
-
-    private void borrarHeader(Path excel, int col) throws Exception {
-        try (Workbook wb = abrirParaEditar(excel)) {
-            Row header = wb.getSheet("MEDIDAS").getRow(0);
-            Cell cell = header.getCell(col);
-            if (cell != null) header.removeCell(cell);
-            try (FileOutputStream fos = new FileOutputStream(excel.toFile())) {
-                wb.write(fos);
-            }
-        }
-    }
-
-    private Path crearExcelViejo(String nombre, List<String[]> filas) throws Exception {
-        Path excel = tempDir.resolve(nombre);
-        try (XSSFWorkbook wb = new XSSFWorkbook()) {
-            Sheet sheet = wb.createSheet("MEDIDAS");
-            Row header = sheet.createRow(0);
-            for (int i = 0; i < HEADERS_VIEJOS.length; i++) {
-                header.createCell(i, CellType.STRING).setCellValue(HEADERS_VIEJOS[i]);
-            }
-            int r = 1;
-            for (String[] fila : filas) {
-                Row row = sheet.createRow(r++);
-                for (int i = 0; i < fila.length; i++) {
-                    row.createCell(i, CellType.STRING).setCellValue(fila[i]);
-                }
+            for (int i = 0; i < fila.length; i++) {
+                row.createCell(i, CellType.STRING).setCellValue(fila[i]);
             }
             try (FileOutputStream fos = new FileOutputStream(excel.toFile())) {
                 wb.write(fos);
@@ -452,46 +238,18 @@ class MedidasExcelManagerTest {
         return excel;
     }
 
-    private Path crearExcelConCatalogo(String nombre, List<Object[]> embalajes) throws Exception {
-        Path excel = crearExcelViejo(nombre, List.<String[]>of(new String[]{"1241212", "Producto A"}));
+    private void escribirNumero(Path excel, int fila, int col, double valor) throws Exception {
         try (Workbook wb = abrirParaEditar(excel)) {
-            Sheet sheet = wb.createSheet("EMBALAJES");
-            Row header = sheet.createRow(0);
-            String[] headers = {"CÓDIGO", "TIPO", "Ancho cm", "Alto cm", "Profundidad cm"};
-            for (int i = 0; i < headers.length; i++) {
-                header.createCell(i, CellType.STRING).setCellValue(headers[i]);
-            }
-            int r = 1;
-            for (Object[] e : embalajes) {
-                Row row = sheet.createRow(r++);
-                row.createCell(0, CellType.STRING).setCellValue((String) e[0]);
-                row.createCell(1, CellType.STRING).setCellValue((String) e[1]);
-                for (int i = 2; i < e.length; i++) {
-                    if (e[i] == null) continue;
-                    row.createCell(i, CellType.NUMERIC).setCellValue((Double) e[i]);
-                }
-            }
-            try (FileOutputStream fos = new FileOutputStream(excel.toFile())) {
-                wb.write(fos);
-            }
-        }
-        return excel;
-    }
-
-    private void escribirCeldaEnFilaDeSku(Path excel, int col, String valor) throws Exception {
-        try (Workbook wb = abrirParaEditar(excel)) {
-            Sheet sheet = wb.getSheetAt(0);
-            sheet.getRow(0).createCell(col, CellType.STRING).setCellValue("EMBALAJE");
-            sheet.getRow(1).createCell(col, CellType.STRING).setCellValue(valor);
+            wb.getSheetAt(0).getRow(fila).createCell(col, CellType.NUMERIC).setCellValue(valor);
             try (FileOutputStream fos = new FileOutputStream(excel.toFile())) {
                 wb.write(fos);
             }
         }
     }
 
-    private void escribirFormulaEnFilaDeSku(Path excel, int col, String formula) throws Exception {
+    private void escribirFormula(Path excel, int fila, int col, String formula) throws Exception {
         try (Workbook wb = abrirParaEditar(excel)) {
-            wb.getSheetAt(0).getRow(1).createCell(col, CellType.FORMULA).setCellFormula(formula);
+            wb.getSheetAt(0).getRow(fila).createCell(col, CellType.FORMULA).setCellFormula(formula);
             try (FileOutputStream fos = new FileOutputStream(excel.toFile())) {
                 wb.write(fos);
             }
@@ -503,50 +261,8 @@ class MedidasExcelManagerTest {
      * WorkbookFactory.create(file, ..., false) mantiene el archivo tomado y lo corrompe al guardar.
      */
     private Workbook abrirParaEditar(Path excel) throws Exception {
-        try (java.io.InputStream in = java.nio.file.Files.newInputStream(excel)) {
+        try (InputStream in = Files.newInputStream(excel)) {
             return new XSSFWorkbook(in);
-        }
-    }
-
-    private void escribirHeader(Path excel, int col, String valor) throws Exception {
-        try (Workbook wb = abrirParaEditar(excel)) {
-            wb.getSheetAt(0).getRow(0).createCell(col, CellType.STRING).setCellValue(valor);
-            try (FileOutputStream fos = new FileOutputStream(excel.toFile())) {
-                wb.write(fos);
-            }
-        }
-    }
-
-    private void moverHojaAlPrincipio(Path excel, String nombre) throws Exception {
-        try (Workbook wb = abrirParaEditar(excel)) {
-            wb.setSheetOrder(nombre, 0);
-            try (FileOutputStream fos = new FileOutputStream(excel.toFile())) {
-                wb.write(fos);
-            }
-        }
-    }
-
-    private void escribirCelda(Path excel, int fila, int col, String valor) throws Exception {
-        try (Workbook wb = abrirParaEditar(excel)) {
-            wb.getSheetAt(0).getRow(fila).createCell(col, CellType.STRING).setCellValue(valor);
-            try (FileOutputStream fos = new FileOutputStream(excel.toFile())) {
-                wb.write(fos);
-            }
-        }
-    }
-
-    private String leerCelda(Path excel, int fila, int col) throws Exception {
-        try (Workbook wb = WorkbookFactory.create(excel.toFile(), null, true)) {
-            Cell cell = wb.getSheetAt(0).getRow(fila).getCell(col);
-            if (cell == null || cell.getCellType() == CellType.BLANK) return "";
-            return cell.getStringCellValue();
-        }
-    }
-
-    private String leerHeader(Path excel, int col) throws Exception {
-        try (Workbook wb = WorkbookFactory.create(excel.toFile(), null, true)) {
-            Cell cell = wb.getSheetAt(0).getRow(0).getCell(col);
-            return cell == null ? null : cell.getStringCellValue();
         }
     }
 }

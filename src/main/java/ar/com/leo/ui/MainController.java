@@ -7,7 +7,8 @@ import ar.com.leo.api.ml.model.ShippingType;
 import ar.com.leo.api.ml.model.Venta;
 import ar.com.leo.etiquetas.model.*;
 import ar.com.leo.etiquetas.parser.ComboProduct;
-import ar.com.leo.etiquetas.parser.EmbalajeResolver;
+import ar.com.leo.etiquetas.model.DatosEmbalaje;
+import ar.com.leo.etiquetas.parser.EmbalajeRenderer;
 import ar.com.leo.etiquetas.parser.ComboExcelReader;
 import ar.com.leo.etiquetas.parser.ExcelMappingReader;
 import ar.com.leo.etiquetas.parser.MedidasExcelManager;
@@ -772,14 +773,12 @@ public class MainController {
         try {
             ExcelMapping excelMapping = loadExcelMapping();
             List<ZplLabel> labels = zplParser.parseFile(Path.of(zplPath));
-            DatosMedidasUI datosMedidas = loadDatosMedidas();
-            Map<String, ar.com.leo.etiquetas.model.MedidaSku> medidas = datosMedidas.medidas();
-            Map<String, ar.com.leo.etiquetas.model.Embalaje> catalogoEmbalajes = datosMedidas.catalogo();
+            Map<String, ar.com.leo.etiquetas.model.MedidaSku> medidas = loadMedidasMap();
             Map<String, String> skusPendientes = new LinkedHashMap<>();
-            Map<String, String> embalajesFaltantes = new LinkedHashMap<>();
+            Set<String> embalajesFaltantes = new LinkedHashSet<>();
             currentResult = injectZplHeaders(
                     labelSorter.sort(labels, excelMapping.skuToZone()), excelMapping, medidas, skusPendientes,
-                    catalogoEmbalajes, embalajesFaltantes);
+                    embalajesFaltantes);
             int agregadosExcel = guardarSkusPendientesMedicion(skusPendientes);
             showLabelTable();
             displayResult(currentResult);
@@ -976,9 +975,7 @@ public class MainController {
         if (confirmResult.isEmpty() || confirmResult.get() != ButtonType.OK) return;
 
         // Capturar referencias/paths en el hilo UI antes de lanzar el thread background.
-        final DatosMedidasUI datosMedidas = loadDatosMedidas();
-        final Map<String, ar.com.leo.etiquetas.model.MedidaSku> medidas = datosMedidas.medidas();
-        final Map<String, ar.com.leo.etiquetas.model.Embalaje> catalogoEmbalajes = datosMedidas.catalogo();
+        final Map<String, ar.com.leo.etiquetas.model.MedidaSku> medidas = loadMedidasMap();
         final String medidasPath = medidasExcelField != null ? medidasExcelField.getText() : null;
 
         setLoading(true);
@@ -987,10 +984,10 @@ public class MainController {
             try {
                 List<ZplLabel> labels = MercadoLibreAPI.descargarEtiquetasZplParaOrdenes(seleccionadas, turboShipmentIds);
                 Map<String, String> skusPendientes = new LinkedHashMap<>();
-                Map<String, String> embalajesFaltantes = new LinkedHashMap<>();
+                Set<String> embalajesFaltantes = new LinkedHashSet<>();
                 SortResult result = injectZplHeaders(
                         labelSorter.sort(labels, excelMapping.skuToZone()), excelMapping, medidas, skusPendientes,
-                        catalogoEmbalajes, embalajesFaltantes);
+                        embalajesFaltantes);
                 int agregadosExcel = guardarSkusPendientesMedicion(skusPendientes, medidasPath);
 
                 // Guardar automáticamente en carpeta "Etiquetas"
@@ -1013,7 +1010,7 @@ public class MainController {
                 final int skusFaltantesCount = skusPendientes.size();
                 final int agregadosCount = agregadosExcel;
                 final List<String> skusFaltantesList = new ArrayList<>(skusPendientes.keySet());
-                final Map<String, String> embalajesFaltantesFinal = new LinkedHashMap<>(embalajesFaltantes);
+                final Set<String> embalajesFaltantesFinal = new LinkedHashSet<>(embalajesFaltantes);
                 Platform.runLater(() -> {
                     setLoading(false);
                     currentResult = result;
@@ -1045,7 +1042,7 @@ public class MainController {
      * en el lote de etiquetas recién procesado. Solo se muestra si hay al menos uno.
      */
     private void mostrarMensajeSkusFaltantes(int faltantesCount, int agregadosExcel, List<String> skus,
-                                             Map<String, String> embalajesFaltantes) {
+                                             Set<String> embalajesFaltantes) {
         boolean hayEmbalajes = embalajesFaltantes != null && !embalajesFaltantes.isEmpty();
         if (faltantesCount <= 0 && !hayEmbalajes) return;
 
@@ -1068,25 +1065,10 @@ public class MainController {
         }
 
         if (hayEmbalajes) {
-            // Sin asignar: la celda EMBALAJE está vacía. Inválidos: tiene un código que no figura
-            // en el catálogo, casi siempre un typo — por eso se muestra qué se escribió.
-            List<String> sinAsignar = new ArrayList<>();
-            List<String> invalidos = new ArrayList<>();
-            for (Map.Entry<String, String> e : embalajesFaltantes.entrySet()) {
-                if (e.getValue() == null || e.getValue().isBlank()) sinAsignar.add(e.getKey());
-                else invalidos.add(e.getKey() + " → \"" + e.getValue() + "\"");
-            }
             if (!msg.isEmpty()) msg.append("\n");
-            if (!sinAsignar.isEmpty()) {
-                msg.append(sinAsignar.size()).append(" SKU(s) sin embalaje asignado en este lote:\n");
-                for (String s : sinAsignar) msg.append("  ").append(s).append("\n");
-            }
-            if (!invalidos.isEmpty()) {
-                if (!sinAsignar.isEmpty()) msg.append("\n");
-                msg.append(invalidos.size())
-                        .append(" SKU(s) con un código de embalaje que no existe en el catálogo:\n");
-                for (String s : invalidos) msg.append("  ").append(s).append("\n");
-            }
+            msg.append(embalajesFaltantes.size())
+                    .append(" SKU(s) sin caja ni bolsa asignada en este lote:\n");
+            for (String sku : embalajesFaltantes) msg.append("  ").append(sku).append("\n");
         }
 
         String titulo = faltantesCount > 0 ? "Medidas pendientes" : "Embalajes pendientes";
@@ -1602,19 +1584,19 @@ public class MainController {
     // (en vez de fallar en silencio produciendo etiquetas incompletas).
     private static final String ANCHOR_UNIDAD = "Unidad";
     private static final String ANCHOR_SKU = "SKU:";
+    // Fragmento del texto "Recortá esta parte..." de ML, sin acentos ni mayúsculas para no depender
+    // de cómo venga codificada la tilde.
+    private static final String ANCHOR_RECORTE = "ecort";
 
     /**
-     * @param catalogoEmbalajes catálogo de la hoja EMBALAJES, o null si el módulo está apagado
-     *                          (en ese caso no se inyecta la línea EMBALAJE).
-     * @param embalajesFaltantesOut se completa con sku → código crudo cargado en el Excel:
-     *                              cadena vacía si el SKU no tiene embalaje asignado, o el código
-     *                              escrito si no figura en el catálogo (typo).
+     * @param embalajesFaltantesOut se completa con los SKU que no tienen ni caja ni bolsa cargada
+     *                              en el Excel. Los agregados (pluribol, rollo, observaciones) no
+     *                              alcanzan para considerar el SKU resuelto.
      */
     private SortResult injectZplHeaders(SortResult result, ExcelMapping excelMapping,
                                         Map<String, ar.com.leo.etiquetas.model.MedidaSku> medidas,
                                         Map<String, String> skusPendientesOut,
-                                        Map<String, ar.com.leo.etiquetas.model.Embalaje> catalogoEmbalajes,
-                                        Map<String, String> embalajesFaltantesOut) {
+                                        Set<String> embalajesFaltantesOut) {
         Map<String, String> skuToExtCode = excelMapping.skuToExternalCode();
         Map<String, ComboProduct> normalizedCombos = loadNormalizedCombos();
         List<SortedLabelGroup> newGroups = new ArrayList<>();
@@ -1647,21 +1629,19 @@ public class MainController {
                 skuPendienteMedicion = (m == null || !m.estaMedido());
             }
 
-            // Embalaje asignado al SKU. Se resuelve una vez por grupo: la línea es igual en todas
-            // las etiquetas del grupo. No aplica a CARROS (esas etiquetas listan varios productos).
+            // Datos de embalaje del SKU. Se resuelven una vez por grupo: las líneas son iguales en
+            // todas las etiquetas del grupo. No aplica a CARROS (listan varios productos).
             // Misma guarda que el bloque MEDIR: los SKU no numéricos son sentinelas del parser
             // ("SKU INVALIDO: ...") que nunca llegan al Excel de medidas, así que no se les puede
-            // asignar un embalaje y no tiene sentido reclamarlos en cada lote.
+            // cargar un embalaje y no tiene sentido reclamarlos en cada lote.
             String embalajeZpl = "";
-            if (catalogoEmbalajes != null && !"CARROS".equals(zone) && sku != null && !sku.isBlank()
+            if (medidas != null && !"CARROS".equals(zone) && sku != null && !sku.isBlank()
                     && !sku.contains("\n") && sku.matches("\\d+")) {
-                ar.com.leo.etiquetas.model.MedidaSku m = medidas == null ? null : medidas.get(sku);
-                String codigoCrudo = m == null ? "" : m.embalaje();
-                EmbalajeResolver.ResultadoEmbalaje resultado =
-                        EmbalajeResolver.resolver(codigoCrudo, catalogoEmbalajes);
-                embalajeZpl = EmbalajeResolver.campoZpl(resultado.textoEtiqueta());
-                if (resultado.estado() != EmbalajeResolver.Estado.OK && embalajesFaltantesOut != null) {
-                    embalajesFaltantesOut.putIfAbsent(sku, codigoCrudo == null ? "" : codigoCrudo.trim());
+                ar.com.leo.etiquetas.model.MedidaSku m = medidas.get(sku);
+                DatosEmbalaje datos = m == null ? DatosEmbalaje.VACIO : m.embalaje();
+                embalajeZpl = EmbalajeRenderer.campoZpl(EmbalajeRenderer.lineas(datos));
+                if (!datos.tieneCajaOBolsa() && embalajesFaltantesOut != null) {
+                    embalajesFaltantesOut.add(sku);
                 }
             }
 
@@ -1691,6 +1671,11 @@ public class MainController {
                     medirPrefix =
                             "^FO200,15^GB580,65,65^FS\n"
                             + "^FO200,22^A0N,50,50^FB580,1,0,C^FR^FD" + medirText + "^FS\n";
+                }
+                // Las líneas de embalaje ocupan la franja donde ML imprime "Recortá esta parte...",
+                // que no le sirve al operario. Se quita para no encimar los dos textos.
+                if (!embalajeZpl.isEmpty()) {
+                    raw = quitarTextoRecorte(raw, sku);
                 }
                 raw = raw.substring(0, insertIdx) + "^LH0,0\n" + posField1 + "\n" + posField2 + "\n" + posField3 + "\n" + embalajeZpl + medirPrefix + raw.substring(insertIdx);
                 labelPosition++;
@@ -1777,6 +1762,29 @@ public class MainController {
             newGroups.add(new SortedLabelGroup(zone, group.sku(), group.productDescription(), group.details(), group.orderIds(), newLabels));
         }
         return new SortResult(newGroups, result.statistics());
+    }
+
+    /**
+     * Elimina el campo de ML "Recortá esta parte de la etiqueta para que tu paquete viaje seguro",
+     * que ocupa la franja donde van las líneas de embalaje. Se busca por el fragmento "ecort" —sin
+     * acentos ni mayúsculas— para no depender de cómo ML codifique la tilde, y se corta desde su
+     * ^FO hasta su ^FS.
+     *
+     * Si el ancla no aparece (ML cambió el texto) se registra una advertencia y la etiqueta sale
+     * con los dos textos encimados: visible, en vez de perder el embalaje en silencio.
+     */
+    private String quitarTextoRecorte(String rawZpl, String sku) {
+        int idx = rawZpl.indexOf(ANCHOR_RECORTE);
+        if (idx < 0) {
+            AppLogger.warn("ZPL - No se encontró el ancla '" + ANCHOR_RECORTE
+                    + "' para quitar el texto de recorte (sku=" + sku
+                    + "). Las líneas de embalaje pueden encimarse. ¿Cambió el formato de ML?");
+            return rawZpl;
+        }
+        int inicio = rawZpl.lastIndexOf("^FO", idx);
+        int fin = rawZpl.indexOf("^FS", idx);
+        if (inicio < 0 || fin < 0) return rawZpl;
+        return rawZpl.substring(0, inicio) + rawZpl.substring(fin + 3);
     }
 
     private String highlightUnitIfNeeded(String rawZpl, String zone) {
@@ -1979,51 +1987,19 @@ public class MainController {
     }
 
     /**
-     * Medidas y catálogo de embalajes en una sola apertura del Excel. Ambos campos quedan en null
-     * si el módulo está apagado o el archivo no es usable, y en ese caso ni el banner MEDIR ni la
-     * línea EMBALAJE se inyectan. También aprovecha para migrar la estructura del archivo: en
-     * régimen normal no aparecen SKUs nuevos, así que no se puede depender de agregarPendientes.
+     * Medidas por SKU, incluidos los datos de embalaje. Devuelve null si el módulo está apagado o
+     * el archivo no es usable; en ese caso ni el banner MEDIR ni las líneas de embalaje se inyectan.
      */
-    private DatosMedidasUI loadDatosMedidas() {
-        if (medidasEnabledCheck == null || !medidasEnabledCheck.isSelected()) return DatosMedidasUI.VACIO;
+    private Map<String, ar.com.leo.etiquetas.model.MedidaSku> loadMedidasMap() {
+        if (medidasEnabledCheck == null || !medidasEnabledCheck.isSelected()) return null;
         String path = medidasExcelField == null ? null : medidasExcelField.getText();
-        if (path == null || path.isBlank()) return DatosMedidasUI.VACIO;
+        if (path == null || path.isBlank()) return null;
         try {
-            MedidasExcelManager.DatosMedidas datos = medidasManager.leerMedidasYCatalogo(Path.of(path));
-
-            // La migración abre el archivo en modo escritura, así que solo se dispara cuando la
-            // lectura detecta que falta algo. En régimen normal esto no vuelve a correr nunca.
-            if (!datos.estructuraCompleta()) {
-                try {
-                    if (medidasManager.asegurarEstructuraEmbalajes(Path.of(path))) {
-                        datos = medidasManager.leerMedidasYCatalogo(Path.of(path));
-                    }
-                } catch (Exception e) {
-                    // No es fatal: sin columna no se pueden asignar embalajes, pero las medidas sí
-                    // se leen. Suele pasar con el archivo abierto en Excel, que lo deja tomado.
-                    AppLogger.warn("No se pudo preparar la columna de embalajes: " + e.getMessage());
-                }
-            }
-            return new DatosMedidasUI(datos.medidas(), catalogoUsable(datos.catalogo()));
+            return medidasManager.leerMedidas(Path.of(path));
         } catch (Exception e) {
             AppLogger.warn("No se pudo leer el Excel de medidas: " + e.getMessage());
-            return DatosMedidasUI.VACIO;
+            return null;
         }
-    }
-
-    private record DatosMedidasUI(Map<String, ar.com.leo.etiquetas.model.MedidaSku> medidas,
-                                  Map<String, ar.com.leo.etiquetas.model.Embalaje> catalogo) {
-        static final DatosMedidasUI VACIO = new DatosMedidasUI(null, null);
-    }
-
-    /**
-     * Un catálogo vacío (hoja EMBALAJES inexistente o sin filas) equivale a la función apagada:
-     * devolver el mapa vacío haría que todas las etiquetas salieran con "EMBALAJE: -" y que el
-     * aviso reclamara el lote entero sin que el usuario pueda hacer nada al respecto todavía.
-     */
-    private Map<String, ar.com.leo.etiquetas.model.Embalaje> catalogoUsable(
-            Map<String, ar.com.leo.etiquetas.model.Embalaje> catalogo) {
-        return catalogo == null || catalogo.isEmpty() ? null : catalogo;
     }
 
     private int guardarSkusPendientesMedicion(Map<String, String> skusPendientes) {
