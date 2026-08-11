@@ -44,8 +44,8 @@ public class MedidasExcelManager {
             "Profunidad +20%",
             "Peso físico (empaque + producto) +20%",
             "SUBIDO",
-            "ERROR",
-            "EMBALAJE"
+            "EMBALAJE",
+            "ERROR"
     };
 
     /** Headers de la hoja catálogo. Solo CÓDIGO se usa; el resto documenta el embalaje. */
@@ -70,10 +70,10 @@ public class MedidasExcelManager {
     private static final int COL_PROFUNDIDAD_MAS = 8;
     private static final int COL_PESO_MAS = 9;
     private static final int COL_SUBIDO = 10;
-    private static final int COL_ERROR = 11;
-    // La columna EMBALAJE va al final para no correr los índices existentes ni romper las
-    // fórmulas que el usuario tenga cargadas en las columnas anteriores.
-    private static final int COL_EMBALAJE = 12;
+    // Posiciones de referencia para archivos nuevos. En los existentes ambas columnas se ubican
+    // buscándolas por header, porque el usuario puede tener columnas propias a la derecha.
+    private static final int COL_EMBALAJE = 11;
+    private static final int COL_ERROR = 12;
 
     private static final int COL_EMB_CODIGO = 0;
     private static final int COL_EMB_TIPO = 1;
@@ -278,7 +278,10 @@ public class MedidasExcelManager {
                 if (sheet == null) sheet = workbook.createSheet("MEDIDAS");
 
                 asegurarHeaders(workbook, sheet);
+                int colError = asegurarColumnaError(workbook, sheet);
                 int colEmbalaje = asegurarColumnaEmbalaje(workbook, sheet);
+                // Insertar EMBALAJE desplaza ERROR: hay que releer su posición.
+                colError = buscarColumna(sheet, "ERROR");
 
                 CellStyle skuPendienteStyle = crearEstiloPendiente(workbook);
                 CellStyle celdaFaltanteStyle = crearEstiloCeldaFaltante(workbook);
@@ -331,8 +334,8 @@ public class MedidasExcelManager {
                     subidoCell.setCellStyle(subidoNoStyle);
 
                     // ERROR vacío — se rellena si una subida falla.
-                    Cell errorCell = row.getCell(COL_ERROR);
-                    if (errorCell == null) row.createCell(COL_ERROR, CellType.BLANK);
+                    Cell errorCell = row.getCell(colError);
+                    if (errorCell == null) row.createCell(colError, CellType.BLANK);
                     else errorCell.setBlank();
 
                     // EMBALAJE vacío, resaltado como pendiente de cargar. Si la celda ya traía algo
@@ -352,7 +355,6 @@ public class MedidasExcelManager {
                 // fórmulas tipo BUSCARX/XLOOKUP en PRODUCTO u otras columnas).
                 workbook.setForceFormulaRecalculation(true);
 
-                asegurarColumnaError(workbook, sheet);
                 asegurarHojaEmbalajes(workbook);
                 aplicarValidacionEmbalaje(sheet, colEmbalaje);
                 autoSizeColumns(sheet);
@@ -547,18 +549,19 @@ public class MedidasExcelManager {
         return style;
     }
 
-    private void asegurarColumnaError(Workbook workbook, Sheet sheet) {
+    /** Índice de la columna ERROR, creándola en COL_ERROR si el archivo es anterior a ella. */
+    private int asegurarColumnaError(Workbook workbook, Sheet sheet) {
+        int existente = buscarColumna(sheet, "ERROR");
+        if (existente != -1) return existente;
+
         Row header = sheet.getRow(0);
-        if (header == null) return;
+        if (header == null) header = sheet.createRow(0);
+
         Cell errorHeaderCell = header.getCell(COL_ERROR);
-        String h = errorHeaderCell == null ? "" : normalizarHeader(getCellString(errorHeaderCell));
-        if (h.equals("ERROR")) return;
-
-        CellStyle headerStyle = crearEstiloHeader(workbook);
-
         if (errorHeaderCell == null) errorHeaderCell = header.createCell(COL_ERROR, CellType.STRING);
         errorHeaderCell.setCellValue("ERROR");
-        errorHeaderCell.setCellStyle(headerStyle);
+        errorHeaderCell.setCellStyle(crearEstiloHeader(workbook));
+        return COL_ERROR;
     }
 
     /**
@@ -573,35 +576,36 @@ public class MedidasExcelManager {
         return null;
     }
 
-    /** Índice de la columna EMBALAJE buscándola por su header, o -1 si todavía no existe. */
-    private int buscarColumnaEmbalaje(Sheet sheet) {
+    /** Índice de una columna buscándola por su header normalizado, o -1 si no existe. */
+    private int buscarColumna(Sheet sheet, String headerBuscado) {
         Row header = sheet.getRow(0);
         if (header == null) return -1;
         for (int i = 0; i < header.getLastCellNum(); i++) {
             Cell cell = header.getCell(i);
             if (cell == null) continue;
-            if (normalizarHeader(getCellString(cell)).equals("EMBALAJE")) return i;
+            if (normalizarHeader(getCellString(cell)).equals(headerBuscado)) return i;
         }
         return -1;
     }
 
     /**
-     * Devuelve el índice de la columna EMBALAJE, creándola si hace falta. Si ya existe se reusa
-     * esté donde esté. Si no, se busca la primera columna con header vacío desde COL_EMBALAJE:
-     * el usuario puede haber agregado columnas propias a la derecha de ERROR y no hay que pisarlas.
+     * Devuelve el índice de la columna EMBALAJE, creándola si hace falta. Si ya existe se reusa esté
+     * donde esté. Si no, se inserta justo antes de ERROR desplazando a la derecha todo lo que venga
+     * después: así queda pegada a las columnas de medidas y no se pisa ninguna columna propia que
+     * el usuario haya agregado al final.
      */
     private int asegurarColumnaEmbalaje(Workbook workbook, Sheet sheet) {
-        int existente = buscarColumnaEmbalaje(sheet);
+        int existente = buscarColumna(sheet, "EMBALAJE");
         if (existente != -1) return existente;
 
         Row header = sheet.getRow(0);
         if (header == null) header = sheet.createRow(0);
 
-        int destino = COL_EMBALAJE;
-        while (destino < header.getLastCellNum()) {
-            Cell cell = header.getCell(destino);
-            if (cell == null || getCellString(cell).trim().isEmpty()) break;
-            destino++;
+        int destino = buscarColumna(sheet, "ERROR");
+        if (destino == -1) {
+            destino = COL_EMBALAJE;
+        } else {
+            desplazarColumnasALaDerecha(sheet, destino);
         }
 
         Cell headerCell = header.getCell(destino);
@@ -609,6 +613,36 @@ public class MedidasExcelManager {
         headerCell.setCellValue("EMBALAJE");
         headerCell.setCellStyle(crearEstiloHeader(workbook));
         return destino;
+    }
+
+    /**
+     * Corre un lugar a la derecha todas las celdas desde {@code desde} en adelante, para abrir hueco
+     * a una columna nueva. Se hace a mano en vez de con Sheet#shiftColumns porque este necesita
+     * mover también los estilos y dejar la celda de origen realmente vacía.
+     */
+    private void desplazarColumnasALaDerecha(Sheet sheet, int desde) {
+        for (int r = 0; r <= sheet.getLastRowNum(); r++) {
+            Row row = sheet.getRow(r);
+            if (row == null) continue;
+
+            for (int c = row.getLastCellNum() - 1; c >= desde; c--) {
+                Cell origen = row.getCell(c);
+                if (origen == null) continue;
+                copiarCelda(origen, row.createCell(c + 1, origen.getCellType()));
+                row.removeCell(origen);
+            }
+        }
+    }
+
+    private void copiarCelda(Cell origen, Cell destino) {
+        destino.setCellStyle(origen.getCellStyle());
+        switch (origen.getCellType()) {
+            case STRING -> destino.setCellValue(origen.getStringCellValue());
+            case NUMERIC -> destino.setCellValue(origen.getNumericCellValue());
+            case BOOLEAN -> destino.setCellValue(origen.getBooleanCellValue());
+            case FORMULA -> destino.setCellFormula(origen.getCellFormula());
+            default -> destino.setBlank();
+        }
     }
 
     /** Crea la hoja catálogo con solo los encabezados. Nunca toca las filas ya cargadas. */
@@ -624,11 +658,13 @@ public class MedidasExcelManager {
         }
         if (header == null) header = sheet.createRow(0);
 
-        CellStyle headerStyle = crearEstiloHeader(workbook);
+        CellStyle headerStyle = crearEstiloHeaderCatalogo(workbook);
         for (int i = 0; i < HEADERS_EMBALAJES.length; i++) {
             Cell c = header.createCell(i, CellType.STRING);
             c.setCellValue(HEADERS_EMBALAJES[i]);
             c.setCellStyle(headerStyle);
+        }
+        for (int i = 0; i < HEADERS_EMBALAJES.length; i++) {
             sheet.autoSizeColumn(i);
         }
         return true;
@@ -684,7 +720,8 @@ public class MedidasExcelManager {
                 Sheet sheet = hojaMedidas(workbook);
                 if (sheet == null) return false;
 
-                boolean faltabaColumna = buscarColumnaEmbalaje(sheet) == -1;
+                boolean faltabaColumna = buscarColumna(sheet, "EMBALAJE") == -1;
+                asegurarColumnaError(workbook, sheet);
                 int colEmbalaje = asegurarColumnaEmbalaje(workbook, sheet);
                 boolean hojaCreada = asegurarHojaEmbalajes(workbook);
                 boolean validacionCreada = aplicarValidacionEmbalaje(sheet, colEmbalaje);
@@ -696,6 +733,15 @@ public class MedidasExcelManager {
                 return true;
             }
         }
+    }
+
+    /** Header del catálogo: mismo formato que el resto más un gris de fondo que lo despega. */
+    private CellStyle crearEstiloHeaderCatalogo(Workbook workbook) {
+        XSSFCellStyle style = (XSSFCellStyle) crearEstiloHeader(workbook);
+        XSSFColor gris = new XSSFColor(new byte[]{(byte) 0xD9, (byte) 0xD9, (byte) 0xD9}, null);
+        style.setFillForegroundColor(gris);
+        style.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+        return style;
     }
 
     private CellStyle crearEstiloHeader(Workbook workbook) {

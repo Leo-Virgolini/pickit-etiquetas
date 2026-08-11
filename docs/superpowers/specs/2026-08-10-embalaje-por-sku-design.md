@@ -36,17 +36,23 @@ El alcance es **informativo para el operario**. Explícitamente **fuera de alcan
 
 ### 1. Excel: hoja de SKUs
 
-Se agrega la columna **`EMBALAJE`** al final, después de `ERROR`.
+Se agrega la columna **`EMBALAJE`** entre `SUBIDO` y `ERROR`, para que quede junto a los datos del
+producto y no detrás de la columna de diagnóstico.
 
-La columna se busca **por su header**, no por índice: si ya existe se reusa esté donde esté, y si
-falta se crea en la primera columna libre a partir de la 12. Un usuario puede haber agregado
-columnas propias a la derecha de `ERROR` y no hay que pisárselas.
+En un archivo existente eso implica **insertarla**: `ERROR` —y cualquier columna propia que el
+usuario tenga después— se desplaza un lugar a la derecha con su contenido y su formato. El
+desplazamiento se hace celda por celda (`desplazarColumnasALaDerecha`) y no con `Sheet#shiftColumns`,
+que no movía los estilos ni dejaba vacía la celda de origen.
 
-Va al final —y no junto a las columnas de dimensiones— para no correr los índices existentes ni
-romper las fórmulas que el usuario ya tiene cargadas (`BUSCARX` en PRODUCTO, `base*1.2` en las +20%).
+Tanto `EMBALAJE` como `ERROR` se ubican **por su header**, no por índice: si ya existen se reusan
+estén donde estén. Las constantes `COL_EMBALAJE = 11` y `COL_ERROR = 12` solo definen dónde van en
+un archivo nuevo.
 
-- `HEADERS` suma `"EMBALAJE"`; `COL_EMBALAJE = 12` es solo el punto de partida de la búsqueda.
+Las columnas anteriores no se mueven, así que las fórmulas cargadas (`BUSCARX` en PRODUCTO,
+`base*1.2` en las +20%) quedan intactas.
+
 - `asegurarColumnaEmbalaje(workbook, sheet)` devuelve el índice de la columna, creándola si falta.
+  Se llama después de `asegurarColumnaError`, que resuelve el punto de inserción.
 - En `agregarPendientes`, la celda `EMBALAJE` de un SKU nuevo se deja vacía con el estilo amarillo
   tenue de "falta cargar" (`crearEstiloCeldaFaltante`), igual que las celdas de medidas.
 - Se aplica **validación de datos** sobre la columna `EMBALAJE`, desde la fila 2 hasta la última
@@ -70,6 +76,7 @@ Hoja nueva creada **solo con encabezados**, sin filas de ejemplo. El usuario car
   existentes.
 - Con dos hojas en el workbook, la hoja de SKUs ya no puede resolverse como "la primera": se toma
   la primera que **no** sea `EMBALAJES`, porque el usuario puede reordenarlas en Excel.
+- El header lleva fondo gris, bordes y ancho automático, para distinguirlo de las filas cargadas.
 - `CÓDIGO` es el texto que se imprime en la etiqueta (ej. `CAJA 3`, `BOLSA CHICA`).
 - `TIPO` y las medidas son documentación del catálogo: **la app no las usa**. Existen para que el
   catálogo esté descrito en un solo lugar.
@@ -106,8 +113,7 @@ public boolean asegurarEstructuraEmbalajes(Path excelPath) throws Exception
 **Normalización de códigos**: para comparar SKU↔catálogo se usa `trim` + mayúsculas + colapso de
 espacios internos. Es la misma regla que ya usaban los headers del Excel, así que
 `MedidasExcelManager.normalizarHeader` pasa a delegar en `EmbalajeResolver.normalizar` en vez de
-duplicarla. Así `caja 3`, `CAJA  3` y
-`Caja 3` resuelven al mismo embalaje. En la etiqueta se imprime el código tal como figura en el
+duplicarla. Así `caja 3`, `CAJA  3` y `Caja 3` resuelven al mismo embalaje. En la etiqueta se imprime el código tal como figura en el
 **catálogo**, no como lo escribió el usuario en la fila del SKU, para que la impresión sea uniforme.
 
 ### 4. Resolución SKU → texto de embalaje
@@ -234,7 +240,7 @@ JavaFX inicializado. Las coordenadas se verifican a ojo en el archivo
 | `etiquetas/parser/EmbalajeResolver.java` | **Nuevo** — resolución SKU → texto/estado |
 | `etiquetas/parser/MedidasExcelManager.java` | Columna `EMBALAJE`, hoja `EMBALAJES`, validación de datos, `leerCatalogoEmbalajes` |
 | `ui/MainController.java` | Lee el catálogo, inyecta la línea ZPL, acumula y reporta los faltantes |
-| `test/.../MedidasExcelManagerTest.java` | **Nuevo** — 19 tests |
+| `test/.../MedidasExcelManagerTest.java` | **Nuevo** — 21 tests |
 | `test/.../EmbalajeResolverTest.java` | **Nuevo** — 10 tests |
 | `README.md` | Columna `EMBALAJE`, hoja `EMBALAJES` y línea en la etiqueta |
 

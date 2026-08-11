@@ -23,17 +23,17 @@ Tres selectores de archivo persistentes (guardados en `Preferences`) disponibles
   | 8 | `Profunidad +20%` | Valor que se sube a ML. |
   | 9 | `Peso físico (empaque + producto) +20%` | Valor que se sube a ML. |
   | 10 | `SUBIDO` | `NO` al agregar (rojo tenue), `SI` al subir OK (verde tenue). |
-  | 11 | `ERROR` | Mensaje de ML en rojo cuando falla la subida. Se limpia al pasar a `SUBIDO=SI` en un reintento exitoso. |
-  | 12 | `EMBALAJE` | Codigo del embalaje asignado al SKU, elegido de la hoja `EMBALAJES`. Solo informativo: se imprime en la etiqueta y no afecta lo que se sube a ML. |
+  | 11 | `EMBALAJE` | Codigo del embalaje asignado al SKU, elegido de la hoja `EMBALAJES`. Solo informativo: se imprime en la etiqueta y no afecta lo que se sube a ML. |
+  | 12 | `ERROR` | Mensaje de ML en rojo cuando falla la subida. Se limpia al pasar a `SUBIDO=SI` en un reintento exitoso. |
 
   - Las 4 columnas base cm/kg son los valores reales medidos por el deposito. Las `+20%` son los valores efectivos declarados a ML (margen por variaciones de armado).
   - Si el archivo no existe se crea automaticamente con headers en la primera ejecucion. Los SKUs nuevos se insertan primero en filas con SKU vacio (reutilizando slots pre-cargados con formulas) y si se agotan se appendean al final. En ambos casos las celdas de medidas faltantes quedan en amarillo y `SUBIDO=NO`. Las celdas que contengan una formula se preservan intactas.
   - El lector tolera variantes: "Largo" o "Profundidad", espacios y saltos de linea dentro del header, y el typo "Profunidad" en la columna +20%.
   - Si el archivo existente no tiene columna `ERROR`, se agrega automaticamente en la primera escritura (migracion silenciosa).
-  - Lo mismo con `EMBALAJE` y la hoja `EMBALAJES`: se crean al leer el archivo si faltan, y solo entonces se reescribe. Si la posicion 12 ya esta ocupada por una columna propia del usuario, `EMBALAJE` se agrega en la primera libre a la derecha; si ya existe se reusa este donde este (se busca por header, no por indice).
+  - Lo mismo con `EMBALAJE` y la hoja `EMBALAJES`: se crean al leer el archivo si faltan, y solo entonces se reescribe. En un archivo existente `EMBALAJE` se **inserta antes de `ERROR`**, desplazando un lugar a la derecha esa columna y cualquier otra que el usuario tenga despues (con su contenido y formato). Si ya existe se reusa este donde este: ambas columnas se ubican por header, no por indice.
   - Con el checkbox desactivado se saltea el marcado MEDIR, la linea EMBALAJE y la subida a ML.
 
-- **Hoja `EMBALAJES`** (dentro del mismo archivo de medidas): catalogo de los embalajes disponibles. Columnas: `CODIGO`, `TIPO`, `Ancho cm`, `Alto cm`, `Profundidad cm`. Solo `CODIGO` lo usa la app (es lo que se imprime y lo que alimenta el desplegable de la columna `EMBALAJE`); el resto documenta el embalaje. La app crea la hoja con los encabezados y sin filas: el contenido lo carga el usuario. Si el catalogo esta vacio, la funcion se comporta como desactivada.
+- **Hoja `EMBALAJES`** (dentro del mismo archivo de medidas): catalogo de los embalajes disponibles. Columnas: `CODIGO`, `TIPO`, `Ancho cm`, `Alto cm`, `Profundidad cm`, con el header en gris, bordes y ancho automatico. Solo `CODIGO` lo usa la app (es lo que se imprime y lo que alimenta el desplegable de la columna `EMBALAJE`); el resto documenta el embalaje. La app crea la hoja con los encabezados y sin filas: el contenido lo carga el usuario. Si el catalogo esta vacio, la funcion se comporta como desactivada.
   - Escritura serializada con lock interno y reintentos con backoff (500/1000/1500/2000 ms) si el archivo esta abierto en Excel (sharing violation).
   - Los decimales con coma ("3,006" = 3.006 kg) se leen correctamente tanto si la celda es numerica (POI devuelve el valor crudo) como si es texto (se normaliza `,` → `.`).
 

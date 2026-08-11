@@ -2,12 +2,16 @@ package ar.com.leo.etiquetas.parser;
 
 import ar.com.leo.etiquetas.model.Embalaje;
 import ar.com.leo.etiquetas.model.MedidaSku;
+import org.apache.poi.ss.usermodel.BorderStyle;
 import org.apache.poi.ss.usermodel.Cell;
+import org.apache.poi.ss.usermodel.CellStyle;
+import org.apache.poi.ss.usermodel.FillPatternType;
 import org.apache.poi.ss.usermodel.CellType;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.usermodel.Workbook;
 import org.apache.poi.ss.usermodel.WorkbookFactory;
+import org.apache.poi.xssf.usermodel.XSSFCellStyle;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -129,7 +133,8 @@ class MedidasExcelManagerTest {
 
         manager.agregarPendientes(excel, List.of("999999"));
 
-        assertEquals("EMBALAJE", leerHeader(excel, 12));
+        assertEquals("EMBALAJE", leerHeader(excel, 11));
+        assertEquals("ERROR", leerHeader(excel, 12));
     }
 
     @Test
@@ -194,7 +199,7 @@ class MedidasExcelManagerTest {
 
         manager.asegurarEstructuraEmbalajes(excel);
 
-        assertEquals("EMBALAJE", leerHeader(excel, 12));
+        assertEquals("EMBALAJE", leerHeader(excel, 11));
         try (Workbook wb = WorkbookFactory.create(excel.toFile(), null, true)) {
             assertNotNull(wb.getSheet("EMBALAJES"));
         }
@@ -231,8 +236,36 @@ class MedidasExcelManagerTest {
 
         manager.asegurarEstructuraEmbalajes(excel);
 
-        assertEquals("OBSERVACIONES", leerHeader(excel, 12));
-        assertEquals("EMBALAJE", leerHeader(excel, 13));
+        // EMBALAJE se inserta antes de ERROR: todo lo que estaba a la derecha corre un lugar.
+        assertEquals("EMBALAJE", leerHeader(excel, 11));
+        assertEquals("ERROR", leerHeader(excel, 12));
+        assertEquals("OBSERVACIONES", leerHeader(excel, 13));
+    }
+
+    @Test
+    void insertarLaColumnaNoPierdeElContenidoDeError() throws Exception {
+        Path excel = crearExcelViejo("con-error.xlsx", List.<String[]>of(new String[]{"1241212", "Producto A"}));
+        escribirCelda(excel, 1, 11, "Item no encontrado");
+
+        manager.asegurarEstructuraEmbalajes(excel);
+
+        assertEquals("Item no encontrado", leerCelda(excel, 1, 12));
+        assertEquals("", leerCelda(excel, 1, 11));
+    }
+
+    @Test
+    void elHeaderDelCatalogoTieneFondoGrisYBordes() throws Exception {
+        Path excel = crearExcelViejo("estilo-catalogo.xlsx", List.<String[]>of(new String[]{"1241212", "Producto A"}));
+
+        manager.asegurarEstructuraEmbalajes(excel);
+
+        try (Workbook wb = WorkbookFactory.create(excel.toFile(), null, true)) {
+            CellStyle estilo = wb.getSheet("EMBALAJES").getRow(0).getCell(0).getCellStyle();
+            assertEquals(FillPatternType.SOLID_FOREGROUND, estilo.getFillPattern());
+            assertNotNull(((XSSFCellStyle) estilo).getFillForegroundColorColor());
+            assertEquals(BorderStyle.THIN, estilo.getBorderTop());
+            assertEquals(BorderStyle.THIN, estilo.getBorderBottom());
+        }
     }
 
     @Test
@@ -243,7 +276,9 @@ class MedidasExcelManagerTest {
 
         manager.asegurarEstructuraEmbalajes(excel);
 
+        // Ya existe: se reusa donde está, sin mover nada.
         assertEquals("EMBALAJE", leerHeader(excel, 13));
+        assertEquals("OBSERVACIONES", leerHeader(excel, 12));
         assertNull(leerHeader(excel, 14));
     }
 
@@ -369,6 +404,23 @@ class MedidasExcelManagerTest {
             try (FileOutputStream fos = new FileOutputStream(excel.toFile())) {
                 wb.write(fos);
             }
+        }
+    }
+
+    private void escribirCelda(Path excel, int fila, int col, String valor) throws Exception {
+        try (Workbook wb = abrirParaEditar(excel)) {
+            wb.getSheetAt(0).getRow(fila).createCell(col, CellType.STRING).setCellValue(valor);
+            try (FileOutputStream fos = new FileOutputStream(excel.toFile())) {
+                wb.write(fos);
+            }
+        }
+    }
+
+    private String leerCelda(Path excel, int fila, int col) throws Exception {
+        try (Workbook wb = WorkbookFactory.create(excel.toFile(), null, true)) {
+            Cell cell = wb.getSheetAt(0).getRow(fila).getCell(col);
+            if (cell == null || cell.getCellType() == CellType.BLANK) return "";
+            return cell.getStringCellValue();
         }
     }
 
