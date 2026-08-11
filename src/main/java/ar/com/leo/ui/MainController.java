@@ -1599,6 +1599,7 @@ public class MainController {
                                         Set<String> embalajesFaltantesOut) {
         Map<String, String> skuToExtCode = excelMapping.skuToExternalCode();
         Map<String, ComboProduct> normalizedCombos = loadNormalizedCombos();
+        boolean embalajeConfigurado = hayDatosDeEmbalaje(medidas);
         List<SortedLabelGroup> newGroups = new ArrayList<>();
         int labelPosition = 1;
         Set<String> skusYaMarcados = new HashSet<>();
@@ -1622,23 +1623,22 @@ public class MainController {
             // Detectar si el SKU individual está pendiente de medición (MEDIR tag).
             // Solo aplica a productos individuales (no CARROS) con SKU numérico válido,
             // y solo se marca/guarda cuando el pedido es de 1 unidad (se evalúa por etiqueta).
-            boolean skuPendienteMedicion = false;
-            if (medidas != null && !"CARROS".equals(zone) && sku != null && !sku.isBlank()
-                    && !sku.contains("\n") && sku.matches("\\d+")) {
-                ar.com.leo.etiquetas.model.MedidaSku m = medidas.get(sku);
-                skuPendienteMedicion = (m == null || !m.estaMedido());
-            }
+            // Un SKU es elegible si tiene número propio y su etiqueta corresponde a un solo
+            // producto. Los no numéricos son sentinelas del parser ("SKU INVALIDO: ...") que nunca
+            // llegan al Excel de medidas, así que no se les puede cargar ni medida ni embalaje.
+            // La condición es una sola para los dos usos: si divergen, una etiqueta podría salir
+            // con banner MEDIR pero sin líneas de embalaje, o al revés.
+            boolean skuElegible = medidas != null && !"CARROS".equals(zone)
+                    && sku != null && !sku.isBlank() && !sku.contains("\n") && sku.matches("\\d+");
+            ar.com.leo.etiquetas.model.MedidaSku medidaSku = skuElegible ? medidas.get(sku) : null;
+
+            boolean skuPendienteMedicion = skuElegible && (medidaSku == null || !medidaSku.estaMedido());
 
             // Datos de embalaje del SKU. Se resuelven una vez por grupo: las líneas son iguales en
-            // todas las etiquetas del grupo. No aplica a CARROS (listan varios productos).
-            // Misma guarda que el bloque MEDIR: los SKU no numéricos son sentinelas del parser
-            // ("SKU INVALIDO: ...") que nunca llegan al Excel de medidas, así que no se les puede
-            // cargar un embalaje y no tiene sentido reclamarlos en cada lote.
+            // todas las etiquetas del grupo.
             String embalajeZpl = "";
-            if (medidas != null && !"CARROS".equals(zone) && sku != null && !sku.isBlank()
-                    && !sku.contains("\n") && sku.matches("\\d+")) {
-                ar.com.leo.etiquetas.model.MedidaSku m = medidas.get(sku);
-                DatosEmbalaje datos = m == null ? DatosEmbalaje.VACIO : m.embalaje();
+            if (skuElegible && embalajeConfigurado) {
+                DatosEmbalaje datos = medidaSku == null ? DatosEmbalaje.VACIO : medidaSku.embalaje();
                 embalajeZpl = EmbalajeRenderer.campoZpl(EmbalajeRenderer.lineas(datos));
                 if (!datos.tieneCajaOBolsa() && embalajesFaltantesOut != null) {
                     embalajesFaltantesOut.add(sku);
@@ -1651,6 +1651,12 @@ public class MainController {
                 boolean necesitaMedir = skuPendienteMedicion && label.quantity() == 1;
                 if (necesitaMedir) {
                     skusPendientesOut.putIfAbsent(sku, group.productDescription() != null ? group.productDescription() : "");
+                }
+                // Las líneas de embalaje ocupan la franja donde ML imprime "Recortá esta parte...",
+                // que no le sirve al operario. Se quita antes de calcular el punto de inserción para
+                // que el índice corresponda al texto que efectivamente se va a partir.
+                if (!embalajeZpl.isEmpty()) {
+                    raw = quitarTextoRecorte(raw, sku);
                 }
                 // Inyectar número de posición (#1, #2, ...) arriba a la izquierda en negrita
                 // Se inserta antes de ^LH (si existe) para que use coordenadas absolutas (top-left del label)
@@ -1671,11 +1677,6 @@ public class MainController {
                     medirPrefix =
                             "^FO200,15^GB580,65,65^FS\n"
                             + "^FO200,22^A0N,50,50^FB580,1,0,C^FR^FD" + medirText + "^FS\n";
-                }
-                // Las líneas de embalaje ocupan la franja donde ML imprime "Recortá esta parte...",
-                // que no le sirve al operario. Se quita para no encimar los dos textos.
-                if (!embalajeZpl.isEmpty()) {
-                    raw = quitarTextoRecorte(raw, sku);
                 }
                 raw = raw.substring(0, insertIdx) + "^LH0,0\n" + posField1 + "\n" + posField2 + "\n" + posField3 + "\n" + embalajeZpl + medirPrefix + raw.substring(insertIdx);
                 labelPosition++;
@@ -1984,6 +1985,17 @@ public class MainController {
         }
         m.appendTail(sb);
         return sb.toString();
+    }
+
+    /**
+     * Si ningún SKU tiene datos de embalaje cargados, la función se trata como no configurada: el
+     * Excel todavía no tiene las columnas o están vacías. Sin esto, un archivo anterior a esta
+     * función haría que el aviso reclamara el lote entero en cada corrida sin que el usuario pueda
+     * hacer nada al respecto.
+     */
+    private boolean hayDatosDeEmbalaje(Map<String, ar.com.leo.etiquetas.model.MedidaSku> medidas) {
+        return medidas != null && medidas.values().stream()
+                .anyMatch(m -> !DatosEmbalaje.VACIO.equals(m.embalaje()));
     }
 
     /**

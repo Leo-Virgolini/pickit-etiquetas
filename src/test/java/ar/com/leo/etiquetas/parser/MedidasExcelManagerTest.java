@@ -215,6 +215,74 @@ class MedidasExcelManagerTest {
         }
     }
 
+    @Test
+    void laHojaDeMedidasSeUbicaPorSuColumnaSku() throws Exception {
+        // El usuario puede tener hojas propias ("Resumen", "Notas") antes de la de medidas.
+        Path excel = crearExcel("hoja-ajena.xlsx", HEADERS_CON_EMBALAJE,
+                new String[]{"1241212", "Producto A"});
+        agregarHojaAjenaAlPrincipio(excel, "Resumen");
+
+        MedidaSku medida = manager.leerMedidas(excel).get("1241212");
+
+        assertNotNull(medida, "debe encontrar la hoja de medidas aunque no sea la primera");
+    }
+
+    @Test
+    void unaMedidaQueMencionaLaCajaNoSeConfundeConLaColumnaDeCaja() throws Exception {
+        // "Ancho caja cm" es un nombre natural: lo que se mide es la caja.
+        String[] headers = {"SKU", "PRODUCTO", "Ancho caja cm", "Alto de la caja", "SUBIDO", "N° Caja"};
+        Path excel = crearExcel("medida-caja.xlsx", headers,
+                new String[]{"1241212", "Producto A", "30", "20", "NO", "3"});
+
+        MedidaSku medida = manager.leerMedidas(excel).get("1241212");
+
+        assertEquals(30.0, medida.anchoCm(), "la medida no debe ir a parar a la columna de caja");
+        assertEquals(20.0, medida.altoCm());
+        assertEquals("3", medida.embalaje().nroCaja());
+    }
+
+    @Test
+    void agregarPendientesUbicaLasColumnasPorHeader() throws Exception {
+        // Columnas de embalaje intercaladas antes de las +20%, como habilita el README.
+        String[] headers = {
+                "SKU", "PRODUCTO", "Ancho\ncm", "Alto\ncm", "Profundidad\ncm",
+                "Peso físico\n(empaque + producto)\nkg",
+                "N° Bolsa", "Nombre Caja", "N° Caja",
+                "Ancho +20%", "Alto +20%", "Profunidad +20%",
+                "Peso físico (empaque + producto) +20%", "SUBIDO", "ERROR"
+        };
+        Path excel = crearExcel("intercaladas.xlsx", headers,
+                new String[]{"", "", "", "", "", "", "5", "GRANDE", "3"});
+
+        manager.agregarPendientes(excel, List.of("999999"));
+
+        // La fila con SKU vacío se reusa: los datos de embalaje que el usuario cargó ahí no se pisan.
+        MedidaSku medida = manager.leerMedidas(excel).get("999999");
+        assertEquals("GRANDE", medida.embalaje().nombreCaja());
+        assertEquals("3", medida.embalaje().nroCaja());
+        assertEquals("5", medida.embalaje().nroBolsa());
+    }
+
+    @Test
+    void agregarPendientesEscribeElNoEnLaColumnaSubido() throws Exception {
+        String[] headers = {
+                "SKU", "PRODUCTO", "Ancho\ncm", "Alto\ncm", "Profundidad\ncm",
+                "Peso físico\n(empaque + producto)\nkg",
+                "N° Bolsa", "Nombre Caja", "N° Caja",
+                "Ancho +20%", "Alto +20%", "Profunidad +20%",
+                "Peso físico (empaque + producto) +20%", "SUBIDO", "ERROR"
+        };
+        Path excel = crearExcel("subido.xlsx", headers, new String[]{"1241212", "Producto A"});
+
+        manager.agregarPendientes(excel, List.of("999999"));
+
+        try (Workbook wb = WorkbookFactory.create(excel.toFile(), null, true)) {
+            Row fila = wb.getSheetAt(0).getRow(2);
+            assertEquals("NO", fila.getCell(13).getStringCellValue(), "el NO va en SUBIDO");
+            assertEquals(CellType.BLANK, fila.getCell(9).getCellType(), "no en Ancho +20%");
+        }
+    }
+
     // -------------------------------------------------------------------------------------------
     // Helpers
     // -------------------------------------------------------------------------------------------
@@ -236,6 +304,17 @@ class MedidasExcelManagerTest {
             }
         }
         return excel;
+    }
+
+    private void agregarHojaAjenaAlPrincipio(Path excel, String nombre) throws Exception {
+        try (Workbook wb = abrirParaEditar(excel)) {
+            Sheet ajena = wb.createSheet(nombre);
+            ajena.createRow(0).createCell(0, CellType.STRING).setCellValue("dato propio");
+            wb.setSheetOrder(nombre, 0);
+            try (FileOutputStream fos = new FileOutputStream(excel.toFile())) {
+                wb.write(fos);
+            }
+        }
     }
 
     private void escribirNumero(Path excel, int fila, int col, double valor) throws Exception {

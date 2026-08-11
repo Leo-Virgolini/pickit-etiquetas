@@ -36,6 +36,18 @@ Van después de `SUBIDO` y **las crea y carga el usuario**:
 Se ubican **por su encabezado**, no por índice: el usuario puede reordenarlas o intercalar columnas
 propias. Si una falta, ese dato no se muestra y el resto sigue funcionando.
 
+Esa resolución es **compartida por la lectura y la escritura** (`resolverColumnas`, que devuelve un
+record `Columnas`). `agregarPendientes` no puede escribir por índice fijo: si el usuario intercaló
+sus columnas entre las de la app, limpiar el rango 2..9 le borraría datos y el `NO` de `SUBIDO`
+caería en una columna de medidas.
+
+Los patrones de medida (`ANCHO`, `ALTO`, `PROFUN`, `PESO`) se evalúan **antes** que los de embalaje:
+un encabezado como `Ancho caja cm` es natural —lo que se mide es la caja— y con los de embalaje
+primero terminaría asignado a la columna de caja, dejando la dimensión sin leer.
+
+**La hoja de medidas se ubica por su columna `SKU`**, no por posición: el usuario puede tener hojas
+propias antes de ella.
+
 Reconocimiento sobre el header normalizado (mayúsculas, espacios colapsados), en este orden —
 el orden importa porque los patrones se solapan:
 
@@ -87,8 +99,14 @@ public static String campoZpl(List<String> lineas)
 | ROLLO cargado, sin cantidad | `ROLLO DIAMANTE` |
 | OBSERVACIONES cargado | `Obs: Colchon + Tapa` |
 
-El orden es siempre ese, y caja y bolsa no coinciden nunca en el mismo SKU, así que el máximo es de
-4 líneas.
+El orden es siempre ese. **Caja y bolsa son excluyentes en el render**: si las dos están cargadas
+—pasa cuando cambia el embalaje y queda el número de bolsa viejo— gana la caja. Sin esa regla
+saldrían cinco líneas y la quinta se imprimiría sobre el separador de la zona de picking y el
+título del producto. Así el máximo es siempre de 4 líneas.
+
+Los valores se colapsan antes de imprimirse (saltos de línea y espacios repetidos): el usuario
+puede haber usado Alt+Enter en OBSERVACIONES, y un LF crudo dentro de un `^FD` pega las palabras
+porque la impresora lo ignora.
 
 `campoZpl` neutraliza `^` y `~` en todos los valores: son prefijos de comando de ZPL y dentro de un
 `^FD` cortarían el campo, haciendo que el resto de la etiqueta se interprete como comandos. El texto
@@ -140,6 +158,10 @@ Desaparece la categoría de "código inexistente": existía solo por el catálog
 
 Si el módulo de medidas está apagado, la ruta está vacía o el archivo no es usable, no se inyecta
 nada y no se avisa nada — la etiqueta sale como antes de esta función.
+
+Lo mismo si **ningún SKU del Excel tiene datos de embalaje**: el archivo todavía no tiene las
+columnas, o están vacías. Sin esa guarda, un Excel anterior a esta función haría que el aviso
+reclamara el lote entero en cada corrida sin que el usuario pueda hacer nada al respecto.
 
 ## Qué se elimina
 

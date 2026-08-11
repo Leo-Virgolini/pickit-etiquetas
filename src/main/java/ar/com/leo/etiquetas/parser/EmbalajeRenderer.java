@@ -27,10 +27,12 @@ public final class EmbalajeRenderer {
         List<String> lineas = new ArrayList<>();
         if (datos == null) return lineas;
 
+        // Caja y bolsa son excluyentes: si están las dos cargadas gana la caja. Puede pasar cuando
+        // cambia el embalaje y queda el número de bolsa viejo; con las dos salen cinco líneas y la
+        // última se imprimiría sobre el separador de la zona de picking.
         String caja = unir(valor(datos.nroCaja()), valor(datos.nombreCaja()));
         if (!caja.isEmpty()) lineas.add("CAJA " + caja);
-
-        if (cargado(datos.nroBolsa())) lineas.add("BOLSA " + valor(datos.nroBolsa()));
+        else if (cargado(datos.nroBolsa())) lineas.add("BOLSA " + valor(datos.nroBolsa()));
 
         if (cargado(datos.pluribol())) {
             String linea = "PLURIBOL: " + valor(datos.pluribol());
@@ -91,7 +93,13 @@ public final class EmbalajeRenderer {
         return valor != null && !valor.isBlank();
     }
 
+    /**
+     * Texto de una celda listo para imprimir: sin saltos de línea ni espacios de más. El usuario
+     * puede haber usado Alt+Enter en el Excel, y un LF crudo dentro de un ^FD pega las palabras
+     * porque la impresora lo ignora.
+     */
     private static String valor(String raw) {
-        return raw == null ? "" : raw.trim();
+        if (raw == null) return "";
+        return raw.replaceAll("\\s+", " ").trim();
     }
 }

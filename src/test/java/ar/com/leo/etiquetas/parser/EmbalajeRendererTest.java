@@ -114,6 +114,26 @@ class EmbalajeRendererTest {
     }
 
     @Test
+    void conCajaYBolsaCargadasGanaLaCaja() {
+        // Puede pasar cuando cambia el embalaje y queda el número de bolsa viejo. Sin esto salen
+        // 5 líneas y la última se imprime sobre el separador y el título del producto.
+        List<String> lineas = EmbalajeRenderer.lineas(
+                datos("5", "GRANDE", "3", "SI", "2", "DIAMANTE", "3", "Colchon"));
+
+        assertEquals(4, lineas.size(), lineas.toString());
+        assertEquals("CAJA 3 - GRANDE", lineas.get(0));
+    }
+
+    @Test
+    void losSaltosDeLineaDelExcelSeColapsan() {
+        // OBSERVACIONES cargado con Alt+Enter: el LF crudo dentro del ^FD pega las palabras.
+        List<String> lineas = EmbalajeRenderer.lineas(
+                datos("", "", "", "", "", "", "", "Colchon\n+ Tapa"));
+
+        assertEquals(List.of("Obs: Colchon + Tapa"), lineas);
+    }
+
+    @Test
     void sinDatosNoHayLineas() {
         assertEquals(List.of(), EmbalajeRenderer.lineas(DatosEmbalaje.VACIO));
     }

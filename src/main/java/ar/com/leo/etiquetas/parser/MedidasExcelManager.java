@@ -74,6 +74,92 @@ public class MedidasExcelManager {
     // cuando el procesamiento de un lote y la subida asincrónica del anterior se solapan.
     private final Object fileLock = new Object();
 
+    /**
+     * Índices de todas las columnas de una hoja, resueltos por encabezado. Se usa tanto para leer
+     * como para escribir: la app no puede asumir posiciones fijas porque el usuario agrega y
+     * reordena columnas propias (las ocho de embalaje son suyas).
+     */
+    private record Columnas(int sku, int producto,
+                            int ancho, int alto, int profundidad, int peso,
+                            int anchoMas, int altoMas, int profundidadMas, int pesoMas,
+                            int subido, int error,
+                            int bolsa, int nombreCaja, int caja,
+                            int pluribol, int cantPluribol,
+                            int rollo, int panos, int observaciones) {
+
+        /** Columnas de medidas que agregarPendientes limpia al reusar una fila. */
+        int[] deMedidas() {
+            return new int[]{ancho, alto, profundidad, peso, anchoMas, altoMas, profundidadMas, pesoMas};
+        }
+
+        boolean tieneAlgunaDeEmbalaje() {
+            return bolsa != -1 || nombreCaja != -1 || caja != -1 || pluribol != -1
+                    || cantPluribol != -1 || rollo != -1 || panos != -1 || observaciones != -1;
+        }
+    }
+
+    /**
+     * Resuelve las columnas por su encabezado normalizado.
+     *
+     * Las de medidas se evalúan antes que las de embalaje: un encabezado como "Ancho caja cm" es
+     * natural —lo que se mide es la caja— y con los patrones de embalaje primero terminaría
+     * asignado a la columna de caja, dejando la dimensión sin leer.
+     */
+    private Columnas resolverColumnas(Sheet sheet) {
+        int sku = -1, producto = -1;
+        int ancho = -1, alto = -1, profundidad = -1, peso = -1;
+        int anchoMas = -1, altoMas = -1, profundidadMas = -1, pesoMas = -1;
+        int subido = -1, error = -1;
+        int bolsa = -1, nombreCaja = -1, caja = -1;
+        int pluribol = -1, cantPluribol = -1;
+        int rollo = -1, panos = -1, observaciones = -1;
+
+        Row header = sheet == null ? null : sheet.getRow(0);
+        if (header == null) {
+            return new Columnas(-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+                    -1, -1, -1, -1, -1, -1, -1, -1);
+        }
+
+        for (int i = 0; i < header.getLastCellNum(); i++) {
+            Cell cell = header.getCell(i);
+            if (cell == null) continue;
+            String h = normalizarHeader(getCellString(cell));
+            boolean mas20 = h.contains("+20");
+
+            if (h.equals("SKU")) sku = i;
+            else if (h.startsWith("PRODUCTO")) producto = i;
+            else if (h.equals("SUBIDO")) subido = i;
+            else if (h.equals("ERROR")) error = i;
+            else if (h.startsWith("ANCHO")) {
+                if (mas20) anchoMas = i; else ancho = i;
+            }
+            else if (h.startsWith("ALTO")) {
+                if (mas20) altoMas = i; else alto = i;
+            }
+            else if (h.startsWith("PROFUN") || h.startsWith("LARGO")) {
+                if (mas20) profundidadMas = i; else profundidad = i;
+            }
+            else if (h.startsWith("PESO")) {
+                if (mas20) pesoMas = i; else peso = i;
+            }
+            // Columnas de embalaje. Los patrones se solapan (CANT PLURIBOL contiene PLURIBOL,
+            // Nombre Caja contiene CAJA), por eso el orden de evaluación importa.
+            else if (h.contains("CANT") && h.contains("PLURIBOL")) cantPluribol = i;
+            else if (h.contains("PLURIBOL")) pluribol = i;
+            else if (h.contains("NOMBRE") && h.contains("CAJA")) nombreCaja = i;
+            else if (h.contains("CAJA")) caja = i;
+            else if (h.contains("BOLSA")) bolsa = i;
+            else if (h.contains("ROLLO")) rollo = i;
+            // El encabezado puede venir con o sin eñe.
+            else if (h.contains("PAÑO") || h.contains("PANO")) panos = i;
+            else if (h.contains("OBSERV")) observaciones = i;
+        }
+
+        return new Columnas(sku, producto, ancho, alto, profundidad, peso,
+                anchoMas, altoMas, profundidadMas, pesoMas, subido, error,
+                bolsa, nombreCaja, caja, pluribol, cantPluribol, rollo, panos, observaciones);
+    }
+
     public Map<String, MedidaSku> leerMedidas(Path excelPath) throws Exception {
         synchronized (fileLock) {
             return leerMedidasInterno(excelPath);
@@ -97,54 +183,8 @@ public class MedidasExcelManager {
         Sheet sheet = hojaMedidas(workbook);
         if (sheet == null) return medidas;
 
-        Row header = sheet.getRow(0);
-        if (header == null) return medidas;
-
-        int skuCol = -1, productoCol = -1;
-        int anchoCol = -1, altoCol = -1, profundidadCol = -1, pesoCol = -1;
-        int anchoMasCol = -1, altoMasCol = -1, profundidadMasCol = -1, pesoMasCol = -1;
-        int subidoCol = -1, errorCol = -1;
-        // Columnas de embalaje: las crea y carga el usuario, así que se ubican por header y en el
-        // orden en que él las haya puesto. Los patrones se solapan (CANT PLURIBOL contiene
-        // PLURIBOL, Nombre Caja contiene CAJA), por eso el orden de evaluación importa.
-        int bolsaCol = -1, nombreCajaCol = -1, cajaCol = -1;
-        int pluribolCol = -1, cantPluribolCol = -1;
-        int rolloCol = -1, panosCol = -1, observacionesCol = -1;
-
-        for (int i = 0; i < header.getLastCellNum(); i++) {
-            Cell cell = header.getCell(i);
-            if (cell == null) continue;
-            String h = normalizarHeader(getCellString(cell));
-            boolean mas20 = h.contains("+20");
-
-            if (h.equals("SKU")) skuCol = i;
-            else if (h.startsWith("PRODUCTO")) productoCol = i;
-            else if (h.equals("SUBIDO")) subidoCol = i;
-            else if (h.equals("ERROR")) errorCol = i;
-            else if (h.contains("CANT") && h.contains("PLURIBOL")) cantPluribolCol = i;
-            else if (h.contains("PLURIBOL")) pluribolCol = i;
-            else if (h.contains("NOMBRE") && h.contains("CAJA")) nombreCajaCol = i;
-            else if (h.contains("CAJA")) cajaCol = i;
-            else if (h.contains("BOLSA")) bolsaCol = i;
-            else if (h.contains("ROLLO")) rolloCol = i;
-            // El encabezado puede venir con o sin eñe.
-            else if (h.contains("PAÑO") || h.contains("PANO")) panosCol = i;
-            else if (h.contains("OBSERV")) observacionesCol = i;
-            else if (h.startsWith("ANCHO")) {
-                if (mas20) anchoMasCol = i; else anchoCol = i;
-            }
-            else if (h.startsWith("ALTO")) {
-                if (mas20) altoMasCol = i; else altoCol = i;
-            }
-            else if (h.startsWith("PROFUN") || h.startsWith("LARGO")) {
-                if (mas20) profundidadMasCol = i; else profundidadCol = i;
-            }
-            else if (h.startsWith("PESO")) {
-                if (mas20) pesoMasCol = i; else pesoCol = i;
-            }
-        }
-
-        if (skuCol == -1) {
+        Columnas cols = resolverColumnas(sheet);
+        if (cols.sku() == -1) {
             throw new IllegalArgumentException(
                     "El Excel de medidas no tiene columna 'SKU'. Revise el archivo.");
         }
@@ -153,38 +193,35 @@ public class MedidasExcelManager {
             Row row = sheet.getRow(r);
             if (row == null) continue;
 
-            Cell skuCell = row.getCell(skuCol);
+            Cell skuCell = row.getCell(cols.sku());
             if (skuCell == null) continue;
             String sku = getCellString(skuCell).trim();
             if (sku.isEmpty()) continue;
 
-            String producto = productoCol != -1 ? getCellString(row.getCell(productoCol)).trim() : "";
-            Double ancho = anchoCol != -1 ? getCellDouble(row.getCell(anchoCol)) : null;
-            Double alto = altoCol != -1 ? getCellDouble(row.getCell(altoCol)) : null;
-            Double profundidad = profundidadCol != -1 ? getCellDouble(row.getCell(profundidadCol)) : null;
-            Double peso = pesoCol != -1 ? getCellDouble(row.getCell(pesoCol)) : null;
-            Double anchoMas = anchoMasCol != -1 ? getCellDouble(row.getCell(anchoMasCol)) : null;
-            Double altoMas = altoMasCol != -1 ? getCellDouble(row.getCell(altoMasCol)) : null;
-            Double profundidadMas = profundidadMasCol != -1 ? getCellDouble(row.getCell(profundidadMasCol)) : null;
-            Double pesoMas = pesoMasCol != -1 ? getCellDouble(row.getCell(pesoMasCol)) : null;
-            boolean subido = subidoCol != -1 && esSubido(getCellString(row.getCell(subidoCol)));
-            String error = errorCol != -1 ? getCellString(row.getCell(errorCol)).trim() : "";
-
             DatosEmbalaje embalaje = new DatosEmbalaje(
-                    celda(row, bolsaCol),
-                    celda(row, nombreCajaCol),
-                    celda(row, cajaCol),
-                    celda(row, pluribolCol),
-                    celda(row, cantPluribolCol),
-                    celda(row, rolloCol),
-                    celda(row, panosCol),
-                    celda(row, observacionesCol));
+                    celda(row, cols.bolsa()),
+                    celda(row, cols.nombreCaja()),
+                    celda(row, cols.caja()),
+                    celda(row, cols.pluribol()),
+                    celda(row, cols.cantPluribol()),
+                    celda(row, cols.rollo()),
+                    celda(row, cols.panos()),
+                    celda(row, cols.observaciones()));
             if (embalaje.equals(DatosEmbalaje.VACIO)) embalaje = DatosEmbalaje.VACIO;
 
-            medidas.put(sku, new MedidaSku(sku, producto,
-                    ancho, alto, profundidad, peso,
-                    anchoMas, altoMas, profundidadMas, pesoMas,
-                    subido, error, embalaje));
+            medidas.put(sku, new MedidaSku(sku,
+                    celda(row, cols.producto()),
+                    numero(row, cols.ancho()),
+                    numero(row, cols.alto()),
+                    numero(row, cols.profundidad()),
+                    numero(row, cols.peso()),
+                    numero(row, cols.anchoMas()),
+                    numero(row, cols.altoMas()),
+                    numero(row, cols.profundidadMas()),
+                    numero(row, cols.pesoMas()),
+                    cols.subido() != -1 && esSubido(getCellString(row.getCell(cols.subido()))),
+                    celda(row, cols.error()),
+                    embalaje));
         }
         return medidas;
     }
@@ -216,6 +253,11 @@ public class MedidasExcelManager {
 
                 asegurarHeaders(workbook, sheet);
                 int colError = asegurarColumnaError(workbook, sheet);
+                // Todo se escribe por índice resuelto, no por posición fija: el usuario puede
+                // haber intercalado sus columnas de embalaje entre las de la app.
+                Columnas cols = resolverColumnas(sheet);
+                int colSku = cols.sku() == -1 ? COL_SKU : cols.sku();
+                int colSubido = cols.subido() == -1 ? COL_SUBIDO : cols.subido();
 
                 CellStyle skuPendienteStyle = crearEstiloPendiente(workbook);
                 CellStyle celdaFaltanteStyle = crearEstiloCeldaFaltante(workbook);
@@ -228,7 +270,7 @@ public class MedidasExcelManager {
                 for (int r = 1; r <= lastRowNum; r++) {
                     Row row = sheet.getRow(r);
                     if (row == null) continue;
-                    Cell skuCell = row.getCell(COL_SKU);
+                    Cell skuCell = row.getCell(colSku);
                     if (skuCell == null || getCellString(skuCell).trim().isEmpty()) {
                         slots.offer(r);
                     }
@@ -245,8 +287,8 @@ public class MedidasExcelManager {
                         row = sheet.createRow(nextAppendRow++);
                     }
 
-                    Cell skuCell = row.getCell(COL_SKU);
-                    if (skuCell == null) skuCell = row.createCell(COL_SKU, CellType.STRING);
+                    Cell skuCell = row.getCell(colSku);
+                    if (skuCell == null) skuCell = row.createCell(colSku, CellType.STRING);
                     skuCell.setCellValue(sku);
                     skuCell.setCellStyle(skuPendienteStyle);
 
@@ -254,7 +296,10 @@ public class MedidasExcelManager {
                     // Al escribir el SKU arriba, la fórmula se recalcula sola al abrir el Excel.
 
                     // Celdas de medidas: solo resetear si no tienen fórmula ni valor cargado.
-                    for (int c = COL_ANCHO; c <= COL_PESO_MAS; c++) {
+                    // Se recorren las columnas resueltas y no un rango de índices: entre medio
+                    // pueden estar las columnas de embalaje, que son del usuario y no se tocan.
+                    for (int c : cols.deMedidas()) {
+                        if (c == -1) continue;
                         Cell cell = row.getCell(c);
                         if (cell != null && cell.getCellType() == CellType.FORMULA) continue;
                         if (cell == null) cell = row.createCell(c, CellType.BLANK);
@@ -262,8 +307,8 @@ public class MedidasExcelManager {
                         cell.setCellStyle(celdaFaltanteStyle);
                     }
 
-                    Cell subidoCell = row.getCell(COL_SUBIDO);
-                    if (subidoCell == null) subidoCell = row.createCell(COL_SUBIDO, CellType.STRING);
+                    Cell subidoCell = row.getCell(colSubido);
+                    if (subidoCell == null) subidoCell = row.createCell(colSubido, CellType.STRING);
                     subidoCell.setCellValue("NO");
                     subidoCell.setCellStyle(subidoNoStyle);
 
@@ -490,8 +535,17 @@ public class MedidasExcelManager {
         return destino;
     }
 
-    /** Hoja de SKUs: la primera del workbook. La app ya no crea hojas propias. */
+    /**
+     * Hoja de SKUs: la que tenga un encabezado SKU. Se busca así y no por posición porque el
+     * usuario puede tener hojas propias ("Resumen", "Notas") antes de la de medidas. Si ninguna
+     * califica se cae a la primera, para que el error de "falta la columna SKU" siga saliendo con
+     * un mensaje entendible en vez de devolver vacío en silencio.
+     */
     private Sheet hojaMedidas(Workbook workbook) {
+        for (int i = 0; i < workbook.getNumberOfSheets(); i++) {
+            Sheet sheet = workbook.getSheetAt(i);
+            if (sheet != null && resolverColumnas(sheet).sku() != -1) return sheet;
+        }
         return workbook.getNumberOfSheets() == 0 ? null : workbook.getSheetAt(0);
     }
 
@@ -589,6 +643,11 @@ public class MedidasExcelManager {
     /** Valor de una celda de la fila, o cadena vacía si la columna no existe en este archivo. */
     private static String celda(Row row, int col) {
         return col == -1 ? "" : getCellString(row.getCell(col)).trim();
+    }
+
+    /** Valor numérico de una celda, o null si la columna no existe o no tiene número. */
+    private static Double numero(Row row, int col) {
+        return col == -1 ? null : getCellDouble(row.getCell(col));
     }
 
     private static boolean esSubido(String raw) {
