@@ -26,6 +26,15 @@ public enum EstadoDato {
         return texto;
     }
 
+    /**
+     * Los handlers de copia de la tabla serializan cada celda con toString(): sin esto, copiar una
+     * fila pegaría el nombre de la constante ("NO_APLICA") en vez de lo que el usuario ve.
+     */
+    @Override
+    public String toString() {
+        return texto;
+    }
+
     /** Las cuatro columnas base cm/kg cargadas. Un SKU que no figura en el Excel cuenta como NO. */
     public static EstadoDato medidasDe(MedidaSku medida) {
         return medida != null && medida.estaMedido() ? SI : NO;

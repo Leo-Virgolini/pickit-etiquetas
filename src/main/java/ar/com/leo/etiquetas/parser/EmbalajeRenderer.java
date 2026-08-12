@@ -25,6 +25,11 @@ public final class EmbalajeRenderer {
     private static final int ALTO_LINEA = 24;
     private static final int FUENTE = 22;
     private static final int ANCHO = 380;
+    /**
+     * Caracteres que entran en una línea. Con la fuente 0 de ZPL, proporcional, un carácter ocupa
+     * poco más de la mitad del alto nominal: 380 / (22 · 0,55) ≈ 31, redondeado para abajo.
+     */
+    private static final int MAX_CARACTERES = 36;
 
     /** Reemplaza a la línea de caja o bolsa cuando el SKU no tiene ninguna de las dos cargada. */
     private static final String SIN_ESTANDARIZAR = "NO ESTANDARIZADO";
@@ -77,11 +82,14 @@ public final class EmbalajeRenderer {
             // descarta el sobrante, lo reimprime encima de la misma y queda ilegible.
             boolean ultima = i == lineas.size() - 1;
             int maxLineas = ultima ? Math.max(1, MAX_LINEAS - i) : 1;
+            // Las líneas que no son la última no pueden crecer sin correr las de abajo, así que se
+            // cortan: el nombre de caja también es texto libre y puede no entrar en una línea.
+            String texto = ultima ? lineas.get(i) : truncar(lineas.get(i));
 
             zpl.append("^FO").append(X).append(',').append(y)
                     .append("^A0N,").append(FUENTE).append(',').append(FUENTE)
                     .append("^FB").append(ANCHO).append(',').append(maxLineas).append(",0,L")
-                    .append("^FD").append(sanitizar(lineas.get(i))).append("^FS\n");
+                    .append("^FD").append(sanitizar(texto)).append("^FS\n");
             y += ALTO_LINEA;
         }
         return zpl.toString();
@@ -94,6 +102,11 @@ public final class EmbalajeRenderer {
      */
     private static String sanitizar(String texto) {
         return texto.replace('^', ' ').replace('~', ' ');
+    }
+
+    private static String truncar(String texto) {
+        if (texto.length() <= MAX_CARACTERES) return texto;
+        return texto.substring(0, MAX_CARACTERES - 1) + "…";
     }
 
     /** Une número y nombre con " - ", omitiendo el separador si falta alguno. */

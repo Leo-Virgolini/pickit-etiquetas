@@ -55,7 +55,6 @@ Genera un Excel de picking para el deposito con todos los pedidos pendientes de 
 - **Expansion de combos**: los SKU compuestos se expanden automaticamente en sus componentes con cantidades multiplicadas.
 - **Consulta de stock**: busca descripcion, proveedor, sector y stock actual en DUX ERP.
 - **Excel generado** (`Pickits y Carros/PICKIT_*.xlsx`) con 3 hojas:
-  - **Tabla de etiquetas**: ademas de #, Orden, Zona, SKU, Producto, Detalles y Cantidad, muestra dos columnas **Medidas** y **Embalaje** con el estado de cada SKU en el Excel de medidas: `✓ SI`, `✘ NO` (fondo rosa) o `—` cuando no aplica (carros y SKU no numericos, o modulo de medidas apagado). Medidas mira las 4 columnas base cm/kg; Embalaje mira que tenga caja o bolsa.
   - **PICKIT**: lista ordenada por sector con columnas SKU, CANT, DESCRIPCION, PROVEEDOR, SECTOR, STOCK. Resaltado: coral=SKU invalido, amarillo=datos faltantes, bold=cantidad>1, naranja=stock insuficiente.
   - **CARROS**: ordenes con 3+ SKUs distintos agrupadas con letra (A, B, C...) para identificar carros fisicos.
   - **SLA**: listado de ordenes ML con fecha/hora de despacho esperado.
@@ -102,7 +101,8 @@ Dos sub-pestañas para obtener etiquetas ZPL, procesarlas y enviarlas a la impre
      | `OBSERVACIONES` | `OBS: Colchon + Tapa` |
 
      Caja y bolsa no se combinan. La linea de observaciones se queda con el alto libre que sobra, asi que un texto largo sigue en las lineas de abajo en vez de imprimirse encima de si mismo. El banner MEDIR se ubica debajo del numero de etiqueta, a la izquierda, para dejarle ese espacio. Para hacerles lugar se elimina el texto de ML "Recorta esta parte de la etiqueta...", que ocupa esa franja. Si ML cambiara ese texto y no se encontrara, queda una advertencia en el log y los textos se encimarian.
-  4. **Mensaje de pendientes al finalizar**: al terminar la descarga se abre un dialogo scrollable con la cantidad de SKUs sin medidas detectados en el lote, cuantos se agregaron efectivamente al Excel y cuantos ya figuraban, ademas del listado de SKUs. Se suman ahi los SKU **sin caja ni bolsa** cargada (el rollo y las observaciones no cuentan).
+  4. **Columnas Medidas y Embalaje en la tabla**: la tabla de etiquetas descargadas muestra, ademas de #, Orden, Zona, SKU, Producto, Detalles y Cantidad, el estado de cada SKU en el Excel de medidas: `✓ SI`, `✘ NO` (fondo rosa palido) o `—` cuando no aplica (carros y SKU no numericos, o modulo de medidas apagado). Medidas mira las 4 columnas base cm/kg; Embalaje mira que el SKU tenga caja o bolsa. Permite ver el estado del lote sin depender del dialogo final.
+  5. **Mensaje de pendientes al finalizar**: al terminar la descarga se abre un dialogo scrollable con la cantidad de SKUs sin medidas detectados en el lote, cuantos se agregaron efectivamente al Excel y cuantos ya figuraban, ademas del listado de SKUs. Se suman ahi los SKU **sin caja ni bolsa** cargada (el rollo y las observaciones no cuentan).
   - Durante la descarga **no** se sube nada a ML: el flujo de descarga solo marca y escribe en el Excel.
 
 - **Subida manual a ML** (boton "⬆ Subir Medidas" al lado del selector del Excel de medidas): la subida a ML es una accion independiente, disparada a demanda. Requisitos para que el boton este habilitado: checkbox activo + archivo existente. El handler valida ademas que la sesion ML este inicializada.

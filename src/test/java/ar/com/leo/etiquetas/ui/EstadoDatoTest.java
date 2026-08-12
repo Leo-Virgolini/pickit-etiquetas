@@ -32,6 +32,14 @@ class EstadoDatoTest {
     // -------------------------------------------------------------------------------------------
 
     @Test
+    void alCopiarUnaCeldaSePegaElTextoVisible() {
+        // Los handlers de copia de la tabla serializan con toString(): sin esto se pegaría
+        // "NO_APLICA" en vez de lo que el usuario ve.
+        assertEquals("✓ SI", EstadoDato.SI.toString());
+        assertEquals("—", EstadoDato.NO_APLICA.toString());
+    }
+
+    @Test
     void cadaEstadoTieneSuTexto() {
         assertEquals("✓ SI", EstadoDato.SI.texto());
         assertEquals("✘ NO", EstadoDato.NO.texto());

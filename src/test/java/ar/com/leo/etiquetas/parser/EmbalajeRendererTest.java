@@ -175,6 +175,24 @@ class EmbalajeRendererTest {
     }
 
     @Test
+    void unaLineaQueNoEsLaUltimaSeTruncaEnVezDeSuperponerse() {
+        // El nombre de caja es texto libre del usuario. Con ^FB de una línea, el sobrante se
+        // reimprime encima; como esta línea no puede crecer sin correr las de abajo, se corta.
+        String largo = "CAJA: 3 - CAJA REFORZADA DOBLE CORRUGADO 60x40x40";
+        String zpl = EmbalajeRenderer.campoZpl(List.of(largo, "OBS: algo"));
+
+        assertTrue(zpl.contains("^FDCAJA: 3 - CAJA REFORZADA DOBLE CORR…^FS"), zpl);
+    }
+
+    @Test
+    void laUltimaLineaNoSeTruncaPorqueTieneAltoDeSobra() {
+        String largo = "OBS: " + "x".repeat(200);
+        String zpl = EmbalajeRenderer.campoZpl(List.of("CAJA: 3", largo));
+
+        assertTrue(zpl.contains(largo), "la última línea se muestra entera, repartida en varias");
+    }
+
+    @Test
     void sinLineasNoHayCampo() {
         assertEquals("", EmbalajeRenderer.campoZpl(List.of()));
     }

@@ -116,15 +116,18 @@ Bloque de hasta 3 líneas en el margen superior derecho, dentro del mismo bloque
 inyecta al inicio de cada etiqueta:
 
 ```
-^FO410,83^A0N,22,22^FB380,1,0,L^FDCAJA: 3 - GRANDE^FS
-^FO410,131^A0N,22,22^FB380,1,0,L^FDROLLO: DIAMANTE - 3 paños^FS
-^FO410,155^A0N,22,22^FB380,1,0,L^FDOBS: Colchon + Tapa^FS
+^FO410,20^A0N,22,22^FB380,1,0,L^FDCAJA: 3 - GRANDE^FS
+^FO410,44^A0N,22,22^FB380,1,0,L^FDROLLO: DIAMANTE - 3 paños^FS
+^FO410,68^A0N,22,22^FB380,4,0,L^FDOBS: Colchon + Tapa^FS
 ```
 
 `x=410`, primera línea en `y=20`, paso de 24px, fuente 22. Entran hasta 6 líneas: la última llega a
 y≈162, justo antes del separador de la zona de picking (y=180).
 
-**La última línea recibe todo el alto libre que sobra** (`MAX_LINEAS - índice`), porque es la de
+Las líneas que no son la última se **truncan** con `…` a 36 caracteres: no pueden crecer sin correr
+las de abajo, y el nombre de caja también es texto libre del usuario.
+
+**La última línea recibe todo el alto libre que sobra**", (`MAX_LINEAS - índice`), porque es la de
 observaciones, el único texto que puede no entrar en una línea: con `^FB` de una sola línea ZPL no
 descarta el sobrante, lo reimprime encima de la misma y queda ilegible.
 

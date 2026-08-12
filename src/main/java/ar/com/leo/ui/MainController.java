@@ -1637,8 +1637,7 @@ public class MainController {
             // llegan al Excel de medidas, así que no se les puede cargar ni medida ni embalaje.
             // La condición es una sola para los dos usos: si divergen, una etiqueta podría salir
             // con banner MEDIR pero sin líneas de embalaje, o al revés.
-            boolean skuElegible = medidas != null && !"CARROS".equals(zone)
-                    && sku != null && !sku.isBlank() && !sku.contains("\n") && sku.matches("\\d+");
+            boolean skuElegible = medidas != null && EstadoDato.esSkuElegible(zone, sku);
             ar.com.leo.etiquetas.model.MedidaSku medidaSku = skuElegible ? medidas.get(sku) : null;
 
             boolean skuPendienteMedicion = skuElegible && (medidaSku == null || !medidaSku.estaMedido());

@@ -168,9 +168,10 @@ public class MedidasExcelManager {
         Sheet sheet = hojaMedidas(workbook);
         if (sheet == null) return medidas;
 
-        // Una hoja sin encabezados es un archivo recién creado: se devuelve vacío para que
-        // agregarPendientes lo inicialice, en vez de dejar el módulo mudo con una excepción.
-        if (sheet.getRow(0) == null) return medidas;
+        // Una hoja sin ninguna fila es un archivo recién creado: se devuelve vacío para que
+        // agregarPendientes lo inicialice. Si tiene filas pero no encabezados, en cambio, es un
+        // archivo equivocado y el error tiene que llegarle al usuario.
+        if (sheet.getPhysicalNumberOfRows() == 0) return medidas;
 
         Columnas cols = resolverColumnas(sheet);
         if (cols.sku() == -1) {
@@ -242,8 +243,8 @@ public class MedidasExcelManager {
                 // Todo se escribe por índice resuelto, no por posición fija: el usuario puede
                 // haber intercalado sus columnas entre las de la app. Las columnas que la app
                 // administra se crean si faltan, así nunca hay que caer a un índice adivinado.
-                int colSubido = asegurarColumna(workbook, sheet, "SUBIDO", COL_SUBIDO);
-                int colError = asegurarColumna(workbook, sheet, "ERROR", COL_ERROR);
+                int colSubido = asegurarColumna(workbook, sheet, "SUBIDO");
+                int colError = asegurarColumna(workbook, sheet, "ERROR");
                 Columnas cols = resolverColumnas(sheet);
                 int colSku = cols.sku();
 
@@ -339,11 +340,15 @@ public class MedidasExcelManager {
                 Sheet sheet = hojaMedidas(workbook);
                 if (sheet == null) return 0;
 
-                int errorCol = asegurarColumna(workbook, sheet, "ERROR", COL_ERROR);
+                // SUBIDO y ERROR se aseguran igual que en agregarPendientes: si el archivo no las
+                // tiene, esta subida no tendría dónde dejar el resultado y se perdería en silencio.
+                // Se hace después de comprobar el SKU para no tocar el archivo si no es el correcto.
+                if (resolverColumnas(sheet).sku() == -1) return 0;
+                asegurarColumna(workbook, sheet, "SUBIDO");
+                int errorCol = asegurarColumna(workbook, sheet, "ERROR");
 
                 Columnas cols = resolverColumnas(sheet);
                 int skuCol = cols.sku(), subidoCol = cols.subido();
-                if (skuCol == -1 || subidoCol == -1) return 0;
 
                 CellStyle subidoSiStyle = crearEstiloSubidoSi(workbook);
                 CellStyle errorStyle = crearEstiloError(workbook);
@@ -501,18 +506,18 @@ public class MedidasExcelManager {
     /**
      * Índice de una columna que la app administra, creándola al final si el archivo no la tiene.
      *
-     * Se agrega al final de lo que haya y no en su posición nominal: el usuario puede tener sus
-     * propias columnas ahí, y no hay forma de escribir en una posición fija sin arriesgarse a
-     * pisarlas. Es preferible una columna al final que un dato del usuario destruido.
+     * Siempre al final de lo que haya: en una posición fija se arriesga a pisar una columna del
+     * usuario, y saltando hasta la posición nominal quedarían columnas en blanco sin encabezado en
+     * el medio. La posición nominal solo aplica a un archivo nuevo, que nace con todos los headers.
      */
-    private int asegurarColumna(Workbook workbook, Sheet sheet, String nombre, int posicionNominal) {
+    private int asegurarColumna(Workbook workbook, Sheet sheet, String nombre) {
         int existente = buscarColumna(sheet, nombre);
         if (existente != -1) return existente;
 
         Row header = sheet.getRow(0);
         if (header == null) header = sheet.createRow(0);
 
-        int destino = Math.max(posicionNominal, Math.max(0, header.getLastCellNum()));
+        int destino = Math.max(0, header.getLastCellNum());
         Cell headerCell = header.getCell(destino);
         if (headerCell == null) headerCell = header.createCell(destino, CellType.STRING);
         headerCell.setCellValue(nombre);
@@ -531,12 +536,19 @@ public class MedidasExcelManager {
      * un mensaje entendible en vez de devolver vacío en silencio.
      */
     private Sheet hojaMedidas(Workbook workbook) {
+        Sheet soloConSku = null;
         for (int i = 0; i < workbook.getNumberOfSheets(); i++) {
             Sheet sheet = workbook.getSheetAt(i);
             if (sheet == null) continue;
             Columnas cols = resolverColumnas(sheet);
-            if (cols.sku() != -1 && cols.esDeLaApp()) return sheet;
+            if (cols.sku() == -1) continue;
+            if (cols.esDeLaApp()) return sheet;
+            if (soloConSku == null) soloConSku = sheet;
         }
+        // Sin ninguna que tenga columnas de la app, la que tenga SKU es la mejor candidata: puede
+        // ser una hoja de medidas todavía incompleta. Recién si no hay ninguna se cae a la primera,
+        // para que el error de "falta la columna SKU" salga con un mensaje entendible.
+        if (soloConSku != null) return soloConSku;
         return workbook.getNumberOfSheets() == 0 ? null : workbook.getSheetAt(0);
     }
 

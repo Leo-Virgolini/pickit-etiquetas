@@ -22,6 +22,7 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class MedidasExcelManagerTest {
 
@@ -361,6 +362,65 @@ class MedidasExcelManagerTest {
         assertEquals("N° Bolsa", leerHeader(excel, 10), "no se pisa la columna de embalaje");
         assertEquals("5", manager.leerMedidas(excel).get("1241212").embalaje().nroBolsa());
         assertEquals("SUBIDO", leerHeader(excel, 13));
+    }
+
+    @Test
+    void unaHojaConFilasPeroSinEncabezadosSigueSiendoUnError() throws Exception {
+        // Distinto de un archivo recién creado: acá hay datos, así que el usuario eligió el Excel
+        // equivocado y tiene que enterarse en vez de que la app escriba encima.
+        Path excel = tempDir.resolve("sin-headers.xlsx");
+        try (XSSFWorkbook wb = new XSSFWorkbook()) {
+            Sheet sheet = wb.createSheet("MEDIDAS");
+            sheet.createRow(1).createCell(0, CellType.STRING).setCellValue("un dato");
+            try (FileOutputStream fos = new FileOutputStream(excel.toFile())) {
+                wb.write(fos);
+            }
+        }
+
+        assertThrows(IllegalArgumentException.class, () -> manager.leerMedidas(excel));
+    }
+
+    @Test
+    void prefiereLaHojaConSkuAntesQueLaPrimeraCuandoNingunaTieneColumnasDeLaApp() throws Exception {
+        // La hoja de medidas del usuario todavía no tiene SUBIDO ni dimensiones, solo SKU y sus
+        // columnas de embalaje. Aun así hay que preferirla sobre una hoja sin SKU.
+        Path excel = tempDir.resolve("sin-columnas-app.xlsx");
+        try (XSSFWorkbook wb = new XSSFWorkbook()) {
+            Sheet portada = wb.createSheet("Instructivo");
+            portada.createRow(0).createCell(0, CellType.STRING).setCellValue("Como usar");
+
+            Sheet medidas = wb.createSheet("MEDIDAS");
+            Row header = medidas.createRow(0);
+            String[] headers = {"SKU", "PRODUCTO", "N° Caja"};
+            for (int i = 0; i < headers.length; i++) {
+                header.createCell(i, CellType.STRING).setCellValue(headers[i]);
+            }
+            Row fila = medidas.createRow(1);
+            fila.createCell(0, CellType.STRING).setCellValue("1241212");
+            fila.createCell(2, CellType.STRING).setCellValue("3");
+
+            try (FileOutputStream fos = new FileOutputStream(excel.toFile())) {
+                wb.write(fos);
+            }
+        }
+
+        assertEquals("3", manager.leerMedidas(excel).get("1241212").embalaje().nroCaja());
+    }
+
+    @Test
+    void laColumnaErrorSeCreaPegadaALaUltimaEnUnArchivoViejo() throws Exception {
+        // Excel anterior a las columnas de embalaje: 11 columnas y sin ERROR.
+        String[] headers = {
+                "SKU", "PRODUCTO", "Ancho cm", "Alto cm", "Profundidad cm",
+                "Peso fisico kg",
+                "Ancho +20%", "Alto +20%", "Profunidad +20%",
+                "Peso fisico +20%", "SUBIDO"
+        };
+        Path excel = crearExcel("legacy.xlsx", headers, new String[]{"1241212", "Producto A"});
+
+        manager.agregarPendientes(excel, List.of("999999"));
+
+        assertEquals("ERROR", leerHeader(excel, 11), "sin dejar columnas en blanco en el medio");
     }
 
     // -------------------------------------------------------------------------------------------
