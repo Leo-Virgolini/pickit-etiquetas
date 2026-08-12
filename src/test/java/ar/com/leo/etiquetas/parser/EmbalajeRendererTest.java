@@ -11,10 +11,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class EmbalajeRendererTest {
 
     private static DatosEmbalaje datos(String nroBolsa, String nombreCaja, String nroCaja,
-                                       String pluribol, String cantPluribol,
                                        String rollo, String cantPanos, String observaciones) {
-        return new DatosEmbalaje(nroBolsa, nombreCaja, nroCaja, pluribol, cantPluribol,
-                rollo, cantPanos, observaciones);
+        return new DatosEmbalaje(nroBolsa, nombreCaja, nroCaja, rollo, cantPanos, observaciones);
     }
 
     // -------------------------------------------------------------------------------------------
@@ -24,7 +22,7 @@ class EmbalajeRendererTest {
     @Test
     void cajaConNumeroYNombre() {
         List<String> lineas = EmbalajeRenderer.lineas(
-                datos("", "GRANDE", "3", "", "", "", "", ""));
+                datos("", "GRANDE", "3", "", "", ""));
 
         assertEquals(List.of("CAJA: 3 - GRANDE"), lineas);
     }
@@ -32,7 +30,7 @@ class EmbalajeRendererTest {
     @Test
     void cajaSoloConNumero() {
         List<String> lineas = EmbalajeRenderer.lineas(
-                datos("", "", "3", "", "", "", "", ""));
+                datos("", "", "3", "", "", ""));
 
         assertEquals(List.of("CAJA: 3"), lineas);
     }
@@ -40,7 +38,7 @@ class EmbalajeRendererTest {
     @Test
     void cajaSoloConNombre() {
         List<String> lineas = EmbalajeRenderer.lineas(
-                datos("", "GRANDE", "", "", "", "", "", ""));
+                datos("", "GRANDE", "", "", "", ""));
 
         assertEquals(List.of("CAJA: GRANDE"), lineas);
     }
@@ -48,7 +46,7 @@ class EmbalajeRendererTest {
     @Test
     void bolsaConNumero() {
         List<String> lineas = EmbalajeRenderer.lineas(
-                datos("5", "", "", "", "", "", "", ""));
+                datos("5", "", "", "", "", ""));
 
         assertEquals(List.of("BOLSA: 5"), lineas);
     }
@@ -58,25 +56,9 @@ class EmbalajeRendererTest {
     // -------------------------------------------------------------------------------------------
 
     @Test
-    void pluribolConVueltas() {
-        List<String> lineas = EmbalajeRenderer.lineas(
-                datos("", "", "", "SI", "2", "", "", ""));
-
-        assertEquals(List.of("NO ESTANDARIZADO", "PLURIBOL: SI - 2 vueltas"), lineas);
-    }
-
-    @Test
-    void pluribolSinVueltas() {
-        List<String> lineas = EmbalajeRenderer.lineas(
-                datos("", "", "", "SI", "", "", "", ""));
-
-        assertEquals(List.of("NO ESTANDARIZADO", "PLURIBOL: SI"), lineas);
-    }
-
-    @Test
     void rolloConPanos() {
         List<String> lineas = EmbalajeRenderer.lineas(
-                datos("", "", "", "", "", "DIAMANTE", "3", ""));
+                datos("", "", "", "DIAMANTE", "3", ""));
 
         assertEquals(List.of("NO ESTANDARIZADO", "ROLLO: DIAMANTE - 3 paños"), lineas);
     }
@@ -84,7 +66,7 @@ class EmbalajeRendererTest {
     @Test
     void rolloSinPanos() {
         List<String> lineas = EmbalajeRenderer.lineas(
-                datos("", "", "", "", "", "CUADRADO", "", ""));
+                datos("", "", "", "CUADRADO", "", ""));
 
         assertEquals(List.of("NO ESTANDARIZADO", "ROLLO: CUADRADO"), lineas);
     }
@@ -92,7 +74,7 @@ class EmbalajeRendererTest {
     @Test
     void observaciones() {
         List<String> lineas = EmbalajeRenderer.lineas(
-                datos("", "", "", "", "", "", "", "Colchon + Tapa"));
+                datos("", "", "", "", "", "Colchon + Tapa"));
 
         assertEquals(List.of("NO ESTANDARIZADO", "OBS: Colchon + Tapa"), lineas);
     }
@@ -104,11 +86,10 @@ class EmbalajeRendererTest {
     @Test
     void elOrdenEsCajaPluribolRolloObservaciones() {
         List<String> lineas = EmbalajeRenderer.lineas(
-                datos("", "GRANDE", "3", "SI", "2", "DIAMANTE", "3", "Colchon + Tapa"));
+                datos("", "GRANDE", "3", "DIAMANTE", "3", "Colchon + Tapa"));
 
         assertEquals(List.of(
                 "CAJA: 3 - GRANDE",
-                "PLURIBOL: SI - 2 vueltas",
                 "ROLLO: DIAMANTE - 3 paños",
                 "OBS: Colchon + Tapa"), lineas);
     }
@@ -118,9 +99,9 @@ class EmbalajeRendererTest {
         // Puede pasar cuando cambia el embalaje y queda el número de bolsa viejo. Sin esto salen
         // 5 líneas y la última se imprime sobre el separador y el título del producto.
         List<String> lineas = EmbalajeRenderer.lineas(
-                datos("5", "GRANDE", "3", "SI", "2", "DIAMANTE", "3", "Colchon"));
+                datos("5", "GRANDE", "3", "DIAMANTE", "3", "Colchon"));
 
-        assertEquals(4, lineas.size(), lineas.toString());
+        assertEquals(3, lineas.size(), lineas.toString());
         assertEquals("CAJA: 3 - GRANDE", lineas.get(0));
     }
 
@@ -128,7 +109,7 @@ class EmbalajeRendererTest {
     void losSaltosDeLineaDelExcelSeColapsan() {
         // OBSERVACIONES cargado con Alt+Enter: el LF crudo dentro del ^FD pega las palabras.
         List<String> lineas = EmbalajeRenderer.lineas(
-                datos("", "", "", "", "", "", "", "Colchon\n+ Tapa"));
+                datos("", "", "", "", "", "Colchon\n+ Tapa"));
 
         assertEquals(List.of("NO ESTANDARIZADO", "OBS: Colchon + Tapa"), lineas);
     }
@@ -141,11 +122,10 @@ class EmbalajeRendererTest {
     @Test
     void sinCajaNiBolsaLosAgregadosSeSiguenMostrando() {
         List<String> lineas = EmbalajeRenderer.lineas(
-                datos("", "", "", "SI", "2", "DIAMANTE", "3", "Colchon"));
+                datos("", "", "", "DIAMANTE", "3", "Colchon"));
 
         assertEquals(List.of(
                 "NO ESTANDARIZADO",
-                "PLURIBOL: SI - 2 vueltas",
                 "ROLLO: DIAMANTE - 3 paños",
                 "OBS: Colchon"), lineas);
     }
@@ -153,7 +133,7 @@ class EmbalajeRendererTest {
     @Test
     void losEspaciosSobrantesNoCuentanComoDato() {
         assertEquals(List.of("NO ESTANDARIZADO"), EmbalajeRenderer.lineas(
-                datos("  ", "  ", "  ", "  ", "  ", "  ", "  ", "  ")));
+                datos("  ", "  ", "  ", "  ", "  ", "  ")));
     }
 
     // -------------------------------------------------------------------------------------------
@@ -174,9 +154,9 @@ class EmbalajeRendererTest {
 
     @Test
     void laUltimaLineaSeQuedaConElAltoRestante() {
-        String zpl = EmbalajeRenderer.campoZpl(List.of("CAJA: 3", "PLURIBOL: SI", "ROLLO: X", "OBS: larga"));
+        String zpl = EmbalajeRenderer.campoZpl(List.of("CAJA: 3", "ROLLO: X", "OBS: larga"));
 
-        assertTrue(zpl.contains("^FO410,92^A0N,22,22^FB380,3,0,L^FDOBS: larga^FS"), zpl);
+        assertTrue(zpl.contains("^FO410,68^A0N,22,22^FB380,4,0,L^FDOBS: larga^FS"), zpl);
     }
 
     @Test

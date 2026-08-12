@@ -1600,7 +1600,7 @@ public class MainController {
 
     /**
      * @param embalajesFaltantesOut se completa con los SKU que no tienen ni caja ni bolsa cargada
-     *                              en el Excel. Los agregados (pluribol, rollo, observaciones) no
+     *                              en el Excel. Los agregados (rollo, observaciones) no
      *                              alcanzan para considerar el SKU resuelto.
      */
     private SortResult injectZplHeaders(SortResult result, ExcelMapping excelMapping,

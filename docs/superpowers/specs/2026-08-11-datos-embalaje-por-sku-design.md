@@ -9,7 +9,7 @@ modelaba el embalaje como un único código elegido de un catálogo.
 ## Resumen
 
 El embalaje deja de ser un código de catálogo y pasa a ser un conjunto de datos que el usuario carga
-a mano en el Excel de medidas: qué caja o bolsa va, si lleva pluribol, si lleva rollo inflado y
+a mano en el Excel de medidas: qué caja o bolsa va, si lleva rollo inflado y
 cuántos paños, más observaciones libres. La etiqueta muestra solo los datos que ese SKU tenga.
 
 **La app solo lee.** No crea columnas, no inserta, no valida, no genera hojas. Eso elimina la hoja
@@ -27,8 +27,6 @@ Van después de `SUBIDO` y **las crea y carga el usuario**:
 | `N° Bolsa` | Número de bolsa |
 | `Nombre Caja` | Nombre de la caja (ej. `GRANDE`) |
 | `N° Caja` | Número de caja |
-| `PLURIBOL` | `SI` / vacío |
-| `CANT PLURIBOL` | Vueltas de pluribol |
 | `ROLLO INFLABLE` | Tipo de rollo (ej. `DIAMANTE`, `CUADRADO`) |
 | `CANT PAÑOS` | Cantidad de paños |
 | `OBSERVACIONES` | Texto libre |
@@ -51,14 +49,12 @@ propias antes de ella.
 Reconocimiento sobre el header normalizado (mayúsculas, espacios colapsados), en este orden —
 el orden importa porque los patrones se solapan:
 
-1. contiene `CANT` y `PLURIBOL` → cantidad de pluribol
-2. contiene `PLURIBOL` → pluribol
-3. contiene `NOMBRE` y `CAJA` → nombre de caja
-4. contiene `CAJA` → número de caja
-5. contiene `BOLSA` → número de bolsa
-6. contiene `ROLLO` → tipo de rollo
-7. contiene `PAÑO` o `PANO` → cantidad de paños
-8. contiene `OBSERV` → observaciones
+1. contiene `NOMBRE` y `CAJA` → nombre de caja
+2. contiene `CAJA` → número de caja
+3. contiene `BOLSA` → número de bolsa
+4. contiene `ROLLO` → tipo de rollo
+5. contiene `PAÑO` o `PANO` → cantidad de paños
+6. contiene `OBSERV` → observaciones
 
 `PAÑO`/`PANO` se aceptan ambos porque el encabezado puede escribirse sin la eñe.
 
@@ -69,7 +65,6 @@ son texto que se imprime tal cual, no se opera con ellos:
 
 ```java
 public record DatosEmbalaje(String nroBolsa, String nombreCaja, String nroCaja,
-                            String pluribol, String cantPluribol,
                             String rollo, String cantPanos, String observaciones) {
     public static final DatosEmbalaje VACIO = ...;
     public boolean tieneCajaOBolsa();
@@ -94,8 +89,6 @@ public static String campoZpl(List<String> lineas)
 | solo uno de los dos | `CAJA: 3` / `CAJA: GRANDE` |
 | N° Bolsa cargado | `BOLSA: 5` |
 | ni caja ni bolsa | `NO ESTANDARIZADO` |
-| PLURIBOL cargado, con cantidad | `PLURIBOL: SI - 2 vueltas` |
-| PLURIBOL cargado, sin cantidad | `PLURIBOL: SI` |
 | ROLLO cargado, con cantidad | `ROLLO: DIAMANTE - 3 paños` |
 | ROLLO cargado, sin cantidad | `ROLLO: DIAMANTE` |
 | OBSERVACIONES cargado | `OBS: Colchon + Tapa` |
@@ -119,12 +112,11 @@ lo tipea el usuario en el Excel, así que no es confiable.
 
 ## Inyección en la etiqueta
 
-Bloque de hasta 4 líneas en el margen superior derecho, dentro del mismo bloque `^LH0,0` que ya se
+Bloque de hasta 3 líneas en el margen superior derecho, dentro del mismo bloque `^LH0,0` que ya se
 inyecta al inicio de cada etiqueta:
 
 ```
 ^FO410,83^A0N,22,22^FB380,1,0,L^FDCAJA: 3 - GRANDE^FS
-^FO410,107^A0N,22,22^FB380,1,0,L^FDPLURIBOL: SI - 2 vueltas^FS
 ^FO410,131^A0N,22,22^FB380,1,0,L^FDROLLO: DIAMANTE - 3 paños^FS
 ^FO410,155^A0N,22,22^FB380,1,0,L^FDOBS: Colchon + Tapa^FS
 ```
@@ -160,7 +152,7 @@ de medidas, así que no se les puede cargar un embalaje.
 
 ## Aviso de pendientes
 
-Un SKU se reporta como pendiente cuando **no tiene ni caja ni bolsa**; pluribol, rollo y
+Un SKU se reporta como pendiente cuando **no tiene ni caja ni bolsa**; el rollo y las
 observaciones no cuentan. El diálogo post-proceso suma:
 
 ```
@@ -195,14 +187,14 @@ Del diseño anterior desaparecen por completo:
 `normalizarHeader` deja de delegar en `EmbalajeResolver` y recupera su implementación propia.
 
 **El usuario limpia su Excel a mano**: borra la columna `EMBALAJE`, la hoja `EMBALAJES` y la
-validación, y agrega las 8 columnas nuevas. La app no lo hace por él.
+validación, y agrega las 6 columnas nuevas. La app no lo hace por él.
 
-Al crear un Excel **desde cero** (archivo inexistente), `HEADERS` incluye las 8 columnas nuevas
+Al crear un Excel **desde cero** (archivo inexistente), `HEADERS` incluye las 6 columnas nuevas
 entre `SUBIDO` y `ERROR`, para que el archivo salga completo y en el orden pedido. `COL_ERROR` pasa
-a 19 en consecuencia. No es migración: no toca archivos existentes, y como `ERROR` se ubica por su
+a 17 en consecuencia. No es migración: no toca archivos existentes, y como `ERROR` se ubica por su
 encabezado, un archivo donde quedó en otra posición sigue funcionando.
 
-`agregarPendientes` **no escribe nada** en las 8 columnas al insertar la fila de un SKU nuevo: son
+`agregarPendientes` **no escribe nada** en las 6 columnas al insertar la fila de un SKU nuevo: son
 de carga manual. Las celdas quedan vacías, sin estilo de "falta cargar", para no ensuciar el archivo
 con formato sobre columnas que la app no administra.
 
@@ -212,7 +204,7 @@ con formato sobre columnas que la app no administra.
 vacías, orden de las líneas, SKU sin ningún dato (lista vacía), sanitizado de `^`/`~`, y el `^FB` en
 el campo ZPL.
 
-**`MedidasExcelManagerTest`** (se reescribe la parte de embalaje): lectura de las ocho columnas,
+**`MedidasExcelManagerTest`** (se reescribe la parte de embalaje): lectura de las seis columnas,
 archivo sin ninguna de ellas (`DatosEmbalaje.VACIO`), columnas en orden distinto, y variantes de
 encabezado (`PAÑOS`/`PANOS`, mayúsculas y espacios).
 
@@ -233,7 +225,7 @@ método.
 | `etiquetas/model/MedidaSku.java` | `embalaje` pasa de `String` a `DatosEmbalaje` |
 | `etiquetas/parser/EmbalajeRenderer.java` | **Nuevo** — reemplaza a `EmbalajeResolver` |
 | `etiquetas/parser/EmbalajeResolver.java` | **Se elimina** |
-| `etiquetas/parser/MedidasExcelManager.java` | Lee las 8 columnas; se le quita toda la escritura de estructura |
+| `etiquetas/parser/MedidasExcelManager.java` | Lee las 6 columnas; se le quita toda la escritura de estructura |
 | `ui/MainController.java` | Inyecta el bloque, borra el texto de ML, reporta los SKU sin caja ni bolsa |
 | `test/.../EmbalajeRendererTest.java` | **Nuevo** |
 | `test/.../EmbalajeResolverTest.java` | **Se elimina** |

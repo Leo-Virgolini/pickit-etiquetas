@@ -8,7 +8,7 @@ import java.util.List;
 /**
  * Arma las líneas de embalaje que van en la etiqueta a partir de lo cargado en el Excel, y su
  * fragmento ZPL. Solo aparecen las líneas cuyos datos estén cargados: un SKU puede llevar desde
- * ninguna hasta cuatro (caja o bolsa, pluribol, rollo y observaciones).
+ * ninguna hasta tres (caja o bolsa, rollo y observaciones).
  */
 public final class EmbalajeRenderer {
 
@@ -47,12 +47,6 @@ public final class EmbalajeRenderer {
         if (!caja.isEmpty()) lineas.add("CAJA: " + caja);
         else if (cargado(datos.nroBolsa())) lineas.add("BOLSA: " + valor(datos.nroBolsa()));
         else lineas.add(SIN_ESTANDARIZAR);
-
-        if (cargado(datos.pluribol())) {
-            String linea = "PLURIBOL: " + valor(datos.pluribol());
-            if (cargado(datos.cantPluribol())) linea += " - " + valor(datos.cantPluribol()) + " vueltas";
-            lineas.add(linea);
-        }
 
         if (cargado(datos.rollo())) {
             String linea = "ROLLO: " + valor(datos.rollo());

@@ -29,7 +29,7 @@ medidas apagado.
 Criterios, los mismos que ya usan la etiqueta y el aviso post-proceso:
 
 - **MEDIDAS**: `MedidaSku.estaMedido()` — las cuatro columnas base cm/kg cargadas.
-- **EMBALAJE**: `DatosEmbalaje.tieneCajaOBolsa()` — los agregados (pluribol, rollo, observaciones)
+- **EMBALAJE**: `DatosEmbalaje.tieneCajaOBolsa()` — los agregados (rollo, observaciones)
   no cuentan, igual que en la línea `NO ESTANDARIZADO`.
 
 Un SKU que no figura en el Excel cuenta como `NO` en ambas: es elegible, solo que todavía no está

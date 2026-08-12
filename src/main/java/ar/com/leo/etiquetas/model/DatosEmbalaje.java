@@ -9,17 +9,15 @@ public record DatosEmbalaje(
         String nroBolsa,
         String nombreCaja,
         String nroCaja,
-        String pluribol,
-        String cantPluribol,
         String rollo,
         String cantPanos,
         String observaciones
 ) {
 
-    public static final DatosEmbalaje VACIO = new DatosEmbalaje("", "", "", "", "", "", "", "");
+    public static final DatosEmbalaje VACIO = new DatosEmbalaje("", "", "", "", "", "");
 
     /**
-     * Un SKU está embalado cuando tiene caja o bolsa. El pluribol, el rollo y las observaciones
+     * Un SKU está embalado cuando tiene caja o bolsa. El rollo y las observaciones
      * son agregados: no alcanzan por sí solos para considerarlo resuelto.
      */
     public boolean tieneCajaOBolsa() {

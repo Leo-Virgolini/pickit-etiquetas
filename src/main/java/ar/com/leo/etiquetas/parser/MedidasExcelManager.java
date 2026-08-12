@@ -43,8 +43,6 @@ public class MedidasExcelManager {
             "N° Bolsa",
             "Nombre Caja",
             "N° Caja",
-            "PLURIBOL",
-            "CANT PLURIBOL",
             "ROLLO INFLABLE",
             "CANT PAÑOS",
             "OBSERVACIONES",
@@ -54,7 +52,7 @@ public class MedidasExcelManager {
     private static final int COL_SUBIDO = 10;
     // Posición de ERROR en un archivo nuevo, después de las ocho columnas de embalaje. En los
     // archivos existentes se ubica por header: el usuario decide dónde van sus columnas.
-    private static final int COL_ERROR = 19;
+    private static final int COL_ERROR = 17;
 
     // Retry para sharing violation (Excel abierto por el usuario).
     private static final int MAX_WRITE_RETRIES = 5;
@@ -74,7 +72,6 @@ public class MedidasExcelManager {
                             int anchoMas, int altoMas, int profundidadMas, int pesoMas,
                             int subido, int error,
                             int bolsa, int nombreCaja, int caja,
-                            int pluribol, int cantPluribol,
                             int rollo, int panos, int observaciones) {
 
         /** Columnas de medidas que agregarPendientes limpia al reusar una fila. */
@@ -102,13 +99,12 @@ public class MedidasExcelManager {
         int anchoMas = -1, altoMas = -1, profundidadMas = -1, pesoMas = -1;
         int subido = -1, error = -1;
         int bolsa = -1, nombreCaja = -1, caja = -1;
-        int pluribol = -1, cantPluribol = -1;
         int rollo = -1, panos = -1, observaciones = -1;
 
         Row header = sheet == null ? null : sheet.getRow(0);
         if (header == null) {
             return new Columnas(-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-                    -1, -1, -1, -1, -1, -1, -1, -1);
+                    -1, -1, -1, -1, -1, -1);
         }
 
         for (int i = 0; i < header.getLastCellNum(); i++) {
@@ -133,10 +129,8 @@ public class MedidasExcelManager {
             else if (h.startsWith("PESO")) {
                 if (mas20) pesoMas = i; else peso = i;
             }
-            // Columnas de embalaje. Los patrones se solapan (CANT PLURIBOL contiene PLURIBOL,
-            // Nombre Caja contiene CAJA), por eso el orden de evaluación importa.
-            else if (h.contains("CANT") && h.contains("PLURIBOL")) cantPluribol = i;
-            else if (h.contains("PLURIBOL")) pluribol = i;
+            // Columnas de embalaje. Los patrones se solapan (Nombre Caja contiene CAJA), por eso
+            // el orden de evaluación importa.
             else if (h.contains("NOMBRE") && h.contains("CAJA")) nombreCaja = i;
             else if (h.contains("CAJA")) caja = i;
             else if (h.contains("BOLSA")) bolsa = i;
@@ -148,7 +142,7 @@ public class MedidasExcelManager {
 
         return new Columnas(sku, producto, ancho, alto, profundidad, peso,
                 anchoMas, altoMas, profundidadMas, pesoMas, subido, error,
-                bolsa, nombreCaja, caja, pluribol, cantPluribol, rollo, panos, observaciones);
+                bolsa, nombreCaja, caja, rollo, panos, observaciones);
     }
 
     public Map<String, MedidaSku> leerMedidas(Path excelPath) throws Exception {
@@ -197,8 +191,6 @@ public class MedidasExcelManager {
                     celda(row, cols.bolsa()),
                     celda(row, cols.nombreCaja()),
                     celda(row, cols.caja()),
-                    celda(row, cols.pluribol()),
-                    celda(row, cols.cantPluribol()),
                     celda(row, cols.rollo()),
                     celda(row, cols.panos()),
                     celda(row, cols.observaciones()));

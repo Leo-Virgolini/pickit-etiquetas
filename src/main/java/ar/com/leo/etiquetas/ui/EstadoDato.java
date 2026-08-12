@@ -32,7 +32,7 @@ public enum EstadoDato {
     }
 
     /**
-     * Caja o bolsa cargada. Los agregados (pluribol, rollo, observaciones) no cuentan, igual que
+     * Caja o bolsa cargada. Los agregados (rollo, observaciones) no cuentan, igual que
      * en la línea "NO ESTANDARIZADO" de la etiqueta.
      */
     public static EstadoDato embalajeDe(MedidaSku medida) {

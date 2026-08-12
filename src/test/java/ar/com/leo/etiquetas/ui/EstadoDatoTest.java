@@ -16,15 +16,15 @@ class EstadoDatoTest {
     }
 
     private static DatosEmbalaje conCaja() {
-        return new DatosEmbalaje("", "GRANDE", "3", "", "", "", "", "");
+        return new DatosEmbalaje("", "GRANDE", "3", "", "", "");
     }
 
     private static DatosEmbalaje conBolsa() {
-        return new DatosEmbalaje("5", "", "", "", "", "", "", "");
+        return new DatosEmbalaje("5", "", "", "", "", "");
     }
 
     private static DatosEmbalaje soloAgregados() {
-        return new DatosEmbalaje("", "", "", "SI", "2", "DIAMANTE", "3", "Colchon");
+        return new DatosEmbalaje("", "", "", "DIAMANTE", "3", "Colchon");
     }
 
     // -------------------------------------------------------------------------------------------

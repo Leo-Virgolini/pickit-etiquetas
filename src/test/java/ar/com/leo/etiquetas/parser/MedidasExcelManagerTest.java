@@ -44,7 +44,7 @@ class MedidasExcelManagerTest {
             "Peso físico\n(empaque + producto)\nkg",
             "Ancho +20%", "Alto +20%", "Profunidad +20%",
             "Peso físico (empaque + producto) +20%", "SUBIDO",
-            "N° Bolsa", "Nombre Caja", "N° Caja", "PLURIBOL", "CANT PLURIBOL",
+            "N° Bolsa", "Nombre Caja", "N° Caja",
             "ROLLO INFLABLE", "CANT PAÑOS", "OBSERVACIONES",
             "ERROR"
     };
@@ -57,15 +57,13 @@ class MedidasExcelManagerTest {
     void leeLasOchoColumnasDeEmbalaje() throws Exception {
         Path excel = crearExcel("completo.xlsx", HEADERS_CON_EMBALAJE,
                 new String[]{"1241212", "Producto A", "", "", "", "", "", "", "", "", "NO",
-                        "5", "GRANDE", "3", "SI", "2", "DIAMANTE", "4", "Colchon + Tapa"});
+                        "5", "GRANDE", "3", "DIAMANTE", "4", "Colchon + Tapa"});
 
         DatosEmbalaje datos = manager.leerMedidas(excel).get("1241212").embalaje();
 
         assertEquals("5", datos.nroBolsa());
         assertEquals("GRANDE", datos.nombreCaja());
         assertEquals("3", datos.nroCaja());
-        assertEquals("SI", datos.pluribol());
-        assertEquals("2", datos.cantPluribol());
         assertEquals("DIAMANTE", datos.rollo());
         assertEquals("4", datos.cantPanos());
         assertEquals("Colchon + Tapa", datos.observaciones());
@@ -112,18 +110,6 @@ class MedidasExcelManagerTest {
         DatosEmbalaje datos = manager.leerMedidas(excel).get("1241212").embalaje();
 
         assertEquals("4", datos.cantPanos());
-    }
-
-    @Test
-    void distingueCantPluribolDePluribol() throws Exception {
-        String[] headers = {"SKU", "PRODUCTO", "SUBIDO", "PLURIBOL", "CANT PLURIBOL"};
-        Path excel = crearExcel("pluribol.xlsx", headers,
-                new String[]{"1241212", "Producto A", "NO", "SI", "2"});
-
-        DatosEmbalaje datos = manager.leerMedidas(excel).get("1241212").embalaje();
-
-        assertEquals("SI", datos.pluribol());
-        assertEquals("2", datos.cantPluribol());
     }
 
     @Test
@@ -198,8 +184,8 @@ class MedidasExcelManagerTest {
             Row header = wb.getSheetAt(0).getRow(0);
             assertEquals("SUBIDO", header.getCell(10).getStringCellValue());
             assertEquals("N° Bolsa", header.getCell(11).getStringCellValue());
-            assertEquals("OBSERVACIONES", header.getCell(18).getStringCellValue());
-            assertEquals("ERROR", header.getCell(19).getStringCellValue());
+            assertEquals("OBSERVACIONES", header.getCell(16).getStringCellValue());
+            assertEquals("ERROR", header.getCell(17).getStringCellValue());
         }
     }
 
@@ -322,19 +308,19 @@ class MedidasExcelManagerTest {
                 "Peso físico\n(empaque + producto)\nkg",
                 "Ancho +20%", "Alto +20%", "Profunidad +20%",
                 "Peso físico (empaque + producto) +20%", "SUBIDO",
-                "N° Bolsa", "Nombre Caja", "N° Caja", "PLURIBOL", "CANT PLURIBOL",
+                "N° Bolsa", "Nombre Caja", "N° Caja",
                 "ROLLO INFLABLE", "CANT PAÑOS", "OBSERVACIONES",
                 "MI COLUMNA"
         };
         Path excel = crearExcel("sin-error.xlsx", headers,
                 new String[]{"1241212", "Producto A", "", "", "", "", "", "", "", "", "NO",
-                        "", "", "", "", "", "", "", "", "dato mio"});
+                        "", "", "", "", "", "", "dato mio"});
 
         manager.agregarPendientes(excel, List.of("999999"));
 
-        assertEquals("MI COLUMNA", leerHeader(excel, 19), "no se pisa la columna del usuario");
-        assertEquals("ERROR", leerHeader(excel, 20));
-        assertEquals("dato mio", leerCelda(excel, 1, 19));
+        assertEquals("MI COLUMNA", leerHeader(excel, 17), "no se pisa la columna del usuario");
+        assertEquals("ERROR", leerHeader(excel, 18));
+        assertEquals("dato mio", leerCelda(excel, 1, 17));
     }
 
     @Test
