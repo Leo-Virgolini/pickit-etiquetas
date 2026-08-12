@@ -175,7 +175,7 @@
                             <TableView fx:id="labelTable">
                                 <columns>
                                     <TableColumn fx:id="printNumCol" maxWidth="70" minWidth="45" prefWidth="55" sortable="false" text="#" />
-                                    <TableColumn fx:id="labelOrderCol" minWidth="80" prefWidth="120" text="Orden" />
+                                    <TableColumn fx:id="labelOrderCol" minWidth="110" prefWidth="150" text="Orden" />
                                     <TableColumn fx:id="zoneCol" minWidth="60" prefWidth="100" text="Zona" />
                                     <TableColumn fx:id="skuCol" minWidth="70" prefWidth="110" text="SKU" />
                                     <TableColumn fx:id="descCol" minWidth="150" prefWidth="350" text="Producto" />
