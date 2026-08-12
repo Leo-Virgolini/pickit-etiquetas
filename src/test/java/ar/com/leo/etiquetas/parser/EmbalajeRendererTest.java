@@ -168,6 +168,24 @@ class EmbalajeRendererTest {
     }
 
     @Test
+    void elAvisoDeNoEstandarizadoVaMasGrandeYEnNegrita() {
+        String zpl = EmbalajeRenderer.campoZpl(List.of("NO ESTANDARIZADO", "OBS: algo"));
+
+        // Doble pasada con 1px de offset: es como se simula la negrita en ZPL.
+        assertTrue(zpl.contains("^FO410,20^A0N,30,30^FB380,1,0,L^FDNO ESTANDARIZADO^FS"), zpl);
+        assertTrue(zpl.contains("^FO411,20^A0N,30,30^FB380,1,0,L^FDNO ESTANDARIZADO^FS"), zpl);
+    }
+
+    @Test
+    void elAvisoMasAltoCorreLasLineasDeAbajo() {
+        String zpl = EmbalajeRenderer.campoZpl(List.of("NO ESTANDARIZADO", "ROLLO: X", "OBS: algo"));
+
+        assertTrue(zpl.contains("^FO410,54^A0N,22,22^FB380,1,0,L^FDROLLO: X^FS"), zpl);
+        // OBS arranca en 78 y hasta el separador (y=180) entran 4 líneas de 24.
+        assertTrue(zpl.contains("^FO410,78^A0N,22,22^FB380,4,0,L^FDOBS: algo^FS"), zpl);
+    }
+
+    @Test
     void elCampoZplNeutralizaLosCaracteresDeControlDeZpl() {
         String zpl = EmbalajeRenderer.campoZpl(List.of("CAJA: ^3~A"));
 

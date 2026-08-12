@@ -131,6 +131,11 @@ las de abajo, y el nombre de caja también es texto libre del usuario.
 repartirse en varias: con `^FB` de una sola línea ZPL no descarta el sobrante, lo reimprime encima
 de la misma y queda ilegible.
 
+El aviso `NO ESTANDARIZADO` va **más grande y en negrita** (fuente 30, alto de línea 34, con la
+doble pasada de 1px que se usa en toda la etiqueta): es lo que tiene que frenar al operario, no un
+dato más de la lista. Al ser más alto corre las líneas de abajo, así que el alto disponible para la
+última se calcula en píxeles contra `Y_LIMITE` y no como un número fijo de líneas.
+
 En esa última línea, además, se **parten las palabras de más de 30 caracteres**. `^FB` corta por
 palabras: una que no entra se baja entera a la línea siguiente y deja el rótulo solo arriba (`OBS:`
 en una línea y el texto en la de abajo). Pasa con códigos y URLs, que no traen espacios donde

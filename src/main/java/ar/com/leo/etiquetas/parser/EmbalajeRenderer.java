@@ -20,10 +20,14 @@ public final class EmbalajeRenderer {
     // esta parte..." se elimina— y el banner MEDIR se ubica a la izquierda, debajo del #N.
     private static final int X = 410;
     private static final int Y_INICIAL = 20;
-    /** Cuántas líneas entran antes del separador de la zona de picking. */
-    private static final int MAX_LINEAS = 6;
+    /** Hasta dónde puede llegar el bloque: el separador de la zona de picking está en y=180. */
+    private static final int Y_LIMITE = 178;
     private static final int ALTO_LINEA = 24;
     private static final int FUENTE = 22;
+    // El aviso de embalaje sin cargar va más grande y en negrita: es lo que tiene que frenar al
+    // operario, no un dato más de la lista.
+    private static final int ALTO_LINEA_AVISO = 34;
+    private static final int FUENTE_AVISO = 30;
     private static final int ANCHO = 380;
     /**
      * Caracteres que entran en una línea. Con la fuente 0 de ZPL, proporcional, un carácter ocupa
@@ -82,22 +86,33 @@ public final class EmbalajeRenderer {
         StringBuilder zpl = new StringBuilder();
         int y = Y_INICIAL;
         for (int i = 0; i < lineas.size(); i++) {
+            String linea = lineas.get(i);
+            boolean aviso = SIN_ESTANDARIZAR.equals(linea);
+            boolean ultima = i == lineas.size() - 1;
+
+            int fuente = aviso ? FUENTE_AVISO : FUENTE;
             // La última línea se queda con todo el alto libre que sobra, así que puede repartirse
             // en varias: con ^FB de una sola línea ZPL no descarta el sobrante, lo reimprime encima
-            // de la misma y queda ilegible.
-            boolean ultima = i == lineas.size() - 1;
-            int maxLineas = ultima ? Math.max(1, MAX_LINEAS - i) : 1;
-            // Las líneas que no son la última no pueden crecer sin correr las de abajo, así que se
-            // cortan: el nombre de caja también es texto libre y puede no entrar en una línea.
-            String texto = ultima ? partirPalabrasLargas(lineas.get(i)) : truncar(lineas.get(i));
+            // de la misma y queda ilegible. Las anteriores no pueden crecer sin correr las de
+            // abajo, así que se cortan — el nombre de caja también es texto libre del usuario.
+            int maxLineas = ultima ? Math.max(1, (Y_LIMITE - y) / ALTO_LINEA) : 1;
+            String texto = ultima ? partirPalabrasLargas(linea) : truncar(linea);
 
-            zpl.append("^FO").append(X).append(',').append(y)
-                    .append("^A0N,").append(FUENTE).append(',').append(FUENTE)
-                    .append("^FB").append(ANCHO).append(',').append(maxLineas).append(",0,L")
-                    .append("^FD").append(sanitizar(texto)).append("^FS\n");
-            y += ALTO_LINEA;
+            zpl.append(campo(X, y, fuente, maxLineas, texto));
+            // El aviso va en negrita, simulada con una segunda pasada corrida 1px, igual que ZONA
+            // y COD.EXT.
+            if (aviso) zpl.append(campo(X + 1, y, fuente, maxLineas, texto));
+
+            y += aviso ? ALTO_LINEA_AVISO : ALTO_LINEA;
         }
         return zpl.toString();
+    }
+
+    private static String campo(int x, int y, int fuente, int maxLineas, String texto) {
+        return "^FO" + x + ',' + y
+                + "^A0N," + fuente + ',' + fuente
+                + "^FB" + ANCHO + ',' + maxLineas + ",0,L"
+                + "^FD" + sanitizar(texto) + "^FS\n";
     }
 
     /**
