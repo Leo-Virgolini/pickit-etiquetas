@@ -149,12 +149,20 @@ class EmbalajeRendererTest {
     // -------------------------------------------------------------------------------------------
 
     @Test
-    void elCampoZplApilaLasLineasCada22Pixeles() {
+    void elCampoZplApilaLasLineas() {
         String zpl = EmbalajeRenderer.campoZpl(List.of("CAJA: 3", "BOLSA: 5"));
 
-        assertEquals("^FO450,85^A0N,18,18^FB340,1,0,L^FDCAJA: 3^FS\n"
-                        + "^FO450,107^A0N,18,18^FB340,1,0,L^FDBOLSA: 5^FS\n",
+        assertEquals("^FO450,83^A0N,22,22^FB340,1,0,L^FDCAJA: 3^FS\n"
+                        + "^FO450,107^A0N,22,22^FB340,1,0,L^FDBOLSA: 5^FS\n",
                 zpl);
+    }
+
+    @Test
+    void cuatroLineasNoLleganAlSeparadorDeLaZonaDePicking() {
+        String zpl = EmbalajeRenderer.campoZpl(List.of("a", "b", "c", "d"));
+
+        // La última arranca en y=155 y con fuente 22 termina en 177: el separador está en 180.
+        assertTrue(zpl.contains("^FO450,155^A0N,22,22"), zpl);
     }
 
     @Test

@@ -118,18 +118,18 @@ Bloque de hasta 4 líneas en el margen superior derecho, dentro del mismo bloque
 inyecta al inicio de cada etiqueta:
 
 ```
-^FO450,85^A0N,18,18^FB340,1,0,L^FDCAJA: 3 - GRANDE^FS
-^FO450,107^A0N,18,18^FB340,1,0,L^FDPLURIBOL: SI - 2 vueltas^FS
-^FO450,129^A0N,18,18^FB340,1,0,L^FDROLLO: DIAMANTE - 3 paños^FS
-^FO450,151^A0N,18,18^FB340,1,0,L^FDOBS: Colchon + Tapa^FS
+^FO450,83^A0N,22,22^FB340,1,0,L^FDCAJA: 3 - GRANDE^FS
+^FO450,107^A0N,22,22^FB340,1,0,L^FDPLURIBOL: SI - 2 vueltas^FS
+^FO450,131^A0N,22,22^FB340,1,0,L^FDROLLO: DIAMANTE - 3 paños^FS
+^FO450,155^A0N,22,22^FB340,1,0,L^FDOBS: Colchon + Tapa^FS
 ```
 
-`x=450`, primera línea en `y=85`, paso de 22px, fuente 18. El `^FB340,1` acota cada línea al ancho
+`x=450`, primera línea en `y=83`, paso de 24px, fuente 22 — el máximo que entra en la franja. El `^FB340,1` acota cada línea al ancho
 disponible: un valor largo se recorta en vez de derramarse fuera del área imprimible.
 
 **Por qué ahí.** El banner `MEDIR` termina en y=80 y el separador de la zona de picking está en
 y=180, así que la franja y 85–178 queda libre a la derecha de x=450 — salvo por un texto de ML.
-Cuatro líneas ocupan hasta y≈169.
+Cuatro líneas ocupan hasta y≈177.
 
 **Hay que borrar el texto de ML** *"Recortá esta parte de la etiqueta para que tu paquete viaje
 seguro"* (`^FO450,30` bajo `^LH0,90`, o sea y≈120–160), que cae justo en esa zona y no le sirve al

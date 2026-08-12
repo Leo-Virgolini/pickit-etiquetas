@@ -13,11 +13,12 @@ import java.util.List;
 public final class EmbalajeRenderer {
 
     // Bloque en el margen superior derecho: debajo del banner MEDIR (que termina en y=80) y por
-    // encima del separador de la zona de picking (y=180). Cuatro líneas llegan hasta y≈169.
+    // encima del separador de la zona de picking (y=180). Cuatro líneas llegan hasta y≈177, así que
+    // el alto de línea y la fuente están al máximo que entra en esa franja.
     private static final int X = 450;
-    private static final int Y_INICIAL = 85;
-    private static final int ALTO_LINEA = 22;
-    private static final int FUENTE = 18;
+    private static final int Y_INICIAL = 83;
+    private static final int ALTO_LINEA = 24;
+    private static final int FUENTE = 22;
     private static final int ANCHO = 340;
 
     private EmbalajeRenderer() {
