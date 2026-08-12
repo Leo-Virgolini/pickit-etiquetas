@@ -12,13 +12,16 @@ import java.util.List;
  */
 public final class EmbalajeRenderer {
 
-    // Bloque en el margen superior derecho: debajo del banner MEDIR (que termina en y=80) y por
-    // encima del separador de la zona de picking (y=180). Cuatro líneas llegan hasta y≈177, así que
-    // el alto de línea y la fuente están al máximo que entra en esa franja.
-    // x=410 es el límite: a la izquierda, entre y=129 y y=160, está el bloque "Pack ID: ..." de ML,
-    // cuyo número llega hasta x≈400 con su fuente 30.
+    // Bloque en el margen superior derecho, entre el borde de la etiqueta y el separador de la zona
+    // de picking (y=180). Seis líneas llegan hasta y≈162.
+    //
+    // x=410 es el límite por la izquierda: entre y=129 y y=160 está el bloque "Pack ID: ..." de ML,
+    // cuyo número llega hasta x≈400 con su fuente 30. Arriba no hay nada de ML —el texto "Recortá
+    // esta parte..." se elimina— y el banner MEDIR se ubica a la izquierda, debajo del #N.
     private static final int X = 410;
-    private static final int Y_INICIAL = 83;
+    private static final int Y_INICIAL = 20;
+    /** Cuántas líneas entran antes del separador de la zona de picking. */
+    private static final int MAX_LINEAS = 6;
     private static final int ALTO_LINEA = 24;
     private static final int FUENTE = 22;
     private static final int ANCHO = 380;
@@ -74,11 +77,17 @@ public final class EmbalajeRenderer {
 
         StringBuilder zpl = new StringBuilder();
         int y = Y_INICIAL;
-        for (String linea : lineas) {
+        for (int i = 0; i < lineas.size(); i++) {
+            // La última línea se queda con todo el alto libre que sobra. Es la de observaciones,
+            // el único texto que puede no entrar en una línea: con ^FB de una sola línea ZPL no
+            // descarta el sobrante, lo reimprime encima de la misma y queda ilegible.
+            boolean ultima = i == lineas.size() - 1;
+            int maxLineas = ultima ? Math.max(1, MAX_LINEAS - i) : 1;
+
             zpl.append("^FO").append(X).append(',').append(y)
                     .append("^A0N,").append(FUENTE).append(',').append(FUENTE)
-                    .append("^FB").append(ANCHO).append(",1,0,L")
-                    .append("^FD").append(sanitizar(linea)).append("^FS\n");
+                    .append("^FB").append(ANCHO).append(',').append(maxLineas).append(",0,L")
+                    .append("^FD").append(sanitizar(lineas.get(i))).append("^FS\n");
             y += ALTO_LINEA;
         }
         return zpl.toString();

@@ -129,13 +129,21 @@ inyecta al inicio de cada etiqueta:
 ^FO410,155^A0N,22,22^FB380,1,0,L^FDOBS: Colchon + Tapa^FS
 ```
 
-`x=410`, primera línea en `y=83`, paso de 24px, fuente 22 — el máximo que entra en la franja. El `^FB340,1` acota cada línea al ancho
+`x=410`, primera línea en `y=20`, paso de 24px, fuente 22. Entran hasta 6 líneas: la última llega a
+y≈162, justo antes del separador de la zona de picking (y=180).
+
+**La última línea recibe todo el alto libre que sobra** (`MAX_LINEAS - índice`), porque es la de
+observaciones, el único texto que puede no entrar en una línea: con `^FB` de una sola línea ZPL no
+descarta el sobrante, lo reimprime encima de la misma y queda ilegible.
+
+**El banner MEDIR se reubica** debajo del `#N` (`^FO20,70^GB380,52,52`, o sea x 20–400 y 70–122),
+entre el número de posición (termina en y=65) y el `Pack ID` de ML (empieza en y=129). Antes ocupaba
+el margen superior derecho, que ahora se necesita entero para las observaciones largas. El `^FB340,1` acota cada línea al ancho
 disponible: un valor largo se recorta en vez de derramarse fuera del área imprimible.
 
-**Por qué ahí.** El banner `MEDIR` termina en y=80 y el separador de la zona de picking está en
-y=180, así que la franja y 83–178 queda libre a la derecha de x=410 — salvo por un texto de ML. El límite
-por la izquierda lo marca el bloque `Pack ID: ...` de ML, cuyo número llega hasta x≈400.
-Cuatro líneas ocupan hasta y≈177.
+**Por qué ahí.** A la derecha de x=410 no hay ningún campo de ML entre y=0 y y=180 salvo el texto
+que se elimina. El límite por la izquierda lo marca el bloque `Pack ID: ...`, cuyo número llega
+hasta x≈400 en las filas y 129–160.
 
 **Hay que borrar el texto de ML** *"Recortá esta parte de la etiqueta para que tu paquete viaje
 seguro"* (`^FO450,30` bajo `^LH0,90`, o sea y≈120–160), que cae justo en esa zona y no le sirve al

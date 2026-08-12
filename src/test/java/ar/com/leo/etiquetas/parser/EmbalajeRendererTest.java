@@ -164,17 +164,27 @@ class EmbalajeRendererTest {
     void elCampoZplApilaLasLineas() {
         String zpl = EmbalajeRenderer.campoZpl(List.of("CAJA: 3", "BOLSA: 5"));
 
-        assertEquals("^FO410,83^A0N,22,22^FB380,1,0,L^FDCAJA: 3^FS\n"
-                        + "^FO410,107^A0N,22,22^FB380,1,0,L^FDBOLSA: 5^FS\n",
+        // La última línea se queda con el alto libre restante: si el texto no entra en una línea
+        // sigue abajo, en vez de que ZPL lo reimprima encima de la misma (^FB con maxLines=1
+        // sobreescribe la última línea, no descarta el sobrante).
+        assertEquals("^FO410,20^A0N,22,22^FB380,1,0,L^FDCAJA: 3^FS\n"
+                        + "^FO410,44^A0N,22,22^FB380,5,0,L^FDBOLSA: 5^FS\n",
                 zpl);
     }
 
     @Test
-    void cuatroLineasNoLleganAlSeparadorDeLaZonaDePicking() {
-        String zpl = EmbalajeRenderer.campoZpl(List.of("a", "b", "c", "d"));
+    void laUltimaLineaSeQuedaConElAltoRestante() {
+        String zpl = EmbalajeRenderer.campoZpl(List.of("CAJA: 3", "PLURIBOL: SI", "ROLLO: X", "OBS: larga"));
 
-        // La última arranca en y=155 y con fuente 22 termina en 177: el separador está en 180.
-        assertTrue(zpl.contains("^FO410,155^A0N,22,22"), zpl);
+        assertTrue(zpl.contains("^FO410,92^A0N,22,22^FB380,3,0,L^FDOBS: larga^FS"), zpl);
+    }
+
+    @Test
+    void elBloqueNoLlegaAlSeparadorDeLaZonaDePicking() {
+        String zpl = EmbalajeRenderer.campoZpl(List.of("a", "b", "c", "d", "e", "f"));
+
+        // Seis líneas: la última arranca en y=140 y con fuente 22 termina en 162 (separador: 180).
+        assertTrue(zpl.contains("^FO410,140^A0N,22,22^FB380,1,0,L^FDf^FS"), zpl);
     }
 
     @Test

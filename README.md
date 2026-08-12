@@ -93,7 +93,7 @@ Dos sub-pestañas para obtener etiquetas ZPL, procesarlas y enviarlas a la impre
 - **Marcado MEDIR y autocarga al Excel** (durante la descarga/procesamiento de etiquetas): si esta configurado el Excel de medidas:
   1. **Banner MEDIR en la etiqueta**: cada etiqueta individual (no CARROS) con SKU numerico, **de pedido de 1 unidad**, cuyo SKU no tenga las 4 columnas base cm/kg cargadas, recibe un banner "MEDIR: [SKU]" en negro invertido sobre el encabezado. Las ordenes de 2+ unidades no se marcan (esos embalajes se miden aparte).
   2. **Autocarga al Excel**: los SKU detectados como pendientes se insertan en el Excel con SUBIDO=NO. El inserter primero **reusa filas pre-existentes con SKU vacio** (tipicamente filas con formulas pre-cargadas, ej: `=BUSCARX(...)` en PRODUCTO o `=base*1.2` en las +20%) y recien appendea al final cuando se agotan. Preserva todas las formulas existentes (celdas tipo FORMULA se dejan intactas; Excel las recalcula al abrir gracias a `setForceFormulaRecalculation(true)`). **No escribe la columna PRODUCTO**: queda delegada a la formula que el usuario tenga configurada. No se duplican si el SKU ya existe.
-  3. **Datos de embalaje en la etiqueta**: cada etiqueta individual (no CARROS) con SKU numerico lleva, en el margen superior derecho, entre 1 y 4 lineas segun lo cargado en el Excel (la primera esta siempre: si no hay ni caja ni bolsa dice `NO ESTANDARIZADO`):
+  3. **Datos de embalaje en la etiqueta**: cada etiqueta individual (no CARROS) con SKU numerico lleva, en el margen superior derecho, entre 1 y 6 lineas segun lo cargado en el Excel (la primera esta siempre: si no hay ni caja ni bolsa dice `NO ESTANDARIZADO`):
 
      | Condicion | Linea |
      |---|---|
@@ -104,7 +104,7 @@ Dos sub-pestañas para obtener etiquetas ZPL, procesarlas y enviarlas a la impre
      | `ROLLO INFLABLE` | `ROLLO: DIAMANTE - 3 paños` (sin cantidad: `ROLLO: DIAMANTE`) |
      | `OBSERVACIONES` | `OBS: Colchon + Tapa` |
 
-     Caja y bolsa no se combinan, asi que el maximo es de 4 lineas. Para hacerles lugar se elimina el texto de ML "Recorta esta parte de la etiqueta...", que ocupa esa franja. Si ML cambiara ese texto y no se encontrara, queda una advertencia en el log y los textos se encimarian.
+     Caja y bolsa no se combinan. La linea de observaciones se queda con el alto libre que sobra, asi que un texto largo sigue en las lineas de abajo en vez de imprimirse encima de si mismo. El banner MEDIR se ubica debajo del numero de etiqueta, a la izquierda, para dejarle ese espacio. Para hacerles lugar se elimina el texto de ML "Recorta esta parte de la etiqueta...", que ocupa esa franja. Si ML cambiara ese texto y no se encontrara, queda una advertencia en el log y los textos se encimarian.
   4. **Mensaje de pendientes al finalizar**: al terminar la descarga se abre un dialogo scrollable con la cantidad de SKUs sin medidas detectados en el lote, cuantos se agregaron efectivamente al Excel y cuantos ya figuraban, ademas del listado de SKUs. Se suman ahi los SKU **sin caja ni bolsa** cargada (el pluribol, el rollo y las observaciones no cuentan).
   - Durante la descarga **no** se sube nada a ML: el flujo de descarga solo marca y escribe en el Excel.
 

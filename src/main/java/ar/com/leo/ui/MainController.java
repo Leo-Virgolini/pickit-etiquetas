@@ -1681,11 +1681,13 @@ public class MainController {
                 // Alcanza con una sola medición para cargar las dimensiones del SKU.
                 if (necesitaMedir && skusYaMarcados.add(sku)) {
                     // Banner MEDIR: [SKU] en video inverso (blanco sobre negro), bien visible.
-                    // Se ubica a la derecha del #X (x>=180) para no taparlo.
+                    // Va debajo del #X (que termina en y=65) y encima del "Pack ID:" de ML (y=129),
+                    // ocupando el ancho hasta x=400. El margen superior derecho quedó para las
+                    // líneas de embalaje, que necesitan todo el alto para las observaciones largas.
                     String medirText = "MEDIR: " + sku;
                     medirPrefix =
-                            "^FO200,15^GB580,65,65^FS\n"
-                            + "^FO200,22^A0N,50,50^FB580,1,0,C^FR^FD" + medirText + "^FS\n";
+                            "^FO20,70^GB380,52,52^FS\n"
+                            + "^FO20,77^A0N,38,38^FB380,1,0,C^FR^FD" + medirText + "^FS\n";
                 }
                 raw = raw.substring(0, insertIdx) + "^LH0,0\n" + posField1 + "\n" + posField2 + "\n" + posField3 + "\n" + embalajeZpl + medirPrefix + raw.substring(insertIdx);
                 labelPosition++;
