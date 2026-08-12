@@ -147,7 +147,9 @@ class EmbalajeRendererTest {
         // sigue abajo, en vez de que ZPL lo reimprima encima de la misma (^FB con maxLines=1
         // sobreescribe la última línea, no descarta el sobrante).
         assertEquals("^FO410,20^A0N,22,22^FB380,1,0,L^FDCAJA: 3^FS\n"
-                        + "^FO410,44^A0N,22,22^FB380,5,0,L^FDBOLSA: 5^FS\n",
+                        + "^FO411,20^A0N,22,22^FB380,1,0,L^FDCAJA:^FS\n"
+                        + "^FO410,44^A0N,22,22^FB380,5,0,L^FDBOLSA: 5^FS\n"
+                        + "^FO411,44^A0N,22,22^FB380,5,0,L^FDBOLSA:^FS\n",
                 zpl);
     }
 
@@ -176,6 +178,24 @@ class EmbalajeRendererTest {
     }
 
     @Test
+    void elRotuloVaEnNegrita() {
+        String zpl = EmbalajeRenderer.campoZpl(List.of("CAJA: 3 - GRANDE"));
+
+        // La línea completa, y encima solo el rótulo corrido 1px: engrosa "CAJA:" sin tocar el
+        // valor. Evita tener que calcular el ancho del rótulo, que con fuente proporcional no se
+        // puede saber de antemano.
+        assertTrue(zpl.contains("^FO410,20^A0N,22,22^FB380,6,0,L^FDCAJA: 3 - GRANDE^FS"), zpl);
+        assertTrue(zpl.contains("^FO411,20^A0N,22,22^FB380,6,0,L^FDCAJA:^FS"), zpl);
+    }
+
+    @Test
+    void unaLineaSinRotuloNoLlevaSegundaPasada() {
+        String zpl = EmbalajeRenderer.campoZpl(List.of("SIN DOS PUNTOS"));
+
+        assertEquals(1, zpl.lines().count(), zpl);
+    }
+
+    @Test
     void elCampoZplNeutralizaLosCaracteresDeControlDeZpl() {
         String zpl = EmbalajeRenderer.campoZpl(List.of("CAJA: ^3~A"));
 
@@ -198,7 +218,7 @@ class EmbalajeRendererTest {
         // abajo es una mancha ilegible sobre la zona de picking.
         String zpl = EmbalajeRenderer.campoZpl(List.of("CAJA: 3", "ROLLO: X", "OBS: " + "x".repeat(300)));
 
-        String impreso = zpl.substring(zpl.lastIndexOf("^FDOBS:") + 3, zpl.lastIndexOf("^FS"));
+        String impreso = zpl.substring(zpl.indexOf("^FDOBS:") + 3, zpl.indexOf("^FS", zpl.indexOf("^FDOBS:")));
         // Cuatro líneas de 30 caracteres es todo lo que entra desde y=68.
         assertTrue(impreso.replace(" ", "").length() <= 4 * 30, impreso);
         assertTrue(impreso.endsWith("..."), impreso);

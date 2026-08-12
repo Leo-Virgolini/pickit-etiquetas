@@ -136,6 +136,11 @@ marca con `...` y no con `…`, porque la fuente residual puede no traer ese gli
 de observaciones, la única que puede necesitarlo. Cuántas le tocan se calcula en píxeles contra
 `Y_LIMITE`, no como un número fijo de líneas.
 
+**Los rótulos van en negrita** (`CAJA:`, `BOLSA:`, `ROLLO:`, `OBS:`). Se imprime la línea completa
+y encima, corrida 1px, solo el rótulo: la segunda pasada se superpone exactamente sobre la primera y
+lo engrosa, sin tocar el valor. Así no hay que calcular el ancho del rótulo, que con una fuente
+proporcional no se puede saber de antemano.
+
 El aviso `NO ESTANDARIZADO` va **más grande y en negrita** (fuente 30, con la doble pasada de 1px
 que se usa en toda la etiqueta): es lo que tiene que frenar al operario, no un dato más de la lista.
 Como es siempre la única línea del bloque, no necesita correr nada abajo.

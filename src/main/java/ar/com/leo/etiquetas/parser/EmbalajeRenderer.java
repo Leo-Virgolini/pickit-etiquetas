@@ -105,9 +105,12 @@ public final class EmbalajeRenderer {
             String texto = truncar(partirPalabrasLargas(linea), maxLineas * MAX_CARACTERES);
 
             zpl.append(campo(X, y, fuente, maxLineas, texto));
-            // El aviso va en negrita, simulada con una segunda pasada corrida 1px, igual que ZONA
-            // y COD.EXT.
-            if (aviso) zpl.append(campo(X + 1, y, fuente, maxLineas, texto));
+            // Negrita simulada con una segunda pasada corrida 1px, igual que ZONA y COD.EXT. El
+            // aviso va entero; en las demás líneas se repasa solo el rótulo, que se superpone
+            // exactamente sobre el de la primera pasada. Así no hay que calcular su ancho, que con
+            // una fuente proporcional no se puede saber de antemano.
+            String negrita = aviso ? texto : rotulo(texto);
+            if (!negrita.isEmpty()) zpl.append(campo(X + 1, y, fuente, maxLineas, negrita));
 
             y += ALTO_LINEA;
         }
@@ -119,6 +122,12 @@ public final class EmbalajeRenderer {
                 + "^A0N," + fuente + ',' + fuente
                 + "^FB" + ANCHO + ',' + maxLineas + ",0,L"
                 + "^FD" + sanitizar(texto) + "^FS\n";
+    }
+
+    /** El rótulo de la línea, con sus dos puntos, o vacío si no tiene. */
+    private static String rotulo(String texto) {
+        int corte = texto.indexOf(':');
+        return corte == -1 ? "" : texto.substring(0, corte + 1);
     }
 
     /**
