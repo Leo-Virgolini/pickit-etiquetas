@@ -31,8 +31,8 @@ public final class EmbalajeRenderer {
         // cambia el embalaje y queda el número de bolsa viejo; con las dos salen cinco líneas y la
         // última se imprimiría sobre el separador de la zona de picking.
         String caja = unir(valor(datos.nroCaja()), valor(datos.nombreCaja()));
-        if (!caja.isEmpty()) lineas.add("CAJA " + caja);
-        else if (cargado(datos.nroBolsa())) lineas.add("BOLSA " + valor(datos.nroBolsa()));
+        if (!caja.isEmpty()) lineas.add("CAJA: " + caja);
+        else if (cargado(datos.nroBolsa())) lineas.add("BOLSA: " + valor(datos.nroBolsa()));
 
         if (cargado(datos.pluribol())) {
             String linea = "PLURIBOL: " + valor(datos.pluribol());
@@ -41,12 +41,12 @@ public final class EmbalajeRenderer {
         }
 
         if (cargado(datos.rollo())) {
-            String linea = "ROLLO " + valor(datos.rollo());
+            String linea = "ROLLO: " + valor(datos.rollo());
             if (cargado(datos.cantPanos())) linea += " - " + valor(datos.cantPanos()) + " paños";
             lineas.add(linea);
         }
 
-        if (cargado(datos.observaciones())) lineas.add("Obs: " + valor(datos.observaciones()));
+        if (cargado(datos.observaciones())) lineas.add("OBS: " + valor(datos.observaciones()));
 
         return lineas;
     }

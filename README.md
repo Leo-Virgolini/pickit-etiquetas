@@ -96,11 +96,11 @@ Dos sub-pestañas para obtener etiquetas ZPL, procesarlas y enviarlas a la impre
 
      | Condicion | Linea |
      |---|---|
-     | `N° Caja` y/o `Nombre Caja` | `CAJA 3 - GRANDE` |
-     | `N° Bolsa` | `BOLSA 5` |
+     | `N° Caja` y/o `Nombre Caja` | `CAJA: 3 - GRANDE` |
+     | `N° Bolsa` | `BOLSA: 5` |
      | `PLURIBOL` | `PLURIBOL: SI - 2 vueltas` (sin cantidad: `PLURIBOL: SI`) |
-     | `ROLLO INFLABLE` | `ROLLO DIAMANTE - 3 paños` (sin cantidad: `ROLLO DIAMANTE`) |
-     | `OBSERVACIONES` | `Obs: Colchon + Tapa` |
+     | `ROLLO INFLABLE` | `ROLLO: DIAMANTE - 3 paños` (sin cantidad: `ROLLO: DIAMANTE`) |
+     | `OBSERVACIONES` | `OBS: Colchon + Tapa` |
 
      Caja y bolsa no se combinan, asi que el maximo es de 4 lineas. Para hacerles lugar se elimina el texto de ML "Recorta esta parte de la etiqueta...", que ocupa esa franja. Si ML cambiara ese texto y no se encontrara, queda una advertencia en el log y los textos se encimarian.
   4. **Mensaje de pendientes al finalizar**: al terminar la descarga se abre un dialogo scrollable con la cantidad de SKUs sin medidas detectados en el lote, cuantos se agregaron efectivamente al Excel y cuantos ya figuraban, ademas del listado de SKUs. Se suman ahi los SKU **sin caja ni bolsa** cargada (el pluribol, el rollo y las observaciones no cuentan).

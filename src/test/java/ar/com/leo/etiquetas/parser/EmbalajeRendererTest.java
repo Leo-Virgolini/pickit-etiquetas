@@ -26,7 +26,7 @@ class EmbalajeRendererTest {
         List<String> lineas = EmbalajeRenderer.lineas(
                 datos("", "GRANDE", "3", "", "", "", "", ""));
 
-        assertEquals(List.of("CAJA 3 - GRANDE"), lineas);
+        assertEquals(List.of("CAJA: 3 - GRANDE"), lineas);
     }
 
     @Test
@@ -34,7 +34,7 @@ class EmbalajeRendererTest {
         List<String> lineas = EmbalajeRenderer.lineas(
                 datos("", "", "3", "", "", "", "", ""));
 
-        assertEquals(List.of("CAJA 3"), lineas);
+        assertEquals(List.of("CAJA: 3"), lineas);
     }
 
     @Test
@@ -42,7 +42,7 @@ class EmbalajeRendererTest {
         List<String> lineas = EmbalajeRenderer.lineas(
                 datos("", "GRANDE", "", "", "", "", "", ""));
 
-        assertEquals(List.of("CAJA GRANDE"), lineas);
+        assertEquals(List.of("CAJA: GRANDE"), lineas);
     }
 
     @Test
@@ -50,7 +50,7 @@ class EmbalajeRendererTest {
         List<String> lineas = EmbalajeRenderer.lineas(
                 datos("5", "", "", "", "", "", "", ""));
 
-        assertEquals(List.of("BOLSA 5"), lineas);
+        assertEquals(List.of("BOLSA: 5"), lineas);
     }
 
     // -------------------------------------------------------------------------------------------
@@ -78,7 +78,7 @@ class EmbalajeRendererTest {
         List<String> lineas = EmbalajeRenderer.lineas(
                 datos("", "", "", "", "", "DIAMANTE", "3", ""));
 
-        assertEquals(List.of("ROLLO DIAMANTE - 3 paños"), lineas);
+        assertEquals(List.of("ROLLO: DIAMANTE - 3 paños"), lineas);
     }
 
     @Test
@@ -86,7 +86,7 @@ class EmbalajeRendererTest {
         List<String> lineas = EmbalajeRenderer.lineas(
                 datos("", "", "", "", "", "CUADRADO", "", ""));
 
-        assertEquals(List.of("ROLLO CUADRADO"), lineas);
+        assertEquals(List.of("ROLLO: CUADRADO"), lineas);
     }
 
     @Test
@@ -94,7 +94,7 @@ class EmbalajeRendererTest {
         List<String> lineas = EmbalajeRenderer.lineas(
                 datos("", "", "", "", "", "", "", "Colchon + Tapa"));
 
-        assertEquals(List.of("Obs: Colchon + Tapa"), lineas);
+        assertEquals(List.of("OBS: Colchon + Tapa"), lineas);
     }
 
     // -------------------------------------------------------------------------------------------
@@ -107,10 +107,10 @@ class EmbalajeRendererTest {
                 datos("", "GRANDE", "3", "SI", "2", "DIAMANTE", "3", "Colchon + Tapa"));
 
         assertEquals(List.of(
-                "CAJA 3 - GRANDE",
+                "CAJA: 3 - GRANDE",
                 "PLURIBOL: SI - 2 vueltas",
-                "ROLLO DIAMANTE - 3 paños",
-                "Obs: Colchon + Tapa"), lineas);
+                "ROLLO: DIAMANTE - 3 paños",
+                "OBS: Colchon + Tapa"), lineas);
     }
 
     @Test
@@ -121,7 +121,7 @@ class EmbalajeRendererTest {
                 datos("5", "GRANDE", "3", "SI", "2", "DIAMANTE", "3", "Colchon"));
 
         assertEquals(4, lineas.size(), lineas.toString());
-        assertEquals("CAJA 3 - GRANDE", lineas.get(0));
+        assertEquals("CAJA: 3 - GRANDE", lineas.get(0));
     }
 
     @Test
@@ -130,7 +130,7 @@ class EmbalajeRendererTest {
         List<String> lineas = EmbalajeRenderer.lineas(
                 datos("", "", "", "", "", "", "", "Colchon\n+ Tapa"));
 
-        assertEquals(List.of("Obs: Colchon + Tapa"), lineas);
+        assertEquals(List.of("OBS: Colchon + Tapa"), lineas);
     }
 
     @Test
@@ -150,18 +150,18 @@ class EmbalajeRendererTest {
 
     @Test
     void elCampoZplApilaLasLineasCada22Pixeles() {
-        String zpl = EmbalajeRenderer.campoZpl(List.of("CAJA 3", "BOLSA 5"));
+        String zpl = EmbalajeRenderer.campoZpl(List.of("CAJA: 3", "BOLSA: 5"));
 
-        assertEquals("^FO450,85^A0N,18,18^FB340,1,0,L^FDCAJA 3^FS\n"
-                        + "^FO450,107^A0N,18,18^FB340,1,0,L^FDBOLSA 5^FS\n",
+        assertEquals("^FO450,85^A0N,18,18^FB340,1,0,L^FDCAJA: 3^FS\n"
+                        + "^FO450,107^A0N,18,18^FB340,1,0,L^FDBOLSA: 5^FS\n",
                 zpl);
     }
 
     @Test
     void elCampoZplNeutralizaLosCaracteresDeControlDeZpl() {
-        String zpl = EmbalajeRenderer.campoZpl(List.of("CAJA ^3~A"));
+        String zpl = EmbalajeRenderer.campoZpl(List.of("CAJA: ^3~A"));
 
-        assertTrue(zpl.contains("^FDCAJA  3 A^FS"), zpl);
+        assertTrue(zpl.contains("^FDCAJA:  3 A^FS"), zpl);
     }
 
     @Test

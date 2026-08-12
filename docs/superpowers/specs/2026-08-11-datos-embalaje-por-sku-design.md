@@ -90,14 +90,14 @@ public static String campoZpl(List<String> lineas)
 
 | Condición | Línea |
 |---|---|
-| N° Caja y Nombre Caja cargados | `CAJA 3 - GRANDE` |
-| solo uno de los dos | `CAJA 3` / `CAJA GRANDE` |
-| N° Bolsa cargado | `BOLSA 5` |
+| N° Caja y Nombre Caja cargados | `CAJA: 3 - GRANDE` |
+| solo uno de los dos | `CAJA: 3` / `CAJA: GRANDE` |
+| N° Bolsa cargado | `BOLSA: 5` |
 | PLURIBOL cargado, con cantidad | `PLURIBOL: SI - 2 vueltas` |
 | PLURIBOL cargado, sin cantidad | `PLURIBOL: SI` |
-| ROLLO cargado, con cantidad | `ROLLO DIAMANTE - 3 paños` |
-| ROLLO cargado, sin cantidad | `ROLLO DIAMANTE` |
-| OBSERVACIONES cargado | `Obs: Colchon + Tapa` |
+| ROLLO cargado, con cantidad | `ROLLO: DIAMANTE - 3 paños` |
+| ROLLO cargado, sin cantidad | `ROLLO: DIAMANTE` |
+| OBSERVACIONES cargado | `OBS: Colchon + Tapa` |
 
 El orden es siempre ese. **Caja y bolsa son excluyentes en el render**: si las dos están cargadas
 —pasa cuando cambia el embalaje y queda el número de bolsa viejo— gana la caja. Sin esa regla
@@ -118,10 +118,10 @@ Bloque de hasta 4 líneas en el margen superior derecho, dentro del mismo bloque
 inyecta al inicio de cada etiqueta:
 
 ```
-^FO450,85^A0N,18,18^FB340,1,0,L^FDCAJA 3 - GRANDE^FS
+^FO450,85^A0N,18,18^FB340,1,0,L^FDCAJA: 3 - GRANDE^FS
 ^FO450,107^A0N,18,18^FB340,1,0,L^FDPLURIBOL: SI - 2 vueltas^FS
-^FO450,129^A0N,18,18^FB340,1,0,L^FDROLLO DIAMANTE - 3 paños^FS
-^FO450,151^A0N,18,18^FB340,1,0,L^FDObs: Colchon + Tapa^FS
+^FO450,129^A0N,18,18^FB340,1,0,L^FDROLLO: DIAMANTE - 3 paños^FS
+^FO450,151^A0N,18,18^FB340,1,0,L^FDOBS: Colchon + Tapa^FS
 ```
 
 `x=450`, primera línea en `y=85`, paso de 22px, fuente 18. El `^FB340,1` acota cada línea al ancho
