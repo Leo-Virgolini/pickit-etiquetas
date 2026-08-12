@@ -93,11 +93,16 @@ public static String campoZpl(List<String> lineas)
 | N° Caja y Nombre Caja cargados | `CAJA: 3 - GRANDE` |
 | solo uno de los dos | `CAJA: 3` / `CAJA: GRANDE` |
 | N° Bolsa cargado | `BOLSA: 5` |
+| ni caja ni bolsa | `NO ESTANDARIZADO` |
 | PLURIBOL cargado, con cantidad | `PLURIBOL: SI - 2 vueltas` |
 | PLURIBOL cargado, sin cantidad | `PLURIBOL: SI` |
 | ROLLO cargado, con cantidad | `ROLLO: DIAMANTE - 3 paños` |
 | ROLLO cargado, sin cantidad | `ROLLO: DIAMANTE` |
 | OBSERVACIONES cargado | `OBS: Colchon + Tapa` |
+
+La primera línea siempre está: si el SKU no tiene ni caja ni bolsa se imprime `NO ESTANDARIZADO`,
+para que el operario distinga "todavía no le cargaron el embalaje" de una etiqueta generada sin esta
+función, en vez de embalar a criterio propio.
 
 El orden es siempre ese. **Caja y bolsa son excluyentes en el render**: si las dos están cargadas
 —pasa cuando cambia el embalaje y queda el número de bolsa viejo— gana la caja. Sin esa regla

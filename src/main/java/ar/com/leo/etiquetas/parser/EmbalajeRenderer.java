@@ -23,6 +23,9 @@ public final class EmbalajeRenderer {
     private static final int FUENTE = 22;
     private static final int ANCHO = 380;
 
+    /** Reemplaza a la línea de caja o bolsa cuando el SKU no tiene ninguna de las dos cargada. */
+    private static final String SIN_ESTANDARIZAR = "NO ESTANDARIZADO";
+
     private EmbalajeRenderer() {
     }
 
@@ -33,9 +36,14 @@ public final class EmbalajeRenderer {
         // Caja y bolsa son excluyentes: si están las dos cargadas gana la caja. Puede pasar cuando
         // cambia el embalaje y queda el número de bolsa viejo; con las dos salen cinco líneas y la
         // última se imprimiría sobre el separador de la zona de picking.
+        //
+        // Sin ninguna de las dos la línea igual se imprime, avisando: el operario tiene que poder
+        // distinguir "a este SKU todavía no le cargaron el embalaje" de una etiqueta generada sin
+        // esta función, en vez de embalar a criterio propio.
         String caja = unir(valor(datos.nroCaja()), valor(datos.nombreCaja()));
         if (!caja.isEmpty()) lineas.add("CAJA: " + caja);
         else if (cargado(datos.nroBolsa())) lineas.add("BOLSA: " + valor(datos.nroBolsa()));
+        else lineas.add(SIN_ESTANDARIZAR);
 
         if (cargado(datos.pluribol())) {
             String linea = "PLURIBOL: " + valor(datos.pluribol());

@@ -62,7 +62,7 @@ class EmbalajeRendererTest {
         List<String> lineas = EmbalajeRenderer.lineas(
                 datos("", "", "", "SI", "2", "", "", ""));
 
-        assertEquals(List.of("PLURIBOL: SI - 2 vueltas"), lineas);
+        assertEquals(List.of("NO ESTANDARIZADO", "PLURIBOL: SI - 2 vueltas"), lineas);
     }
 
     @Test
@@ -70,7 +70,7 @@ class EmbalajeRendererTest {
         List<String> lineas = EmbalajeRenderer.lineas(
                 datos("", "", "", "SI", "", "", "", ""));
 
-        assertEquals(List.of("PLURIBOL: SI"), lineas);
+        assertEquals(List.of("NO ESTANDARIZADO", "PLURIBOL: SI"), lineas);
     }
 
     @Test
@@ -78,7 +78,7 @@ class EmbalajeRendererTest {
         List<String> lineas = EmbalajeRenderer.lineas(
                 datos("", "", "", "", "", "DIAMANTE", "3", ""));
 
-        assertEquals(List.of("ROLLO: DIAMANTE - 3 paños"), lineas);
+        assertEquals(List.of("NO ESTANDARIZADO", "ROLLO: DIAMANTE - 3 paños"), lineas);
     }
 
     @Test
@@ -86,7 +86,7 @@ class EmbalajeRendererTest {
         List<String> lineas = EmbalajeRenderer.lineas(
                 datos("", "", "", "", "", "CUADRADO", "", ""));
 
-        assertEquals(List.of("ROLLO: CUADRADO"), lineas);
+        assertEquals(List.of("NO ESTANDARIZADO", "ROLLO: CUADRADO"), lineas);
     }
 
     @Test
@@ -94,7 +94,7 @@ class EmbalajeRendererTest {
         List<String> lineas = EmbalajeRenderer.lineas(
                 datos("", "", "", "", "", "", "", "Colchon + Tapa"));
 
-        assertEquals(List.of("OBS: Colchon + Tapa"), lineas);
+        assertEquals(List.of("NO ESTANDARIZADO", "OBS: Colchon + Tapa"), lineas);
     }
 
     // -------------------------------------------------------------------------------------------
@@ -130,17 +130,29 @@ class EmbalajeRendererTest {
         List<String> lineas = EmbalajeRenderer.lineas(
                 datos("", "", "", "", "", "", "", "Colchon\n+ Tapa"));
 
-        assertEquals(List.of("OBS: Colchon + Tapa"), lineas);
+        assertEquals(List.of("NO ESTANDARIZADO", "OBS: Colchon + Tapa"), lineas);
     }
 
     @Test
-    void sinDatosNoHayLineas() {
-        assertEquals(List.of(), EmbalajeRenderer.lineas(DatosEmbalaje.VACIO));
+    void sinCajaNiBolsaSeAvisaEnLaEtiqueta() {
+        assertEquals(List.of("NO ESTANDARIZADO"), EmbalajeRenderer.lineas(DatosEmbalaje.VACIO));
+    }
+
+    @Test
+    void sinCajaNiBolsaLosAgregadosSeSiguenMostrando() {
+        List<String> lineas = EmbalajeRenderer.lineas(
+                datos("", "", "", "SI", "2", "DIAMANTE", "3", "Colchon"));
+
+        assertEquals(List.of(
+                "NO ESTANDARIZADO",
+                "PLURIBOL: SI - 2 vueltas",
+                "ROLLO: DIAMANTE - 3 paños",
+                "OBS: Colchon"), lineas);
     }
 
     @Test
     void losEspaciosSobrantesNoCuentanComoDato() {
-        assertEquals(List.of(), EmbalajeRenderer.lineas(
+        assertEquals(List.of("NO ESTANDARIZADO"), EmbalajeRenderer.lineas(
                 datos("  ", "  ", "  ", "  ", "  ", "  ", "  ", "  ")));
     }
 

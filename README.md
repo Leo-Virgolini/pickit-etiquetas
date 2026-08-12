@@ -98,6 +98,7 @@ Dos sub-pestañas para obtener etiquetas ZPL, procesarlas y enviarlas a la impre
      |---|---|
      | `N° Caja` y/o `Nombre Caja` | `CAJA: 3 - GRANDE` |
      | `N° Bolsa` | `BOLSA: 5` |
+     | ni caja ni bolsa | `NO ESTANDARIZADO` |
      | `PLURIBOL` | `PLURIBOL: SI - 2 vueltas` (sin cantidad: `PLURIBOL: SI`) |
      | `ROLLO INFLABLE` | `ROLLO: DIAMANTE - 3 paños` (sin cantidad: `ROLLO: DIAMANTE`) |
      | `OBSERVACIONES` | `OBS: Colchon + Tapa` |
