@@ -30,6 +30,11 @@ public final class EmbalajeRenderer {
      * poco más de la mitad del alto nominal: 380 / (22 · 0,55) ≈ 31, redondeado para abajo.
      */
     private static final int MAX_CARACTERES = 36;
+    /**
+     * Largo máximo de una palabra sin cortar. Es menor que MAX_CARACTERES para que la primera pieza
+     * entre en la misma línea que el rótulo ("OBS: " son 5 caracteres).
+     */
+    private static final int MAX_PALABRA = 30;
 
     /** Reemplaza a la línea de caja o bolsa cuando el SKU no tiene ninguna de las dos cargada. */
     private static final String SIN_ESTANDARIZAR = "NO ESTANDARIZADO";
@@ -77,14 +82,14 @@ public final class EmbalajeRenderer {
         StringBuilder zpl = new StringBuilder();
         int y = Y_INICIAL;
         for (int i = 0; i < lineas.size(); i++) {
-            // La última línea se queda con todo el alto libre que sobra. Es la de observaciones,
-            // el único texto que puede no entrar en una línea: con ^FB de una sola línea ZPL no
-            // descarta el sobrante, lo reimprime encima de la misma y queda ilegible.
+            // La última línea se queda con todo el alto libre que sobra, así que puede repartirse
+            // en varias: con ^FB de una sola línea ZPL no descarta el sobrante, lo reimprime encima
+            // de la misma y queda ilegible.
             boolean ultima = i == lineas.size() - 1;
             int maxLineas = ultima ? Math.max(1, MAX_LINEAS - i) : 1;
             // Las líneas que no son la última no pueden crecer sin correr las de abajo, así que se
             // cortan: el nombre de caja también es texto libre y puede no entrar en una línea.
-            String texto = ultima ? lineas.get(i) : truncar(lineas.get(i));
+            String texto = ultima ? partirPalabrasLargas(lineas.get(i)) : truncar(lineas.get(i));
 
             zpl.append("^FO").append(X).append(',').append(y)
                     .append("^A0N,").append(FUENTE).append(',').append(FUENTE)
@@ -102,6 +107,24 @@ public final class EmbalajeRenderer {
      */
     private static String sanitizar(String texto) {
         return texto.replace('^', ' ').replace('~', ' ');
+    }
+
+    /**
+     * Inserta cortes en las palabras que no entran en una línea. ^FB corta por palabras: una
+     * palabra más larga que el ancho se baja entera a la línea siguiente, dejando el rótulo solo
+     * arriba ("OBS:" en una línea y el texto en la de abajo). Pasa con códigos y URLs, que no
+     * tienen espacios donde cortar.
+     */
+    private static String partirPalabrasLargas(String texto) {
+        StringBuilder salida = new StringBuilder(texto.length() + 8);
+        for (String palabra : texto.split(" ")) {
+            if (!salida.isEmpty()) salida.append(' ');
+            for (int i = 0; i < palabra.length(); i += MAX_PALABRA) {
+                if (i > 0) salida.append(' ');
+                salida.append(palabra, i, Math.min(i + MAX_PALABRA, palabra.length()));
+            }
+        }
+        return salida.toString();
     }
 
     private static String truncar(String texto) {

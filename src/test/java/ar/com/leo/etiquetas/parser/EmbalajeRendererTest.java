@@ -186,10 +186,27 @@ class EmbalajeRendererTest {
 
     @Test
     void laUltimaLineaNoSeTruncaPorqueTieneAltoDeSobra() {
-        String largo = "OBS: " + "x".repeat(200);
-        String zpl = EmbalajeRenderer.campoZpl(List.of("CAJA: 3", largo));
+        String zpl = EmbalajeRenderer.campoZpl(List.of("CAJA: 3", "OBS: " + "x".repeat(200)));
 
-        assertTrue(zpl.contains(largo), "la última línea se muestra entera, repartida en varias");
+        String impreso = zpl.substring(zpl.lastIndexOf("^FDOBS:") + 3, zpl.lastIndexOf("^FS"));
+        assertEquals(200, impreso.replace(" ", "").length() - "OBS:".length(),
+                "no se pierde ningún carácter: solo se agregan cortes");
+    }
+
+    @Test
+    void unaPalabraMasLargaQueLaLineaSeParteParaQuePuedaEnvolver() {
+        // ^FB corta por palabras: una palabra que no entra se baja entera a la línea siguiente,
+        // dejando el rótulo solo arriba. Partirla deja que el texto arranque en la misma línea.
+        String zpl = EmbalajeRenderer.campoZpl(List.of("CAJA: 3", "OBS: " + "a".repeat(50)));
+
+        assertTrue(zpl.contains("^FDOBS: " + "a".repeat(30) + " " + "a".repeat(20) + "^FS"), zpl);
+    }
+
+    @Test
+    void unTextoConEspaciosNoSeToca() {
+        String zpl = EmbalajeRenderer.campoZpl(List.of("CAJA: 3", "OBS: Colchon + Tapa"));
+
+        assertTrue(zpl.contains("^FDOBS: Colchon + Tapa^FS"), zpl);
     }
 
     @Test
