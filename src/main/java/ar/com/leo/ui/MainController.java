@@ -1684,10 +1684,12 @@ public class MainController {
                     // Va debajo del #X (que termina en y=65) y encima del "Pack ID:" de ML (y=129),
                     // ocupando el ancho hasta x=400. El margen superior derecho quedó para las
                     // líneas de embalaje, que necesitan todo el alto para las observaciones largas.
+                    // Los SKU son de 7 dígitos, así que el texto mide 14 caracteres: con fuente 42
+                    // ocupa ~322 de los 380 de ancho y entra sin necesidad de una segunda línea.
                     String medirText = "MEDIR: " + sku;
                     medirPrefix =
                             "^FO20,70^GB380,52,52^FS\n"
-                            + "^FO20,77^A0N,38,38^FB380,1,0,C^FR^FD" + medirText + "^FS\n";
+                            + "^FO20,75^A0N,42,42^FB380,1,0,C^FR^FD" + medirText + "^FS\n";
                 }
                 raw = raw.substring(0, insertIdx) + "^LH0,0\n" + posField1 + "\n" + posField2 + "\n" + posField3 + "\n" + embalajeZpl + medirPrefix + raw.substring(insertIdx);
                 labelPosition++;
