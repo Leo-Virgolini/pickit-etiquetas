@@ -15,11 +15,13 @@ public final class EmbalajeRenderer {
     // Bloque en el margen superior derecho: debajo del banner MEDIR (que termina en y=80) y por
     // encima del separador de la zona de picking (y=180). Cuatro líneas llegan hasta y≈177, así que
     // el alto de línea y la fuente están al máximo que entra en esa franja.
-    private static final int X = 450;
+    // x=410 es el límite: a la izquierda, entre y=129 y y=160, está el bloque "Pack ID: ..." de ML,
+    // cuyo número llega hasta x≈400 con su fuente 30.
+    private static final int X = 410;
     private static final int Y_INICIAL = 83;
     private static final int ALTO_LINEA = 24;
     private static final int FUENTE = 22;
-    private static final int ANCHO = 340;
+    private static final int ANCHO = 380;
 
     private EmbalajeRenderer() {
     }
