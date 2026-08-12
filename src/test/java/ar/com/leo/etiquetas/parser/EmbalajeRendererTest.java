@@ -58,25 +58,25 @@ class EmbalajeRendererTest {
     @Test
     void rolloConPanos() {
         List<String> lineas = EmbalajeRenderer.lineas(
-                datos("", "", "", "DIAMANTE", "3", ""));
+                datos("", "", "3", "DIAMANTE", "3", ""));
 
-        assertEquals(List.of("NO ESTANDARIZADO", "ROLLO: DIAMANTE - 3 paños"), lineas);
+        assertEquals(List.of("CAJA: 3", "ROLLO: DIAMANTE - 3 paños"), lineas);
     }
 
     @Test
     void rolloSinPanos() {
         List<String> lineas = EmbalajeRenderer.lineas(
-                datos("", "", "", "CUADRADO", "", ""));
+                datos("", "", "3", "CUADRADO", "", ""));
 
-        assertEquals(List.of("NO ESTANDARIZADO", "ROLLO: CUADRADO"), lineas);
+        assertEquals(List.of("CAJA: 3", "ROLLO: CUADRADO"), lineas);
     }
 
     @Test
     void observaciones() {
         List<String> lineas = EmbalajeRenderer.lineas(
-                datos("", "", "", "", "", "Colchon + Tapa"));
+                datos("", "", "3", "", "", "Colchon + Tapa"));
 
-        assertEquals(List.of("NO ESTANDARIZADO", "OBS: Colchon + Tapa"), lineas);
+        assertEquals(List.of("CAJA: 3", "OBS: Colchon + Tapa"), lineas);
     }
 
     // -------------------------------------------------------------------------------------------
@@ -109,9 +109,9 @@ class EmbalajeRendererTest {
     void losSaltosDeLineaDelExcelSeColapsan() {
         // OBSERVACIONES cargado con Alt+Enter: el LF crudo dentro del ^FD pega las palabras.
         List<String> lineas = EmbalajeRenderer.lineas(
-                datos("", "", "", "", "", "Colchon\n+ Tapa"));
+                datos("", "", "3", "", "", "Colchon\n+ Tapa"));
 
-        assertEquals(List.of("NO ESTANDARIZADO", "OBS: Colchon + Tapa"), lineas);
+        assertEquals(List.of("CAJA: 3", "OBS: Colchon + Tapa"), lineas);
     }
 
     @Test
@@ -120,14 +120,13 @@ class EmbalajeRendererTest {
     }
 
     @Test
-    void sinCajaNiBolsaLosAgregadosSeSiguenMostrando() {
+    void sinCajaNiBolsaNoSeMuestraNadaMas() {
+        // Sin embalaje definido, el rollo y las observaciones no aplican: la etiqueta solo tiene
+        // que decir que a ese SKU le falta el dato.
         List<String> lineas = EmbalajeRenderer.lineas(
                 datos("", "", "", "DIAMANTE", "3", "Colchon"));
 
-        assertEquals(List.of(
-                "NO ESTANDARIZADO",
-                "ROLLO: DIAMANTE - 3 paños",
-                "OBS: Colchon"), lineas);
+        assertEquals(List.of("NO ESTANDARIZADO"), lineas);
     }
 
     @Test

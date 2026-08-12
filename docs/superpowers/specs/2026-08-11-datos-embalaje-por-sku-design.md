@@ -97,6 +97,9 @@ La primera línea siempre está: si el SKU no tiene ni caja ni bolsa se imprime 
 para que el operario distinga "todavía no le cargaron el embalaje" de una etiqueta generada sin esta
 función, en vez de embalar a criterio propio.
 
+**En ese caso es la única línea**: sin embalaje definido, el rollo y las observaciones no aplican, y
+mostrarlos solo agregaría ruido alrededor del dato que falta.
+
 El orden es siempre ese. **Caja y bolsa son excluyentes en el render**: si las dos están cargadas
 —pasa cuando cambia el embalaje y queda el número de bolsa viejo— gana la caja. Sin esa regla
 saldrían cuatro líneas y la última se imprimiría sobre el separador de la zona de picking y el

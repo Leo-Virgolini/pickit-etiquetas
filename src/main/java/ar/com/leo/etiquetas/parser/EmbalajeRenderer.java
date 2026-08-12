@@ -60,7 +60,12 @@ public final class EmbalajeRenderer {
         String caja = unir(valor(datos.nroCaja()), valor(datos.nombreCaja()));
         if (!caja.isEmpty()) lineas.add("CAJA: " + caja);
         else if (cargado(datos.nroBolsa())) lineas.add("BOLSA: " + valor(datos.nroBolsa()));
-        else lineas.add(SIN_ESTANDARIZAR);
+        else {
+            // Sin embalaje definido, el rollo y las observaciones no aplican: la etiqueta solo
+            // tiene que decir que a ese SKU le falta el dato, sin ruido alrededor.
+            lineas.add(SIN_ESTANDARIZAR);
+            return lineas;
+        }
 
         if (cargado(datos.rollo())) {
             String linea = "ROLLO: " + valor(datos.rollo());
