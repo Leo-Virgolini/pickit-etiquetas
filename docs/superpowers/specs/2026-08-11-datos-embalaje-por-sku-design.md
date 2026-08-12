@@ -60,7 +60,7 @@ el orden importa porque los patrones se solapan:
 
 ## Modelo
 
-**`ar.com.leo.etiquetas.model.DatosEmbalaje`** (record nuevo), con los ocho campos como `String` —
+**`ar.com.leo.etiquetas.model.DatosEmbalaje`** (record nuevo), con los seis campos como `String` —
 son texto que se imprime tal cual, no se opera con ellos:
 
 ```java
@@ -99,8 +99,8 @@ función, en vez de embalar a criterio propio.
 
 El orden es siempre ese. **Caja y bolsa son excluyentes en el render**: si las dos están cargadas
 —pasa cuando cambia el embalaje y queda el número de bolsa viejo— gana la caja. Sin esa regla
-saldrían cinco líneas y la quinta se imprimiría sobre el separador de la zona de picking y el
-título del producto. Así el máximo es siempre de 4 líneas.
+saldrían cuatro líneas y la última se imprimiría sobre el separador de la zona de picking y el
+título del producto. Así el máximo es siempre de 3 líneas.
 
 Los valores se colapsan antes de imprimirse (saltos de línea y espacios repetidos): el usuario
 puede haber usado Alt+Enter en OBSERVACIONES, y un LF crudo dentro de un `^FD` pega las palabras
@@ -121,22 +121,22 @@ inyecta al inicio de cada etiqueta:
 ^FO410,68^A0N,22,22^FB380,4,0,L^FDOBS: Colchon + Tapa^FS
 ```
 
-`x=410`, primera línea en `y=20`, paso de 24px, fuente 22. Entran hasta 6 líneas: la última llega a
-y≈162, justo antes del separador de la zona de picking (y=180).
+`x=410`, primera línea en `y=20`, paso de 24px, fuente 22. El bloque llega como mucho hasta
+`Y_LIMITE = 178`, justo antes del separador de la zona de picking (y=180).
 
 Las líneas que no son la última se **truncan** con `…` a 36 caracteres: no pueden crecer sin correr
 las de abajo, y el nombre de caja también es texto libre del usuario.
 
-**La última línea recibe todo el alto libre que sobra** (`MAX_LINEAS - índice`), así que puede
-repartirse en varias: con `^FB` de una sola línea ZPL no descarta el sobrante, lo reimprime encima
-de la misma y queda ilegible.
+**La última línea recibe todo el alto libre que sobra**, así que puede repartirse en varias: con
+`^FB` de una sola línea ZPL no descarta el sobrante, lo reimprime encima de la misma y queda
+ilegible. Cuántas le tocan se calcula en píxeles contra `Y_LIMITE`, no como un número fijo de
+líneas, porque el aviso de más arriba puede ser más alto.
 
 El aviso `NO ESTANDARIZADO` va **más grande y en negrita** (fuente 30, alto de línea 34, con la
 doble pasada de 1px que se usa en toda la etiqueta): es lo que tiene que frenar al operario, no un
-dato más de la lista. Al ser más alto corre las líneas de abajo, así que el alto disponible para la
-última se calcula en píxeles contra `Y_LIMITE` y no como un número fijo de líneas.
+dato más de la lista.
 
-En esa última línea, además, se **parten las palabras de más de 30 caracteres**. `^FB` corta por
+En la última línea, además, se **parten las palabras de más de 30 caracteres**. `^FB` corta por
 palabras: una que no entra se baja entera a la línea siguiente y deja el rótulo solo arriba (`OBS:`
 en una línea y el texto en la de abajo). Pasa con códigos y URLs, que no traen espacios donde
 cortar. El corte es de 30 y no de 36 para que la primera pieza entre en la misma línea que el
@@ -144,8 +144,7 @@ rótulo.
 
 **El banner MEDIR se reubica** debajo del `#N` (`^FO20,70^GB380,52,52`, o sea x 20–400 y 70–122),
 entre el número de posición (termina en y=65) y el `Pack ID` de ML (empieza en y=129). Antes ocupaba
-el margen superior derecho, que ahora se necesita entero para las observaciones largas. El `^FB340,1` acota cada línea al ancho
-disponible: un valor largo se recorta en vez de derramarse fuera del área imprimible.
+el margen superior derecho, que ahora se necesita entero para las observaciones largas.
 
 **Por qué ahí.** A la derecha de x=410 no hay ningún campo de ML entre y=0 y y=180 salvo el texto
 que se elimina. El límite por la izquierda lo marca el bloque `Pack ID: ...`, cuyo número llega
