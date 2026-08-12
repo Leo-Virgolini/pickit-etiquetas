@@ -1599,7 +1599,6 @@ public class MainController {
                                         Set<String> embalajesFaltantesOut) {
         Map<String, String> skuToExtCode = excelMapping.skuToExternalCode();
         Map<String, ComboProduct> normalizedCombos = loadNormalizedCombos();
-        boolean embalajeConfigurado = hayDatosDeEmbalaje(medidas);
         List<SortedLabelGroup> newGroups = new ArrayList<>();
         int labelPosition = 1;
         Set<String> skusYaMarcados = new HashSet<>();
@@ -1637,7 +1636,7 @@ public class MainController {
             // Datos de embalaje del SKU. Se resuelven una vez por grupo: las líneas son iguales en
             // todas las etiquetas del grupo.
             String embalajeZpl = "";
-            if (skuElegible && embalajeConfigurado) {
+            if (skuElegible) {
                 DatosEmbalaje datos = medidaSku == null ? DatosEmbalaje.VACIO : medidaSku.embalaje();
                 embalajeZpl = EmbalajeRenderer.campoZpl(EmbalajeRenderer.lineas(datos));
                 if (!datos.tieneCajaOBolsa() && embalajesFaltantesOut != null) {
@@ -1985,17 +1984,6 @@ public class MainController {
         }
         m.appendTail(sb);
         return sb.toString();
-    }
-
-    /**
-     * Si ningún SKU tiene datos de embalaje cargados, la función se trata como no configurada: el
-     * Excel todavía no tiene las columnas o están vacías. Sin esto, un archivo anterior a esta
-     * función haría que el aviso reclamara el lote entero en cada corrida sin que el usuario pueda
-     * hacer nada al respecto.
-     */
-    private boolean hayDatosDeEmbalaje(Map<String, ar.com.leo.etiquetas.model.MedidaSku> medidas) {
-        return medidas != null && medidas.values().stream()
-                .anyMatch(m -> !DatosEmbalaje.VACIO.equals(m.embalaje()));
     }
 
     /**

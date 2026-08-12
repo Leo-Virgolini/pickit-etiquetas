@@ -165,9 +165,10 @@ Desaparece la categoría de "código inexistente": existía solo por el catálog
 Si el módulo de medidas está apagado, la ruta está vacía o el archivo no es usable, no se inyecta
 nada y no se avisa nada — la etiqueta sale como antes de esta función.
 
-Lo mismo si **ningún SKU del Excel tiene datos de embalaje**: el archivo todavía no tiene las
-columnas, o están vacías. Sin esa guarda, un Excel anterior a esta función haría que el aviso
-reclamara el lote entero en cada corrida sin que el usuario pueda hacer nada al respecto.
+Si el Excel tiene el módulo activo pero le faltan las columnas de embalaje, todas las etiquetas
+salen con `NO ESTANDARIZADO` y el aviso lista el lote entero. Es intencional: el archivo de
+producción ya tiene las columnas, y un aviso ruidoso es preferible a que la función se apague sola
+sin que nadie lo note.
 
 ## Qué se elimina
 
