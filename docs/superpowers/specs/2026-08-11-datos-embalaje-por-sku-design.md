@@ -127,9 +127,15 @@ y≈162, justo antes del separador de la zona de picking (y=180).
 Las líneas que no son la última se **truncan** con `…` a 36 caracteres: no pueden crecer sin correr
 las de abajo, y el nombre de caja también es texto libre del usuario.
 
-**La última línea recibe todo el alto libre que sobra**", (`MAX_LINEAS - índice`), porque es la de
-observaciones, el único texto que puede no entrar en una línea: con `^FB` de una sola línea ZPL no
-descarta el sobrante, lo reimprime encima de la misma y queda ilegible.
+**La última línea recibe todo el alto libre que sobra** (`MAX_LINEAS - índice`), así que puede
+repartirse en varias: con `^FB` de una sola línea ZPL no descarta el sobrante, lo reimprime encima
+de la misma y queda ilegible.
+
+En esa última línea, además, se **parten las palabras de más de 30 caracteres**. `^FB` corta por
+palabras: una que no entra se baja entera a la línea siguiente y deja el rótulo solo arriba (`OBS:`
+en una línea y el texto en la de abajo). Pasa con códigos y URLs, que no traen espacios donde
+cortar. El corte es de 30 y no de 36 para que la primera pieza entre en la misma línea que el
+rótulo.
 
 **El banner MEDIR se reubica** debajo del `#N` (`^FO20,70^GB380,52,52`, o sea x 20–400 y 70–122),
 entre el número de posición (termina en y=65) y el `Pack ID` de ML (empieza en y=129). Antes ocupaba
