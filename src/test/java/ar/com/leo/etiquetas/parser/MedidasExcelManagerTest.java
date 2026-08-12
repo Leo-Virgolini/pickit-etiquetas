@@ -283,6 +283,100 @@ class MedidasExcelManagerTest {
         }
     }
 
+    @Test
+    void noPisaLosEncabezadosCuandoSkuNoEstaEnLaPrimeraColumna() throws Exception {
+        // El usuario agregó una columna propia a la izquierda, así que SKU quedó en la B.
+        String[] headers = {"ID interno", "SKU", "PRODUCTO", "SUBIDO", "N° Caja", "ERROR"};
+        Path excel = crearExcel("sku-corrido.xlsx", headers,
+                new String[]{"X-1", "1241212", "Producto A", "NO", "3", ""});
+
+        manager.agregarPendientes(excel, List.of("999999"));
+
+        assertEquals("ID interno", leerHeader(excel, 0), "no se deben reescribir los encabezados");
+        assertEquals("SKU", leerHeader(excel, 1));
+        assertEquals("3", manager.leerMedidas(excel).get("1241212").embalaje().nroCaja());
+    }
+
+    @Test
+    void noEligeUnaHojaAuxiliarDelUsuarioComoHojaDeMedidas() throws Exception {
+        // Una tabla de búsqueda con columna SKU no es la hoja de medidas: no tiene ni SUBIDO ni
+        // las columnas de dimensiones, y escribir ahí destruiría los datos del usuario.
+        Path excel = crearExcel("medidas.xlsx", HEADERS_CON_EMBALAJE,
+                new String[]{"1241212", "Producto A"});
+        agregarHojaAuxiliarAlPrincipio(excel, "Catalogo", new String[]{"SKU", "DESCRIPCION"});
+
+        manager.agregarPendientes(excel, List.of("999999"));
+
+        try (Workbook wb = WorkbookFactory.create(excel.toFile(), null, true)) {
+            Sheet auxiliar = wb.getSheet("Catalogo");
+            assertEquals(2, auxiliar.getRow(0).getLastCellNum(), "la hoja auxiliar no se toca");
+            assertEquals(0, auxiliar.getLastRowNum());
+        }
+        assertNotNull(manager.leerMedidas(excel).get("999999"), "el SKU va a la hoja de medidas");
+    }
+
+    @Test
+    void laColumnaErrorSeCreaAlFinalSinPisarColumnasPropias() throws Exception {
+        String[] headers = {
+                "SKU", "PRODUCTO", "Ancho\ncm", "Alto\ncm", "Profundidad\ncm",
+                "Peso físico\n(empaque + producto)\nkg",
+                "Ancho +20%", "Alto +20%", "Profunidad +20%",
+                "Peso físico (empaque + producto) +20%", "SUBIDO",
+                "N° Bolsa", "Nombre Caja", "N° Caja", "PLURIBOL", "CANT PLURIBOL",
+                "ROLLO INFLABLE", "CANT PAÑOS", "OBSERVACIONES",
+                "MI COLUMNA"
+        };
+        Path excel = crearExcel("sin-error.xlsx", headers,
+                new String[]{"1241212", "Producto A", "", "", "", "", "", "", "", "", "NO",
+                        "", "", "", "", "", "", "", "", "dato mio"});
+
+        manager.agregarPendientes(excel, List.of("999999"));
+
+        assertEquals("MI COLUMNA", leerHeader(excel, 19), "no se pisa la columna del usuario");
+        assertEquals("ERROR", leerHeader(excel, 20));
+        assertEquals("dato mio", leerCelda(excel, 1, 19));
+    }
+
+    @Test
+    void unaHojaSinEncabezadosNoRompeLaLectura() throws Exception {
+        // Un .xlsx recién creado a mano: la app tiene que poder inicializarlo.
+        Path excel = tempDir.resolve("hoja-vacia.xlsx");
+        try (XSSFWorkbook wb = new XSSFWorkbook()) {
+            wb.createSheet("MEDIDAS");
+            try (FileOutputStream fos = new FileOutputStream(excel.toFile())) {
+                wb.write(fos);
+            }
+        }
+
+        assertEquals(Map.of(), manager.leerMedidas(excel));
+
+        manager.agregarPendientes(excel, List.of("999999"));
+        assertEquals("SKU", leerHeader(excel, 0));
+        assertNotNull(manager.leerMedidas(excel).get("999999"));
+    }
+
+    @Test
+    void siFaltaLaColumnaSubidoSeCreaEnVezDeEscribirPorPosicion() throws Exception {
+        // El usuario renombró SUBIDO, así que la app no la reconoce. Escribir el "NO" en el índice
+        // 10 caería sobre una de sus columnas de embalaje.
+        String[] headers = {
+                "SKU", "PRODUCTO", "Ancho\ncm", "Alto\ncm", "Profundidad\ncm",
+                "Peso físico\n(empaque + producto)\nkg",
+                "Ancho +20%", "Alto +20%", "Profunidad +20%",
+                "Peso físico (empaque + producto) +20%",
+                "N° Bolsa", "Nombre Caja", "N° Caja"
+        };
+        Path excel = crearExcel("sin-subido.xlsx", headers,
+                new String[]{"1241212", "Producto A", "", "", "", "", "", "", "", "",
+                        "5", "GRANDE", "3"});
+
+        manager.agregarPendientes(excel, List.of("999999"));
+
+        assertEquals("N° Bolsa", leerHeader(excel, 10), "no se pisa la columna de embalaje");
+        assertEquals("5", manager.leerMedidas(excel).get("1241212").embalaje().nroBolsa());
+        assertEquals("SUBIDO", leerHeader(excel, 13));
+    }
+
     // -------------------------------------------------------------------------------------------
     // Helpers
     // -------------------------------------------------------------------------------------------
@@ -306,6 +400,20 @@ class MedidasExcelManagerTest {
         return excel;
     }
 
+    private void agregarHojaAuxiliarAlPrincipio(Path excel, String nombre, String[] headers) throws Exception {
+        try (Workbook wb = abrirParaEditar(excel)) {
+            Sheet aux = wb.createSheet(nombre);
+            Row header = aux.createRow(0);
+            for (int i = 0; i < headers.length; i++) {
+                header.createCell(i, CellType.STRING).setCellValue(headers[i]);
+            }
+            wb.setSheetOrder(nombre, 0);
+            try (FileOutputStream fos = new FileOutputStream(excel.toFile())) {
+                wb.write(fos);
+            }
+        }
+    }
+
     private void agregarHojaAjenaAlPrincipio(Path excel, String nombre) throws Exception {
         try (Workbook wb = abrirParaEditar(excel)) {
             Sheet ajena = wb.createSheet(nombre);
@@ -314,6 +422,21 @@ class MedidasExcelManagerTest {
             try (FileOutputStream fos = new FileOutputStream(excel.toFile())) {
                 wb.write(fos);
             }
+        }
+    }
+
+    private String leerHeader(Path excel, int col) throws Exception {
+        try (Workbook wb = WorkbookFactory.create(excel.toFile(), null, true)) {
+            Cell cell = wb.getSheet("MEDIDAS").getRow(0).getCell(col);
+            return cell == null ? null : cell.getStringCellValue();
+        }
+    }
+
+    private String leerCelda(Path excel, int fila, int col) throws Exception {
+        try (Workbook wb = WorkbookFactory.create(excel.toFile(), null, true)) {
+            Cell cell = wb.getSheet("MEDIDAS").getRow(fila).getCell(col);
+            if (cell == null || cell.getCellType() == CellType.BLANK) return "";
+            return cell.getStringCellValue();
         }
     }
 

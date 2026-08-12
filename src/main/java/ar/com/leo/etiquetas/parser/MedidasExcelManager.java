@@ -51,16 +51,6 @@ public class MedidasExcelManager {
             "ERROR"
     };
 
-    private static final int COL_SKU = 0;
-    private static final int COL_PRODUCTO = 1;
-    private static final int COL_ANCHO = 2;
-    private static final int COL_ALTO = 3;
-    private static final int COL_PROFUNDIDAD = 4;
-    private static final int COL_PESO = 5;
-    private static final int COL_ANCHO_MAS = 6;
-    private static final int COL_ALTO_MAS = 7;
-    private static final int COL_PROFUNDIDAD_MAS = 8;
-    private static final int COL_PESO_MAS = 9;
     private static final int COL_SUBIDO = 10;
     // Posición de ERROR en un archivo nuevo, después de las ocho columnas de embalaje. En los
     // archivos existentes se ubica por header: el usuario decide dónde van sus columnas.
@@ -92,9 +82,10 @@ public class MedidasExcelManager {
             return new int[]{ancho, alto, profundidad, peso, anchoMas, altoMas, profundidadMas, pesoMas};
         }
 
-        boolean tieneAlgunaDeEmbalaje() {
-            return bolsa != -1 || nombreCaja != -1 || caja != -1 || pluribol != -1
-                    || cantPluribol != -1 || rollo != -1 || panos != -1 || observaciones != -1;
+        /** Distingue la hoja de medidas de cualquier otra tabla del usuario que tenga un SKU. */
+        boolean esDeLaApp() {
+            return subido != -1 || error != -1 || ancho != -1 || alto != -1
+                    || profundidad != -1 || peso != -1;
         }
     }
 
@@ -183,6 +174,10 @@ public class MedidasExcelManager {
         Sheet sheet = hojaMedidas(workbook);
         if (sheet == null) return medidas;
 
+        // Una hoja sin encabezados es un archivo recién creado: se devuelve vacío para que
+        // agregarPendientes lo inicialice, en vez de dejar el módulo mudo con una excepción.
+        if (sheet.getRow(0) == null) return medidas;
+
         Columnas cols = resolverColumnas(sheet);
         if (cols.sku() == -1) {
             throw new IllegalArgumentException(
@@ -252,12 +247,13 @@ public class MedidasExcelManager {
                 if (sheet == null) sheet = workbook.createSheet("MEDIDAS");
 
                 asegurarHeaders(workbook, sheet);
-                int colError = asegurarColumnaError(workbook, sheet);
                 // Todo se escribe por índice resuelto, no por posición fija: el usuario puede
-                // haber intercalado sus columnas de embalaje entre las de la app.
+                // haber intercalado sus columnas entre las de la app. Las columnas que la app
+                // administra se crean si faltan, así nunca hay que caer a un índice adivinado.
+                int colSubido = asegurarColumna(workbook, sheet, "SUBIDO", COL_SUBIDO);
+                int colError = asegurarColumna(workbook, sheet, "ERROR", COL_ERROR);
                 Columnas cols = resolverColumnas(sheet);
-                int colSku = cols.sku() == -1 ? COL_SKU : cols.sku();
-                int colSubido = cols.subido() == -1 ? COL_SUBIDO : cols.subido();
+                int colSku = cols.sku();
 
                 CellStyle skuPendienteStyle = crearEstiloPendiente(workbook);
                 CellStyle celdaFaltanteStyle = crearEstiloCeldaFaltante(workbook);
@@ -351,19 +347,10 @@ public class MedidasExcelManager {
                 Sheet sheet = hojaMedidas(workbook);
                 if (sheet == null) return 0;
 
-                asegurarColumnaError(workbook, sheet);
+                int errorCol = asegurarColumna(workbook, sheet, "ERROR", COL_ERROR);
 
-                int skuCol = -1, subidoCol = -1, errorCol = -1;
-                Row header = sheet.getRow(0);
-                if (header == null) return 0;
-                for (int i = 0; i < header.getLastCellNum(); i++) {
-                    Cell cell = header.getCell(i);
-                    if (cell == null) continue;
-                    String h = normalizarHeader(getCellString(cell));
-                    if (h.equals("SKU")) skuCol = i;
-                    else if (h.equals("SUBIDO")) subidoCol = i;
-                    else if (h.equals("ERROR")) errorCol = i;
-                }
+                Columnas cols = resolverColumnas(sheet);
+                int skuCol = cols.sku(), subidoCol = cols.subido();
                 if (skuCol == -1 || subidoCol == -1) return 0;
 
                 CellStyle subidoSiStyle = crearEstiloSubidoSi(workbook);
@@ -424,12 +411,16 @@ public class MedidasExcelManager {
         return wb;
     }
 
+    /**
+     * Escribe los encabezados por defecto solo en una hoja que todavía no los tiene. La condición
+     * es que no haya columna SKU en ninguna posición, no que SKU esté en la A: el usuario puede
+     * tener columnas propias a la izquierda, y reescribir la fila le borraría sus encabezados
+     * —incluidos los ocho de embalaje— dejando cada valor bajo el título equivocado.
+     */
     private void asegurarHeaders(Workbook workbook, Sheet sheet) {
+        if (buscarColumna(sheet, "SKU") != -1) return;
+
         Row header = sheet.getRow(0);
-        if (header != null && header.getCell(0) != null
-                && "SKU".equalsIgnoreCase(getCellString(header.getCell(0)).trim())) {
-            return;
-        }
         if (header == null) header = sheet.createRow(0);
 
         CellStyle headerStyle = crearEstiloHeader(workbook);
@@ -516,35 +507,43 @@ public class MedidasExcelManager {
     }
 
     /**
-     * Índice de la columna ERROR, creándola si el archivo es anterior a ella. Se agrega pegada a la
-     * última columna existente y no en COL_ERROR a secas: en un archivo que tampoco tiene EMBALAJE
-     * quedaría un hueco sin encabezado entre SUBIDO y ERROR.
+     * Índice de una columna que la app administra, creándola al final si el archivo no la tiene.
+     *
+     * Se agrega al final de lo que haya y no en su posición nominal: el usuario puede tener sus
+     * propias columnas ahí, y no hay forma de escribir en una posición fija sin arriesgarse a
+     * pisarlas. Es preferible una columna al final que un dato del usuario destruido.
      */
-    private int asegurarColumnaError(Workbook workbook, Sheet sheet) {
-        int existente = buscarColumna(sheet, "ERROR");
+    private int asegurarColumna(Workbook workbook, Sheet sheet, String nombre, int posicionNominal) {
+        int existente = buscarColumna(sheet, nombre);
         if (existente != -1) return existente;
 
         Row header = sheet.getRow(0);
         if (header == null) header = sheet.createRow(0);
 
-        int destino = Math.min(COL_ERROR, Math.max(0, header.getLastCellNum()));
-        Cell errorHeaderCell = header.getCell(destino);
-        if (errorHeaderCell == null) errorHeaderCell = header.createCell(destino, CellType.STRING);
-        errorHeaderCell.setCellValue("ERROR");
-        errorHeaderCell.setCellStyle(crearEstiloHeader(workbook));
+        int destino = Math.max(posicionNominal, Math.max(0, header.getLastCellNum()));
+        Cell headerCell = header.getCell(destino);
+        if (headerCell == null) headerCell = header.createCell(destino, CellType.STRING);
+        headerCell.setCellValue(nombre);
+        headerCell.setCellStyle(crearEstiloHeader(workbook));
         return destino;
     }
 
     /**
-     * Hoja de SKUs: la que tenga un encabezado SKU. Se busca así y no por posición porque el
-     * usuario puede tener hojas propias ("Resumen", "Notas") antes de la de medidas. Si ninguna
+     * Hoja de medidas: la que tenga columna SKU y además alguna columna propia de la app (SUBIDO,
+     * ERROR o una dimensión). Se busca así y no por posición porque el usuario puede tener hojas
+     * propias antes de ella.
+     *
+     * No alcanza con la columna SKU: una tabla de búsqueda del usuario —de las que alimentan sus
+     * BUSCARX— también la tiene, y escribirle los SKU pendientes la destruiría. Si ninguna hoja
      * califica se cae a la primera, para que el error de "falta la columna SKU" siga saliendo con
      * un mensaje entendible en vez de devolver vacío en silencio.
      */
     private Sheet hojaMedidas(Workbook workbook) {
         for (int i = 0; i < workbook.getNumberOfSheets(); i++) {
             Sheet sheet = workbook.getSheetAt(i);
-            if (sheet != null && resolverColumnas(sheet).sku() != -1) return sheet;
+            if (sheet == null) continue;
+            Columnas cols = resolverColumnas(sheet);
+            if (cols.sku() != -1 && cols.esDeLaApp()) return sheet;
         }
         return workbook.getNumberOfSheets() == 0 ? null : workbook.getSheetAt(0);
     }

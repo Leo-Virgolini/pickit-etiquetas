@@ -138,7 +138,7 @@ por la izquierda lo marca el bloque `Pack ID: ...` de ML, cuyo número llega has
 Cuatro líneas ocupan hasta y≈177.
 
 **Hay que borrar el texto de ML** *"Recortá esta parte de la etiqueta para que tu paquete viaje
-seguro"* (`^FO410,30` bajo `^LH0,90`, o sea y≈120–160), que cae justo en esa zona y no le sirve al
+seguro"* (`^FO450,30` bajo `^LH0,90`, o sea y≈120–160), que cae justo en esa zona y no le sirve al
 operario. Se elimina localizando el campo por el fragmento `ecort` —sin acentos ni mayúsculas, para
 que no dependa de cómo ML codifique la tilde— y cortando desde su `^FO` hasta su `^FS`.
 
