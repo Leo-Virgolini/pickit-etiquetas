@@ -11,8 +11,11 @@ public class LabelTableRow {
     private final StringProperty productDescription;
     private final StringProperty details;
     private final IntegerProperty quantity;
+    private final ObjectProperty<EstadoDato> medidas;
+    private final ObjectProperty<EstadoDato> embalaje;
 
-    public LabelTableRow(String printNumber, String orderIds, String zone, String sku, String productDescription, String details, int quantity) {
+    public LabelTableRow(String printNumber, String orderIds, String zone, String sku, String productDescription, String details, int quantity,
+                         EstadoDato medidas, EstadoDato embalaje) {
         this.printNumber = new SimpleStringProperty(printNumber);
         this.orderIds = new SimpleStringProperty(orderIds);
         this.zone = new SimpleStringProperty(zone);
@@ -20,6 +23,8 @@ public class LabelTableRow {
         this.productDescription = new SimpleStringProperty(productDescription);
         this.details = new SimpleStringProperty(details);
         this.quantity = new SimpleIntegerProperty(quantity);
+        this.medidas = new SimpleObjectProperty<>(medidas);
+        this.embalaje = new SimpleObjectProperty<>(embalaje);
     }
 
     public StringProperty printNumberProperty() { return printNumber; }
@@ -29,6 +34,8 @@ public class LabelTableRow {
     public StringProperty productDescriptionProperty() { return productDescription; }
     public StringProperty detailsProperty() { return details; }
     public IntegerProperty quantityProperty() { return quantity; }
+    public ObjectProperty<EstadoDato> medidasProperty() { return medidas; }
+    public ObjectProperty<EstadoDato> embalajeProperty() { return embalaje; }
 
     public String getPrintNumber() { return printNumber.get(); }
     public String getOrderIds() { return orderIds.get(); }
@@ -37,4 +44,6 @@ public class LabelTableRow {
     public String getProductDescription() { return productDescription.get(); }
     public String getDetails() { return details.get(); }
     public int getQuantity() { return quantity.get(); }
+    public EstadoDato getMedidas() { return medidas.get(); }
+    public EstadoDato getEmbalaje() { return embalaje.get(); }
 }

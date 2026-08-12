@@ -14,6 +14,7 @@ import ar.com.leo.etiquetas.parser.ExcelMappingReader;
 import ar.com.leo.etiquetas.parser.MedidasExcelManager;
 import ar.com.leo.etiquetas.parser.ZplParser;
 import ar.com.leo.etiquetas.ui.ComboPrintDialog;
+import ar.com.leo.etiquetas.ui.EstadoDato;
 import ar.com.leo.etiquetas.ui.LabelTableRow;
 import ar.com.leo.etiquetas.ui.OrderTableRow;
 import ar.com.leo.pickit.excel.ExcelManager;
@@ -126,6 +127,10 @@ public class MainController {
     private TableColumn<LabelTableRow, String> detailsCol;
     @FXML
     private TableColumn<LabelTableRow, Integer> countCol;
+    @FXML
+    private TableColumn<LabelTableRow, EstadoDato> medidasCol;
+    @FXML
+    private TableColumn<LabelTableRow, EstadoDato> embalajeCol;
     @FXML
     private Button fetchOrdersBtn;
     @FXML
@@ -287,6 +292,11 @@ public class MainController {
                 setText(empty || item == null ? null : String.valueOf(item));
             }
         });
+
+        medidasCol.setCellValueFactory(cd -> cd.getValue().medidasProperty());
+        medidasCol.setCellFactory(col -> estadoDatoCell());
+        embalajeCol.setCellValueFactory(cd -> cd.getValue().embalajeProperty());
+        embalajeCol.setCellFactory(col -> estadoDatoCell());
 
         orderTable.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
         orderTable.getSelectionModel().setSelectionMode(javafx.scene.control.SelectionMode.MULTIPLE);
@@ -781,7 +791,7 @@ public class MainController {
                     embalajesFaltantes);
             int agregadosExcel = guardarSkusPendientesMedicion(skusPendientes);
             showLabelTable();
-            displayResult(currentResult);
+            displayResult(currentResult, medidas);
             mostrarMensajeSkusFaltantes(skusPendientes.size(), agregadosExcel,
                     new ArrayList<>(skusPendientes.keySet()), embalajesFaltantes);
         } catch (Exception e) {
@@ -1015,7 +1025,7 @@ public class MainController {
                     setLoading(false);
                     currentResult = result;
                     showLabelTable();
-                    displayResult(result);
+                    displayResult(result, medidas);
                     if (finalSavedFile != null) {
                         fileLinkBar.getChildren().clear();
                         LogHelper.addFileLink(fileLinkBar, finalSavedFile);
@@ -2134,7 +2144,33 @@ public class MainController {
         combo.setButtonCell(factory.call(null));
     }
 
-    private void displayResult(SortResult result) {
+    /**
+     * Celda de MEDIDAS/EMBALAJE. El NO va con fondo rosa pálido y texto rojo oscuro, los mismos
+     * colores que la columna ERROR del Excel de medidas, para que el código de color sea el mismo
+     * en la app y en la planilla.
+     */
+    private TableCell<LabelTableRow, EstadoDato> estadoDatoCell() {
+        return new TableCell<>() {
+            @Override
+            protected void updateItem(EstadoDato item, boolean empty) {
+                super.updateItem(item, empty);
+                setAlignment(Pos.CENTER);
+                if (empty || item == null) {
+                    setText(null);
+                    setStyle("");
+                    return;
+                }
+                setText(item.texto());
+                setStyle(switch (item) {
+                    case NO -> "-fx-background-color: #FEE2E2; -fx-text-fill: #991B1B; -fx-font-weight: bold;";
+                    case SI -> "-fx-text-fill: #15803d; -fx-font-weight: bold;";
+                    case NO_APLICA -> "-fx-text-fill: #9ca3af;";
+                });
+            }
+        };
+    }
+
+    private void displayResult(SortResult result, Map<String, ar.com.leo.etiquetas.model.MedidaSku> medidas) {
         ObservableList<LabelTableRow> rows = FXCollections.observableArrayList();
         List<Integer> groupSizes = result.groups().stream()
                 .map(g -> g.labels().size())
@@ -2142,6 +2178,10 @@ public class MainController {
         List<String> printNumbers = ar.com.leo.etiquetas.model.PrintNumbering.compute(groupSizes);
         int i = 0;
         for (SortedLabelGroup group : result.groups()) {
+            // Sin módulo de medidas activo no hay nada que informar: las dos columnas quedan en "—".
+            boolean elegible = medidas != null && EstadoDato.esSkuElegible(group.zone(), group.sku());
+            ar.com.leo.etiquetas.model.MedidaSku medida = elegible ? medidas.get(group.sku()) : null;
+
             rows.add(new LabelTableRow(
                     printNumbers.get(i++),
                     group.orderIds(),
@@ -2149,7 +2189,9 @@ public class MainController {
                     group.sku(),
                     group.productDescription(),
                     group.details(),
-                    extractQuantityFromLabels(group.labels())));
+                    extractQuantityFromLabels(group.labels()),
+                    elegible ? EstadoDato.medidasDe(medida) : EstadoDato.NO_APLICA,
+                    elegible ? EstadoDato.embalajeDe(medida) : EstadoDato.NO_APLICA));
         }
         filteredLabels = new FilteredList<>(rows, p -> true);
         SortedList<LabelTableRow> sortedLabels = new SortedList<>(filteredLabels);

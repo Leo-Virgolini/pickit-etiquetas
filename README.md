@@ -57,6 +57,7 @@ Genera un Excel de picking para el deposito con todos los pedidos pendientes de 
 - **Expansion de combos**: los SKU compuestos se expanden automaticamente en sus componentes con cantidades multiplicadas.
 - **Consulta de stock**: busca descripcion, proveedor, sector y stock actual en DUX ERP.
 - **Excel generado** (`Pickits y Carros/PICKIT_*.xlsx`) con 3 hojas:
+  - **Tabla de etiquetas**: ademas de #, Orden, Zona, SKU, Producto, Detalles y Cantidad, muestra dos columnas **Medidas** y **Embalaje** con el estado de cada SKU en el Excel de medidas: `✓ SI`, `✘ NO` (fondo rosa) o `—` cuando no aplica (carros y SKU no numericos, o modulo de medidas apagado). Medidas mira las 4 columnas base cm/kg; Embalaje mira que tenga caja o bolsa.
   - **PICKIT**: lista ordenada por sector con columnas SKU, CANT, DESCRIPCION, PROVEEDOR, SECTOR, STOCK. Resaltado: coral=SKU invalido, amarillo=datos faltantes, bold=cantidad>1, naranja=stock insuficiente.
   - **CARROS**: ordenes con 3+ SKUs distintos agrupadas con letra (A, B, C...) para identificar carros fisicos.
   - **SLA**: listado de ordenes ML con fecha/hora de despacho esperado.
