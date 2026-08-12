@@ -1067,7 +1067,7 @@ public class MainController {
         if (hayEmbalajes) {
             if (!msg.isEmpty()) msg.append("\n");
             msg.append(embalajesFaltantes.size())
-                    .append(" SKU(s) sin caja ni bolsa asignada en este lote:\n");
+                    .append(" SKU(s) sin caja/bolsa asignada en este lote:\n");
             for (String sku : embalajesFaltantes) msg.append("  ").append(sku).append("\n");
         }
 

@@ -150,7 +150,7 @@ Un SKU se reporta como pendiente cuando **no tiene ni caja ni bolsa**; pluribol,
 observaciones no cuentan. El diálogo post-proceso suma:
 
 ```
-3 SKU(s) sin caja ni bolsa asignada en este lote:
+3 SKU(s) sin caja/bolsa asignada en este lote:
   1241212, 1241255, 998877
 ```
 
