@@ -127,17 +127,18 @@ inyecta al inicio de cada etiqueta:
 `x=410`, primera línea en `y=20`, paso de 24px, fuente 22. El bloque llega como mucho hasta
 `Y_LIMITE = 178`, justo antes del separador de la zona de picking (y=180).
 
-Las líneas que no son la última se **truncan** con `…` a 36 caracteres: no pueden crecer sin correr
-las de abajo, y el nombre de caja también es texto libre del usuario.
+**Todas las líneas se acotan en largo** a los caracteres que entran en el alto que tienen asignado
+(30 por línea, derivado de 380 px con la fuente 22 proporcional de ZPL). Con `^FB`, ZPL no descarta
+lo que no entra: lo reimprime encima de la última línea y queda una mancha ilegible. El corte se
+marca con `...` y no con `…`, porque la fuente residual puede no traer ese glifo.
 
-**La última línea recibe todo el alto libre que sobra**, así que puede repartirse en varias: con
-`^FB` de una sola línea ZPL no descarta el sobrante, lo reimprime encima de la misma y queda
-ilegible. Cuántas le tocan se calcula en píxeles contra `Y_LIMITE`, no como un número fijo de
-líneas, porque el aviso de más arriba puede ser más alto.
+**La última línea recibe todo el alto libre que sobra**, así que puede repartirse en varias — es la
+de observaciones, la única que puede necesitarlo. Cuántas le tocan se calcula en píxeles contra
+`Y_LIMITE`, no como un número fijo de líneas.
 
-El aviso `NO ESTANDARIZADO` va **más grande y en negrita** (fuente 30, alto de línea 34, con la
-doble pasada de 1px que se usa en toda la etiqueta): es lo que tiene que frenar al operario, no un
-dato más de la lista.
+El aviso `NO ESTANDARIZADO` va **más grande y en negrita** (fuente 30, con la doble pasada de 1px
+que se usa en toda la etiqueta): es lo que tiene que frenar al operario, no un dato más de la lista.
+Como es siempre la única línea del bloque, no necesita correr nada abajo.
 
 En la última línea, además, se **parten las palabras de más de 30 caracteres**. `^FB` corta por
 palabras: una que no entra se baja entera a la línea siguiente y deja el rótulo solo arriba (`OBS:`

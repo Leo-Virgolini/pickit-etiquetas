@@ -423,6 +423,46 @@ class MedidasExcelManagerTest {
         assertEquals("ERROR", leerHeader(excel, 11), "sin dejar columnas en blanco en el medio");
     }
 
+    @Test
+    void noEscribeEnUnaHojaQueSoloTieneSku() throws Exception {
+        // La tabla de búsqueda del usuario tiene SKU pero no es la hoja de medidas: se puede leer
+        // de ahí si no hay nada mejor, pero nunca escribirle.
+        Path excel = tempDir.resolve("solo-lookup.xlsx");
+        try (XSSFWorkbook wb = new XSSFWorkbook()) {
+            Sheet lookup = wb.createSheet("Catalogo");
+            Row header = lookup.createRow(0);
+            header.createCell(0, CellType.STRING).setCellValue("SKU");
+            header.createCell(1, CellType.STRING).setCellValue("DESCRIPCION");
+            Row fila = lookup.createRow(1);
+            fila.createCell(0, CellType.STRING).setCellValue("1241212");
+            fila.createCell(1, CellType.STRING).setCellValue("Producto A");
+            try (FileOutputStream fos = new FileOutputStream(excel.toFile())) {
+                wb.write(fos);
+            }
+        }
+
+        manager.agregarPendientes(excel, List.of("999999"));
+
+        try (Workbook wb = WorkbookFactory.create(excel.toFile(), null, true)) {
+            Sheet lookup = wb.getSheet("Catalogo");
+            assertEquals(2, lookup.getRow(0).getLastCellNum(), "no se le agregan columnas");
+            assertEquals(1, lookup.getLastRowNum(), "no se le agregan filas");
+        }
+    }
+
+    @Test
+    void laColumnaNuevaNoPisaUnaColumnaConDatosSinEncabezado() throws Exception {
+        String[] headers = {"SKU", "PRODUCTO", "SUBIDO"};
+        Path excel = crearExcel("dato-sin-header.xlsx", headers,
+                new String[]{"1241212", "Producto A", "NO"});
+        // Justo donde iría la columna nueva según el ancho del encabezado.
+        escribirCelda(excel, 1, 3, "dato mio");
+
+        manager.marcarResultados(excel, List.of(), Map.of("1241212", "error de ML"));
+
+        assertEquals("dato mio", leerCelda(excel, 1, 3), "la columna del usuario queda intacta");
+    }
+
     // -------------------------------------------------------------------------------------------
     // Helpers
     // -------------------------------------------------------------------------------------------
@@ -483,6 +523,15 @@ class MedidasExcelManagerTest {
             Cell cell = wb.getSheet("MEDIDAS").getRow(fila).getCell(col);
             if (cell == null || cell.getCellType() == CellType.BLANK) return "";
             return cell.getStringCellValue();
+        }
+    }
+
+    private void escribirCelda(Path excel, int fila, int col, String valor) throws Exception {
+        try (Workbook wb = abrirParaEditar(excel)) {
+            wb.getSheetAt(0).getRow(fila).createCell(col, CellType.STRING).setCellValue(valor);
+            try (FileOutputStream fos = new FileOutputStream(excel.toFile())) {
+                wb.write(fos);
+            }
         }
     }
 

@@ -168,20 +168,11 @@ class EmbalajeRendererTest {
 
     @Test
     void elAvisoDeNoEstandarizadoVaMasGrandeYEnNegrita() {
-        String zpl = EmbalajeRenderer.campoZpl(List.of("NO ESTANDARIZADO", "OBS: algo"));
+        String zpl = EmbalajeRenderer.campoZpl(List.of("NO ESTANDARIZADO"));
 
         // Doble pasada con 1px de offset: es como se simula la negrita en ZPL.
-        assertTrue(zpl.contains("^FO410,20^A0N,30,30^FB380,1,0,L^FDNO ESTANDARIZADO^FS"), zpl);
-        assertTrue(zpl.contains("^FO411,20^A0N,30,30^FB380,1,0,L^FDNO ESTANDARIZADO^FS"), zpl);
-    }
-
-    @Test
-    void elAvisoMasAltoCorreLasLineasDeAbajo() {
-        String zpl = EmbalajeRenderer.campoZpl(List.of("NO ESTANDARIZADO", "ROLLO: X", "OBS: algo"));
-
-        assertTrue(zpl.contains("^FO410,54^A0N,22,22^FB380,1,0,L^FDROLLO: X^FS"), zpl);
-        // OBS arranca en 78 y hasta el separador (y=180) entran 4 líneas de 24.
-        assertTrue(zpl.contains("^FO410,78^A0N,22,22^FB380,4,0,L^FDOBS: algo^FS"), zpl);
+        assertTrue(zpl.contains("^FO410,20^A0N,30,30"), zpl);
+        assertTrue(zpl.contains("^FO411,20^A0N,30,30"), zpl);
     }
 
     @Test
@@ -198,16 +189,19 @@ class EmbalajeRendererTest {
         String largo = "CAJA: 3 - CAJA REFORZADA DOBLE CORRUGADO 60x40x40";
         String zpl = EmbalajeRenderer.campoZpl(List.of(largo, "OBS: algo"));
 
-        assertTrue(zpl.contains("^FDCAJA: 3 - CAJA REFORZADA DOBLE CORR…^FS"), zpl);
+        assertTrue(zpl.contains("^FDCAJA: 3 - CAJA REFORZADA DO...^FS"), zpl);
     }
 
     @Test
-    void laUltimaLineaNoSeTruncaPorqueTieneAltoDeSobra() {
-        String zpl = EmbalajeRenderer.campoZpl(List.of("CAJA: 3", "OBS: " + "x".repeat(200)));
+    void laUltimaLineaSeAcotaALoQueEntraEnSuAlto() {
+        // Sin tope, ZPL reimprime el sobrante encima de la última línea del bloque y lo que queda
+        // abajo es una mancha ilegible sobre la zona de picking.
+        String zpl = EmbalajeRenderer.campoZpl(List.of("CAJA: 3", "ROLLO: X", "OBS: " + "x".repeat(300)));
 
         String impreso = zpl.substring(zpl.lastIndexOf("^FDOBS:") + 3, zpl.lastIndexOf("^FS"));
-        assertEquals(200, impreso.replace(" ", "").length() - "OBS:".length(),
-                "no se pierde ningún carácter: solo se agregan cortes");
+        // Cuatro líneas de 30 caracteres es todo lo que entra desde y=68.
+        assertTrue(impreso.replace(" ", "").length() <= 4 * 30, impreso);
+        assertTrue(impreso.endsWith("..."), impreso);
     }
 
     @Test
@@ -216,7 +210,7 @@ class EmbalajeRendererTest {
         // dejando el rótulo solo arriba. Partirla deja que el texto arranque en la misma línea.
         String zpl = EmbalajeRenderer.campoZpl(List.of("CAJA: 3", "OBS: " + "a".repeat(50)));
 
-        assertTrue(zpl.contains("^FDOBS: " + "a".repeat(30) + " " + "a".repeat(20) + "^FS"), zpl);
+        assertTrue(zpl.contains("^FDOBS: " + "a".repeat(25) + " " + "a".repeat(25) + "^FS"), zpl);
     }
 
     @Test

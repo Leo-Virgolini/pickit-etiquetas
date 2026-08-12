@@ -49,11 +49,6 @@ public class MedidasExcelManager {
             "ERROR"
     };
 
-    private static final int COL_SUBIDO = 10;
-    // Posición de ERROR en un archivo nuevo, después de las ocho columnas de embalaje. En los
-    // archivos existentes se ubica por header: el usuario decide dónde van sus columnas.
-    private static final int COL_ERROR = 17;
-
     // Retry para sharing violation (Excel abierto por el usuario).
     private static final int MAX_WRITE_RETRIES = 5;
     private static final long WRITE_RETRY_BASE_MS = 500;
@@ -236,8 +231,11 @@ public class MedidasExcelManager {
             if (aAgregar.isEmpty()) return 0;
 
             try (XSSFWorkbook workbook = abrirOCrear(excelPath)) {
-                Sheet sheet = hojaMedidas(workbook);
-                if (sheet == null) sheet = workbook.createSheet("MEDIDAS");
+                Sheet sheet = hojaMedidasParaEscribir(workbook);
+                if (sheet == null) {
+                    if (workbook.getNumberOfSheets() > 0) return 0;
+                    sheet = workbook.createSheet("MEDIDAS");
+                }
 
                 asegurarHeaders(workbook, sheet);
                 // Todo se escribe por índice resuelto, no por posición fija: el usuario puede
@@ -337,7 +335,7 @@ public class MedidasExcelManager {
         synchronized (fileLock) {
             int actualizados = 0;
             try (XSSFWorkbook workbook = abrirOCrear(excelPath)) {
-                Sheet sheet = hojaMedidas(workbook);
+                Sheet sheet = hojaMedidasParaEscribir(workbook);
                 if (sheet == null) return 0;
 
                 // SUBIDO y ERROR se aseguran igual que en agregarPendientes: si el archivo no las
@@ -510,6 +508,19 @@ public class MedidasExcelManager {
      * usuario, y saltando hasta la posición nominal quedarían columnas en blanco sin encabezado en
      * el medio. La posición nominal solo aplica a un archivo nuevo, que nace con todos los headers.
      */
+    /**
+     * Cuántas columnas ocupa la hoja mirando todas las filas, no solo el encabezado: el usuario
+     * puede tener una columna con datos y sin título, y escribirle encima la destruiría.
+     */
+    private int anchoUsado(Sheet sheet) {
+        int ancho = 0;
+        for (int r = 0; r <= sheet.getLastRowNum(); r++) {
+            Row row = sheet.getRow(r);
+            if (row != null) ancho = Math.max(ancho, row.getLastCellNum());
+        }
+        return Math.max(0, ancho);
+    }
+
     private int asegurarColumna(Workbook workbook, Sheet sheet, String nombre) {
         int existente = buscarColumna(sheet, nombre);
         if (existente != -1) return existente;
@@ -517,7 +528,7 @@ public class MedidasExcelManager {
         Row header = sheet.getRow(0);
         if (header == null) header = sheet.createRow(0);
 
-        int destino = Math.max(0, header.getLastCellNum());
+        int destino = anchoUsado(sheet);
         Cell headerCell = header.getCell(destino);
         if (headerCell == null) headerCell = header.createCell(destino, CellType.STRING);
         headerCell.setCellValue(nombre);
@@ -535,6 +546,30 @@ public class MedidasExcelManager {
      * califica se cae a la primera, para que el error de "falta la columna SKU" siga saliendo con
      * un mensaje entendible en vez de devolver vacío en silencio.
      */
+    /**
+     * Hoja donde la app puede escribir: la que tiene SKU y alguna columna propia. Si hay una hoja
+     * con SKU que no califica —típicamente la tabla de búsqueda del usuario— se devuelve null antes
+     * que arriesgarse a escribirle encima. Solo cuando no hay ninguna hoja con SKU se asume que el
+     * archivo está por inicializarse y se usa la primera.
+     */
+    private Sheet hojaMedidasParaEscribir(Workbook workbook) {
+        Sheet conSku = null;
+        for (int i = 0; i < workbook.getNumberOfSheets(); i++) {
+            Sheet sheet = workbook.getSheetAt(i);
+            if (sheet == null) continue;
+            Columnas cols = resolverColumnas(sheet);
+            if (cols.sku() == -1) continue;
+            if (cols.esDeLaApp()) return sheet;
+            if (conSku == null) conSku = sheet;
+        }
+        if (conSku != null) {
+            AppLogger.warn("MEDIDAS - La única hoja con columna SKU no parece la de medidas "
+                    + "(no tiene SUBIDO, ERROR ni dimensiones). No se escribe nada para no dañarla.");
+            return null;
+        }
+        return workbook.getNumberOfSheets() == 0 ? null : workbook.getSheetAt(0);
+    }
+
     private Sheet hojaMedidas(Workbook workbook) {
         Sheet soloConSku = null;
         for (int i = 0; i < workbook.getNumberOfSheets(); i++) {

@@ -7,13 +7,13 @@ import java.util.List;
 
 /**
  * Arma las líneas de embalaje que van en la etiqueta a partir de lo cargado en el Excel, y su
- * fragmento ZPL. Solo aparecen las líneas cuyos datos estén cargados: un SKU puede llevar desde
- * ninguna hasta tres (caja o bolsa, rollo y observaciones).
+ * fragmento ZPL. Solo aparecen las líneas cuyos datos estén cargados: un SKU lleva entre una y tres
+ * (caja o bolsa, rollo y observaciones), o una sola con el aviso si no tiene embalaje asignado.
  */
 public final class EmbalajeRenderer {
 
     // Bloque en el margen superior derecho, entre el borde de la etiqueta y el separador de la zona
-    // de picking (y=180). Seis líneas llegan hasta y≈162.
+    // de picking (y=180).
     //
     // x=410 es el límite por la izquierda: entre y=129 y y=160 está el bloque "Pack ID: ..." de ML,
     // cuyo número llega hasta x≈400 con su fuente 30. Arriba no hay nada de ML —el texto "Recortá
@@ -25,20 +25,21 @@ public final class EmbalajeRenderer {
     private static final int ALTO_LINEA = 24;
     private static final int FUENTE = 22;
     // El aviso de embalaje sin cargar va más grande y en negrita: es lo que tiene que frenar al
-    // operario, no un dato más de la lista.
-    private static final int ALTO_LINEA_AVISO = 34;
+    // operario, no un dato más de la lista. Siempre es la única línea del bloque.
     private static final int FUENTE_AVISO = 30;
     private static final int ANCHO = 380;
     /**
      * Caracteres que entran en una línea. Con la fuente 0 de ZPL, proporcional, un carácter ocupa
      * poco más de la mitad del alto nominal: 380 / (22 · 0,55) ≈ 31, redondeado para abajo.
      */
-    private static final int MAX_CARACTERES = 36;
+    private static final int MAX_CARACTERES = 30;
     /**
-     * Largo máximo de una palabra sin cortar. Es menor que MAX_CARACTERES para que la primera pieza
-     * entre en la misma línea que el rótulo ("OBS: " son 5 caracteres).
+     * Largo máximo de una palabra sin cortar. Deja lugar para el rótulo más largo ("OBS: ", 5
+     * caracteres) en la misma línea que la primera pieza.
      */
-    private static final int MAX_PALABRA = 30;
+    private static final int MAX_PALABRA = MAX_CARACTERES - 5;
+    /** Marca de texto cortado. Tres puntos y no "…": la fuente residual puede no traer ese glifo. */
+    private static final String ELIPSIS = "...";
 
     /** Reemplaza a la línea de caja o bolsa cuando el SKU no tiene ninguna de las dos cargada. */
     private static final String SIN_ESTANDARIZAR = "NO ESTANDARIZADO";
@@ -51,8 +52,7 @@ public final class EmbalajeRenderer {
         if (datos == null) return lineas;
 
         // Caja y bolsa son excluyentes: si están las dos cargadas gana la caja. Puede pasar cuando
-        // cambia el embalaje y queda el número de bolsa viejo; con las dos salen cinco líneas y la
-        // última se imprimiría sobre el separador de la zona de picking.
+        // cambia el embalaje y queda el número de bolsa viejo.
         //
         // Sin ninguna de las dos la línea igual se imprime, avisando: el operario tiene que poder
         // distinguir "a este SKU todavía no le cargaron el embalaje" de una etiqueta generada sin
@@ -97,18 +97,19 @@ public final class EmbalajeRenderer {
 
             int fuente = aviso ? FUENTE_AVISO : FUENTE;
             // La última línea se queda con todo el alto libre que sobra, así que puede repartirse
-            // en varias: con ^FB de una sola línea ZPL no descarta el sobrante, lo reimprime encima
-            // de la misma y queda ilegible. Las anteriores no pueden crecer sin correr las de
-            // abajo, así que se cortan — el nombre de caja también es texto libre del usuario.
+            // en varias. Las anteriores no pueden crecer sin correr las de abajo, así que entran
+            // en una sola — el nombre de caja también es texto libre del usuario.
             int maxLineas = ultima ? Math.max(1, (Y_LIMITE - y) / ALTO_LINEA) : 1;
-            String texto = ultima ? partirPalabrasLargas(linea) : truncar(linea);
+            // En los dos casos se acota el largo: con ^FB, ZPL no descarta lo que no entra, lo
+            // reimprime encima de la última línea y queda una mancha ilegible.
+            String texto = truncar(partirPalabrasLargas(linea), maxLineas * MAX_CARACTERES);
 
             zpl.append(campo(X, y, fuente, maxLineas, texto));
             // El aviso va en negrita, simulada con una segunda pasada corrida 1px, igual que ZONA
             // y COD.EXT.
             if (aviso) zpl.append(campo(X + 1, y, fuente, maxLineas, texto));
 
-            y += aviso ? ALTO_LINEA_AVISO : ALTO_LINEA;
+            y += ALTO_LINEA;
         }
         return zpl.toString();
     }
@@ -147,9 +148,9 @@ public final class EmbalajeRenderer {
         return salida.toString();
     }
 
-    private static String truncar(String texto) {
-        if (texto.length() <= MAX_CARACTERES) return texto;
-        return texto.substring(0, MAX_CARACTERES - 1) + "…";
+    private static String truncar(String texto, int maxCaracteres) {
+        if (texto.length() <= maxCaracteres) return texto;
+        return texto.substring(0, maxCaracteres - ELIPSIS.length()) + ELIPSIS;
     }
 
     /** Une número y nombre con " - ", omitiendo el separador si falta alguno. */

@@ -2010,7 +2010,13 @@ public class MainController {
         try {
             return medidasManager.leerMedidas(Path.of(path));
         } catch (Exception e) {
+            // Se avisa además de loguear: sin medidas el lote sale sin banner MEDIR, sin líneas de
+            // embalaje y con el diálogo final informando cero pendientes. El operario embalaría
+            // creyendo que la etiqueta está completa.
             AppLogger.warn("No se pudo leer el Excel de medidas: " + e.getMessage());
+            AlertHelper.showError("Excel de medidas",
+                    "No se pudo leer el Excel de medidas, así que las etiquetas de este lote van a "
+                    + "salir sin los datos de embalaje ni el aviso de medición.\n\n" + e.getMessage());
             return null;
         }
     }
