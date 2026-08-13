@@ -1599,9 +1599,7 @@ public class MainController {
     private static final String ANCHOR_RECORTE = "ecort";
 
     /**
-     * @param embalajesFaltantesOut se completa con los SKU que no tienen ni caja ni bolsa cargada
-     *                              en el Excel. Los agregados (rollo, observaciones) no
-     *                              alcanzan para considerar el SKU resuelto.
+     * @param embalajesFaltantesOut se completa con los SKU cuya columna ESTANDARIZADO no dice SI.
      */
     private SortResult injectZplHeaders(SortResult result, ExcelMapping excelMapping,
                                         Map<String, ar.com.leo.etiquetas.model.MedidaSku> medidas,
@@ -1648,7 +1646,7 @@ public class MainController {
             if (skuElegible) {
                 DatosEmbalaje datos = medidaSku == null ? DatosEmbalaje.VACIO : medidaSku.embalaje();
                 embalajeZpl = EmbalajeRenderer.campoZpl(EmbalajeRenderer.lineas(datos));
-                if (!datos.tieneCajaOBolsa() && embalajesFaltantesOut != null) {
+                if (!datos.estandarizado() && embalajesFaltantesOut != null) {
                     embalajesFaltantesOut.add(sku);
                 }
             }
@@ -2200,7 +2198,7 @@ public class MainController {
                     group.details(),
                     extractQuantityFromLabels(group.labels()),
                     elegible ? EstadoDato.medidasDe(medida) : EstadoDato.NO_APLICA,
-                    elegible ? EstadoDato.embalajeDe(medida) : EstadoDato.NO_APLICA));
+                    elegible ? EstadoDato.estandarizadoDe(medida) : EstadoDato.NO_APLICA));
         }
         filteredLabels = new FilteredList<>(rows, p -> true);
         SortedList<LabelTableRow> sortedLabels = new SortedList<>(filteredLabels);

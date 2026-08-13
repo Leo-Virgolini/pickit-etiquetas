@@ -56,7 +56,8 @@ validación, y no vale la pena frenar por eso.
 | `ENVASE` con inscripción conocida | `ENVASE: BOL-1 - 9Y` |
 | `ENVASE` sin inscripción en la hoja | `ENVASE: BOL-1` |
 | `ENVASE` = `NO` | `ENVASE: NO` |
-| `TIPO DE ROLLO` cargado, con paños > 0 | `ROLLO: DIAMANTES - 2 paños` |
+| inscripción `-` en la hoja | se ignora: las bolsas y la fila `NO` la traen así |
+| `TIPO DE ROLLO` cargado, con paños > 0 | `ROLLO: DIAMANTES - 2 paños` (un solo paño va en singular) |
 | `TIPO DE ROLLO` cargado, paños 0 o vacío | `ROLLO: DIAMANTES` / `ROLLO: NO` |
 | `OBSERVACIONES` cargado | `OBS: Colchon + Tapa` |
 

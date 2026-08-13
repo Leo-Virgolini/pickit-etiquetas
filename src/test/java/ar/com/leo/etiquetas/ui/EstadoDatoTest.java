@@ -15,16 +15,13 @@ class EstadoDatoTest {
                 false, "", embalaje);
     }
 
-    private static DatosEmbalaje conCaja() {
-        return new DatosEmbalaje("", "GRANDE", "3", "", "", "");
+    private static DatosEmbalaje estandarizado() {
+        return new DatosEmbalaje("BOL-1", "9Y", "DIAMANTES", "2", "", true);
     }
 
-    private static DatosEmbalaje conBolsa() {
-        return new DatosEmbalaje("5", "", "", "", "", "");
-    }
-
-    private static DatosEmbalaje soloAgregados() {
-        return new DatosEmbalaje("", "", "", "DIAMANTE", "3", "Colchon");
+    private static DatosEmbalaje sinEstandarizar() {
+        // Con datos cargados pero la fórmula del Excel diciendo que falta algo.
+        return new DatosEmbalaje("BOL-1", "9Y", "DIAMANTES", "2", "", false);
     }
 
     // -------------------------------------------------------------------------------------------
@@ -70,29 +67,24 @@ class EstadoDatoTest {
     // -------------------------------------------------------------------------------------------
 
     @Test
-    void conCajaElEmbalajeEstaEnSi() {
-        assertEquals(EstadoDato.SI, EstadoDato.embalajeDe(medida(null, conCaja())));
+    void conLaFormulaEnSiElEstadoEsSi() {
+        assertEquals(EstadoDato.SI, EstadoDato.estandarizadoDe(medida(null, estandarizado())));
     }
 
     @Test
-    void conBolsaElEmbalajeEstaEnSi() {
-        assertEquals(EstadoDato.SI, EstadoDato.embalajeDe(medida(null, conBolsa())));
+    void conLaFormulaEnNoElEstadoEsNo() {
+        // Aunque tenga envase y rollo cargados: la fórmula del Excel es la fuente de verdad.
+        assertEquals(EstadoDato.NO, EstadoDato.estandarizadoDe(medida(null, sinEstandarizar())));
     }
 
     @Test
-    void soloConAgregadosElEmbalajeEstaEnNo() {
-        // Pluribol, rollo y observaciones no alcanzan: el criterio es el mismo que en la etiqueta.
-        assertEquals(EstadoDato.NO, EstadoDato.embalajeDe(medida(null, soloAgregados())));
+    void sinNingunDatoElEstadoEsNo() {
+        assertEquals(EstadoDato.NO, EstadoDato.estandarizadoDe(medida(null, DatosEmbalaje.VACIO)));
     }
 
     @Test
-    void sinNingunDatoElEmbalajeEstaEnNo() {
-        assertEquals(EstadoDato.NO, EstadoDato.embalajeDe(medida(null, DatosEmbalaje.VACIO)));
-    }
-
-    @Test
-    void unSkuQueNoFiguraEnElExcelNoTieneEmbalaje() {
-        assertEquals(EstadoDato.NO, EstadoDato.embalajeDe(null));
+    void unSkuQueNoFiguraEnElExcelNoEstaEstandarizado() {
+        assertEquals(EstadoDato.NO, EstadoDato.estandarizadoDe(null));
     }
 
     // -------------------------------------------------------------------------------------------

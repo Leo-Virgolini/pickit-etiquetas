@@ -40,14 +40,20 @@ public class MedidasExcelManager {
             "Profunidad +20%",
             "Peso físico (empaque + producto) +20%",
             "SUBIDO",
-            "N° Bolsa",
-            "Nombre Caja",
-            "N° Caja",
-            "ROLLO INFLABLE",
+            "ESTANDARIZADO",
+            "ENVASE",
+            "TIPO DE ROLLO",
             "CANT PAÑOS",
             "OBSERVACIONES",
             "ERROR"
     };
+
+    /** Marca una columna de margen: "+20%" en las dimensiones, "+5%" en el peso. */
+    private static final java.util.regex.Pattern PORCENTAJE =
+            java.util.regex.Pattern.compile("\\+\\s*\\d+\\s*%");
+
+    /** Hoja con el catálogo de envases: código en "N°" e inscripción en "INSCRIPCION". */
+    public static final String HOJA_ESTANDARIZACION = "ESTANDARIZACION";
 
     // Retry para sharing violation (Excel abierto por el usuario).
     private static final int MAX_WRITE_RETRIES = 5;
@@ -66,7 +72,7 @@ public class MedidasExcelManager {
                             int ancho, int alto, int profundidad, int peso,
                             int anchoMas, int altoMas, int profundidadMas, int pesoMas,
                             int subido, int error,
-                            int bolsa, int nombreCaja, int caja,
+                            int estandarizado, int envase,
                             int rollo, int panos, int observaciones) {
 
         /** Columnas de medidas que agregarPendientes limpia al reusar una fila. */
@@ -77,7 +83,7 @@ public class MedidasExcelManager {
         /** Distingue la hoja de medidas de cualquier otra tabla del usuario que tenga un SKU. */
         boolean esDeLaApp() {
             return subido != -1 || error != -1 || ancho != -1 || alto != -1
-                    || profundidad != -1 || peso != -1;
+                    || profundidad != -1 || peso != -1 || estandarizado != -1;
         }
     }
 
@@ -93,25 +99,29 @@ public class MedidasExcelManager {
         int ancho = -1, alto = -1, profundidad = -1, peso = -1;
         int anchoMas = -1, altoMas = -1, profundidadMas = -1, pesoMas = -1;
         int subido = -1, error = -1;
-        int bolsa = -1, nombreCaja = -1, caja = -1;
+        int estandarizado = -1, envase = -1;
         int rollo = -1, panos = -1, observaciones = -1;
 
         Row header = sheet == null ? null : sheet.getRow(0);
         if (header == null) {
             return new Columnas(-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-                    -1, -1, -1, -1, -1, -1);
+                    -1, -1, -1, -1, -1);
         }
 
         for (int i = 0; i < header.getLastCellNum(); i++) {
             Cell cell = header.getCell(i);
             if (cell == null) continue;
             String h = normalizarHeader(getCellString(cell));
-            boolean mas20 = h.contains("+20");
+            // Las columnas de margen son las que llevan un porcentaje: +20% en las dimensiones y
+            // +5% en el peso. No alcanza con buscar "+": el encabezado del peso base es
+            // "Peso físico (empaque + producto) kg" y también lo tiene.
+            boolean mas20 = PORCENTAJE.matcher(h).find();
 
             if (h.equals("SKU")) sku = i;
             else if (h.startsWith("PRODUCTO")) producto = i;
             else if (h.equals("SUBIDO")) subido = i;
             else if (h.equals("ERROR")) error = i;
+            else if (h.startsWith("ESTANDARIZ")) estandarizado = i;
             else if (h.startsWith("ANCHO")) {
                 if (mas20) anchoMas = i; else ancho = i;
             }
@@ -124,11 +134,8 @@ public class MedidasExcelManager {
             else if (h.startsWith("PESO")) {
                 if (mas20) pesoMas = i; else peso = i;
             }
-            // Columnas de embalaje. Los patrones se solapan (Nombre Caja contiene CAJA), por eso
-            // el orden de evaluación importa.
-            else if (h.contains("NOMBRE") && h.contains("CAJA")) nombreCaja = i;
-            else if (h.contains("CAJA")) caja = i;
-            else if (h.contains("BOLSA")) bolsa = i;
+            // Columnas de embalaje.
+            else if (h.contains("ENVASE")) envase = i;
             else if (h.contains("ROLLO")) rollo = i;
             // El encabezado puede venir con o sin eñe.
             else if (h.contains("PAÑO") || h.contains("PANO")) panos = i;
@@ -137,7 +144,7 @@ public class MedidasExcelManager {
 
         return new Columnas(sku, producto, ancho, alto, profundidad, peso,
                 anchoMas, altoMas, profundidadMas, pesoMas, subido, error,
-                bolsa, nombreCaja, caja, rollo, panos, observaciones);
+                estandarizado, envase, rollo, panos, observaciones);
     }
 
     public Map<String, MedidaSku> leerMedidas(Path excelPath) throws Exception {
@@ -174,6 +181,8 @@ public class MedidasExcelManager {
                     "El Excel de medidas no tiene columna 'SKU'. Revise el archivo.");
         }
 
+        Map<String, String> inscripciones = leerInscripciones(workbook);
+
         for (int r = 1; r <= sheet.getLastRowNum(); r++) {
             Row row = sheet.getRow(r);
             if (row == null) continue;
@@ -183,13 +192,14 @@ public class MedidasExcelManager {
             String sku = getCellString(skuCell).trim();
             if (sku.isEmpty()) continue;
 
+            String envase = celda(row, cols.envase());
             DatosEmbalaje embalaje = new DatosEmbalaje(
-                    celda(row, cols.bolsa()),
-                    celda(row, cols.nombreCaja()),
-                    celda(row, cols.caja()),
+                    envase,
+                    inscripciones.getOrDefault(normalizarHeader(envase), ""),
                     celda(row, cols.rollo()),
                     celda(row, cols.panos()),
-                    celda(row, cols.observaciones()));
+                    celda(row, cols.observaciones()),
+                    esSubido(celda(row, cols.estandarizado())));
             if (embalaje.equals(DatosEmbalaje.VACIO)) embalaje = DatosEmbalaje.VACIO;
 
             medidas.put(sku, new MedidaSku(sku,
@@ -678,6 +688,42 @@ public class MedidasExcelManager {
                 .toUpperCase();
     }
 
+    /**
+     * Inscripción de cada envase, indexada por su código normalizado. Sale de la hoja
+     * ESTANDARIZACION: la columna "N°" trae el código (BOL-1, CAJ-1) y "INSCRIPCION" el texto que
+     * está escrito en el envase físico.
+     *
+     * Si la hoja no está, se devuelve vacío: la etiqueta muestra el código solo. Es un dato de
+     * referencia, no una validación, y no vale la pena frenar el lote por eso.
+     */
+    private Map<String, String> leerInscripciones(Workbook workbook) {
+        Map<String, String> inscripciones = new LinkedHashMap<>();
+        Sheet sheet = workbook.getSheet(HOJA_ESTANDARIZACION);
+        if (sheet == null) return inscripciones;
+
+        Row header = sheet.getRow(0);
+        if (header == null) return inscripciones;
+
+        int codigoCol = -1, inscripcionCol = -1;
+        for (int i = 0; i < header.getLastCellNum(); i++) {
+            Cell cell = header.getCell(i);
+            if (cell == null) continue;
+            String h = normalizarHeader(getCellString(cell));
+            if (h.startsWith("N°") || h.equals("N") || h.startsWith("CODIGO")) codigoCol = i;
+            else if (h.startsWith("INSCRIP")) inscripcionCol = i;
+        }
+        if (codigoCol == -1 || inscripcionCol == -1) return inscripciones;
+
+        for (int r = 1; r <= sheet.getLastRowNum(); r++) {
+            Row row = sheet.getRow(r);
+            if (row == null) continue;
+            String codigo = celda(row, codigoCol);
+            if (codigo.isEmpty()) continue;
+            inscripciones.putIfAbsent(normalizarHeader(codigo), celda(row, inscripcionCol));
+        }
+        return inscripciones;
+    }
+
     /** Valor de una celda de la fila, o cadena vacía si la columna no existe en este archivo. */
     private static String celda(Row row, int col) {
         return col == -1 ? "" : getCellString(row.getCell(col)).trim();
@@ -711,19 +757,18 @@ public class MedidasExcelManager {
         };
     }
 
+    /**
+     * Valor numérico de una celda, o null si no lo es.
+     *
+     * Se exige que la celda sea numérica de verdad —o una fórmula con resultado numérico, que es
+     * como están cargadas las columnas de margen— y se rechaza el texto aunque se pueda parsear:
+     * un "38,4" pegado como texto suele ser un dato mal cargado, y de ahí sale la medida que se
+     * publica en ML. Las fórmulas con error también quedan afuera.
+     */
     private static Double getCellDouble(Cell cell) {
         if (cell == null) return null;
         CellType type = cell.getCellType();
         if (type == CellType.FORMULA) type = cell.getCachedFormulaResultType();
-        return switch (type) {
-            case NUMERIC -> cell.getNumericCellValue();
-            case STRING -> {
-                String s = cell.getStringCellValue().trim().replace(",", ".");
-                if (s.isEmpty()) yield null;
-                try { yield Double.parseDouble(s); }
-                catch (NumberFormatException e) { yield null; }
-            }
-            default -> null;
-        };
+        return type == CellType.NUMERIC ? cell.getNumericCellValue() : null;
     }
 }

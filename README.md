@@ -8,7 +8,7 @@ Tres selectores de archivo persistentes (guardados en `Preferences`) disponibles
 
 - **Excel de stock** (`Stock.xlsx`): mapea SKU a zona de almacen (J1, J2, T1, T2, etc.) y opcionalmente codigo externo. Lee desde fila 3 las columnas "Codigo Producto", "Unidad" y "Codigo Externo".
 - **Excel de combos**: define productos compuestos y sus componentes. Columnas: "Codigo Compuesto", "Codigo Componente", "Cantidad".
-- **Excel de medidas ML** (opcional, se activa con checkbox): base "madre" de medidas de embalaje por SKU, usada para marcar etiquetas pendientes de medir y para cargar las dimensiones de paquete en ML (atributos `SELLER_PACKAGE_*`) y para indicar en la etiqueta con que embalar. 18 columnas en fila 1:
+- **Excel de medidas ML** (opcional, se activa con checkbox): base "madre" de medidas de embalaje por SKU, usada para marcar etiquetas pendientes de medir y para cargar las dimensiones de paquete en ML (atributos `SELLER_PACKAGE_*`) y para indicar en la etiqueta con que embalar. 17 columnas en fila 1:
 
   | # | Columna | Uso |
   |---|---|---|
@@ -23,20 +23,21 @@ Tres selectores de archivo persistentes (guardados en `Preferences`) disponibles
   | 8 | `Profunidad +20%` | Valor que se sube a ML. |
   | 9 | `Peso físico (empaque + producto) +20%` | Valor que se sube a ML. |
   | 10 | `SUBIDO` | `NO` al agregar (rojo tenue), `SI` al subir OK (verde tenue). |
-  | 11 | `N° Bolsa` | Numero de bolsa. |
-  | 12 | `Nombre Caja` | Nombre de la caja (ej. `GRANDE`). |
-  | 13 | `N° Caja` | Numero de caja. |
-  | 14 | `ROLLO INFLABLE` | Tipo de rollo (ej. `DIAMANTE`, `CUADRADO`). |
-  | 15 | `CANT PAÑOS` | Cantidad de paños. |
-  | 16 | `OBSERVACIONES` | Texto libre. |
-  | 17 | `ERROR` | Mensaje de ML en rojo cuando falla la subida. Se limpia al pasar a `SUBIDO=SI` en un reintento exitoso. |
+  | 11 | `ESTANDARIZADO` | `SI`/`NO`, calculado por una formula del usuario: resume si completo envase, tipo de rollo y cantidad de paños. Es la unica fuente de verdad sobre si el embalaje esta cargado. |
+  | 12 | `ENVASE` | Codigo del envase (`BOL-1`, `CAJ-1`), o `NO` si el producto no lleva. |
+  | 13 | `TIPO DE ROLLO` | Tipo de rollo (`DIAMANTES`, `CUADRADOS`), o `NO`. |
+  | 14 | `CANT PAÑOS` | Cantidad de paños; solo se imprime si es mayor a cero. |
+  | 15 | `OBSERVACIONES` | Texto libre. |
+  | 16 | `ERROR` | Mensaje de ML en rojo cuando falla la subida. Se limpia al pasar a `SUBIDO=SI` en un reintento exitoso. |
 
   - Las 4 columnas base cm/kg son los valores reales medidos por el deposito. Las `+20%` son los valores efectivos declarados a ML (margen por variaciones de armado).
   - Si el archivo no existe se crea automaticamente con headers en la primera ejecucion. Los SKUs nuevos se insertan primero en filas con SKU vacio (reutilizando slots pre-cargados con formulas) y si se agotan se appendean al final. En ambos casos las celdas de medidas faltantes quedan en amarillo y `SUBIDO=NO`. Las celdas que contengan una formula se preservan intactas.
   - El lector tolera variantes: "Largo" o "Profundidad", espacios y saltos de linea dentro del header, y el typo "Profunidad" en la columna +20%.
   - Si el archivo existente no tiene columna `ERROR`, se agrega automaticamente en la primera escritura (migracion silenciosa).
-  - Las 6 columnas de embalaje (11 a 16) **las crea y carga el usuario a mano**: la app solo las lee. Se ubican por su encabezado, no por posicion, asi que se pueden reordenar o intercalar columnas propias. Si alguna falta, ese dato no se muestra y el resto sigue funcionando. Solo se crean automaticamente cuando la app genera el archivo desde cero.
+  - Las columnas de embalaje (11 a 15) **las crea y carga el usuario a mano**: la app solo las lee. Se ubican por su encabezado, no por posicion, asi que se pueden reordenar o intercalar columnas propias. Si alguna falta, ese dato no se muestra y el resto sigue funcionando. Solo se crean automaticamente cuando la app genera el archivo desde cero.
   - Con el checkbox desactivado se saltea el marcado MEDIR, las lineas de embalaje y la subida a ML.
+
+- **Hoja `ESTANDARIZACION`** (dentro del mismo archivo de medidas): catalogo de envases. La app usa dos columnas: `N°` con el codigo (`CAJ-1`, `BOL-1`) e `INSCRIPCION` con el texto escrito en el envase fisico (`9Y`, `AYUDIN`). Las bolsas no llevan inscripcion y las filas que no la tienen traen un guion, que se ignora. Si falta la hoja o el codigo no figura, la etiqueta muestra solo el codigo.
   - Escritura serializada con lock interno y reintentos con backoff (500/1000/1500/2000 ms) si el archivo esta abierto en Excel (sharing violation).
   - Los decimales con coma ("3,006" = 3.006 kg) se leen correctamente tanto si la celda es numerica (POI devuelve el valor crudo) como si es texto (se normaliza `,` → `.`).
 
@@ -90,23 +91,23 @@ Dos sub-pestañas para obtener etiquetas ZPL, procesarlas y enviarlas a la impre
 - **Marcado MEDIR y autocarga al Excel** (durante la descarga/procesamiento de etiquetas): si esta configurado el Excel de medidas:
   1. **Banner MEDIR en la etiqueta**: cada etiqueta individual (no CARROS) con SKU numerico, **de pedido de 1 unidad**, cuyo SKU no tenga las 4 columnas base cm/kg cargadas, recibe un banner "MEDIR: [SKU]" en negro invertido sobre el encabezado. Las ordenes de 2+ unidades no se marcan (esos embalajes se miden aparte).
   2. **Autocarga al Excel**: los SKU detectados como pendientes se insertan en el Excel con SUBIDO=NO. El inserter primero **reusa filas pre-existentes con SKU vacio** (tipicamente filas con formulas pre-cargadas, ej: `=BUSCARX(...)` en PRODUCTO o `=base*1.2` en las +20%) y recien appendea al final cuando se agotan. Preserva todas las formulas existentes (celdas tipo FORMULA se dejan intactas; Excel las recalcula al abrir gracias a `setForceFormulaRecalculation(true)`). **No escribe la columna PRODUCTO**: queda delegada a la formula que el usuario tenga configurada. No se duplican si el SKU ya existe.
-  3. **Datos de embalaje en la etiqueta**: cada etiqueta individual (no CARROS) con SKU numerico lleva, en el margen superior derecho, entre 1 y 3 lineas segun lo cargado en el Excel (la primera esta siempre: si no hay ni caja ni bolsa dice `NO ESTANDARIZADO`, mas grande y en negrita, y esa es la unica linea):
+  3. **Datos de embalaje en la etiqueta**: cada etiqueta individual (no CARROS) con SKU numerico lleva, en el margen superior derecho, entre 1 y 3 lineas segun lo cargado en el Excel (si `ESTANDARIZADO` dice `NO`, la unica linea es `NO ESTANDARIZADO`, mas grande y en negrita):
 
      | Condicion | Linea |
      |---|---|
-     | `N° Caja` y/o `Nombre Caja` | `CAJA: 3 - GRANDE` |
-     | `N° Bolsa` | `BOLSA: 5` |
-     | ni caja ni bolsa | `NO ESTANDARIZADO` |
-     | `ROLLO INFLABLE` | `ROLLO: DIAMANTE - 3 paños` (sin cantidad: `ROLLO: DIAMANTE`) |
+     | `ESTANDARIZADO` en `NO` | `NO ESTANDARIZADO`, y es la unica linea |
+     | `ENVASE` | `ENVASE: CAJ-1 - 9Y` (la inscripcion sale de la hoja `ESTANDARIZACION`) |
+     | `ENVASE` en `NO` | `ENVASE: NO` |
+     | `TIPO DE ROLLO` | `ROLLO: DIAMANTES - 2 paños` (con 0 paños: `ROLLO: DIAMANTES`) |
      | `OBSERVACIONES` | `OBS: Colchon + Tapa` |
 
      Caja y bolsa no se combinan. La linea de observaciones se queda con el alto libre que sobra, asi que un texto largo sigue en las lineas de abajo en vez de imprimirse encima de si mismo. El banner MEDIR se ubica debajo del numero de etiqueta, a la izquierda, para dejarle ese espacio. Los rotulos (`CAJA:`, `BOLSA:`, `ROLLO:`, `OBS:`) van en negrita. Las lineas que no son la ultima se cortan con `...` si no entran, y las palabras muy largas (codigos, URLs) se parten para que no quede el rotulo solo arriba. Para hacerles lugar se elimina el texto de ML "Recorta esta parte de la etiqueta...", que ocupa esa franja. Si ML cambiara ese texto y no se encontrara, queda una advertencia en el log y los textos se encimarian.
-  4. **Columnas Medidas y Embalaje en la tabla**: la tabla de etiquetas descargadas muestra, ademas de #, Orden, Zona, SKU, Producto, Detalles y Cantidad, el estado de cada SKU en el Excel de medidas: `✓ SI`, `✘ NO` (fondo rosa palido) o `—` cuando no aplica (carros y SKU no numericos, o modulo de medidas apagado). Medidas mira las 4 columnas base cm/kg; Embalaje mira que el SKU tenga caja o bolsa. Permite ver el estado del lote sin depender del dialogo final.
-  5. **Mensaje de pendientes al finalizar**: al terminar la descarga se abre un dialogo scrollable con la cantidad de SKUs sin medidas detectados en el lote, cuantos se agregaron efectivamente al Excel y cuantos ya figuraban, ademas del listado de SKUs. Se suman ahi los SKU **sin caja ni bolsa** cargada (el rollo y las observaciones no cuentan).
+  4. **Columnas Medidas y Embalaje en la tabla**: la tabla de etiquetas descargadas muestra, ademas de #, Orden, Zona, SKU, Producto, Detalles y Cantidad, el estado de cada SKU en el Excel de medidas: `✓ SI`, `✘ NO` (fondo rosa palido) o `—` cuando no aplica (carros y SKU no numericos, o modulo de medidas apagado). Medidas mira las 4 columnas base cm/kg; Estandarizado mira esa columna del Excel. Permite ver el estado del lote sin depender del dialogo final.
+  5. **Mensaje de pendientes al finalizar**: al terminar la descarga se abre un dialogo scrollable con la cantidad de SKUs sin medidas detectados en el lote, cuantos se agregaron efectivamente al Excel y cuantos ya figuraban, ademas del listado de SKUs. Se suman ahi los SKU **sin estandarizar**, segun la columna `ESTANDARIZADO`.
   - Durante la descarga **no** se sube nada a ML: el flujo de descarga solo marca y escribe en el Excel.
 
 - **Subida manual a ML** (boton "⬆ Subir Medidas" al lado del selector del Excel de medidas): la subida a ML es una accion independiente, disparada a demanda. Requisitos para que el boton este habilitado: checkbox activo + archivo existente. El handler valida ademas que la sesion ML este inicializada.
-  - Al ejecutarse, recorre el Excel, filtra filas con `SUBIDO=NO` **y** las 4 columnas `+20%` completas, y para cada una:
+  - Al ejecutarse, recorre el Excel, filtra filas con `SUBIDO=NO` **y** las 4 columnas de margen (`+20%` en las dimensiones, `+5%` en el peso) cargadas como numero y mayores a cero, y para cada una:
      - Resuelve `SKU → item_id` via `GET /users/{uid}/items/search?seller_sku=...` con fallback a `?sku=...`.
      - Hace `PUT /items/{item_id}` con body `{"attributes":[...]}` y los 4 atributos `SELLER_PACKAGE_WIDTH`, `SELLER_PACKAGE_HEIGHT`, `SELLER_PACKAGE_LENGTH`, `SELLER_PACKAGE_WEIGHT`. Formato requerido por ML: enteros, `cm` para dimensiones, `g` para peso. El codigo convierte `kg × 1000 → g` y redondea con `Math.round` (evita sesgo de truncado y el ruido de floats de Excel).
      - Si HTTP 200/201, marca `SUBIDO=SI` en verde tenue y limpia la celda `ERROR`. Si falla, deja `SUBIDO=NO` (rojo) y escribe el mensaje parseado en la columna `ERROR` (rojo oscuro sobre rosa palido, con wrap).

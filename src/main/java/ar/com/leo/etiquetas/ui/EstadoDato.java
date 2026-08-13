@@ -41,11 +41,12 @@ public enum EstadoDato {
     }
 
     /**
-     * Caja o bolsa cargada. Los agregados (rollo, observaciones) no cuentan, igual que
-     * en la línea "NO ESTANDARIZADO" de la etiqueta.
+     * Sale de la columna ESTANDARIZADO del Excel, que es una fórmula del usuario: resume si
+     * completó envase, tipo de rollo y cantidad de paños. La app no lo deduce por su cuenta, así
+     * que la tabla y la etiqueta siempre dicen lo mismo.
      */
-    public static EstadoDato embalajeDe(MedidaSku medida) {
-        return medida != null && medida.embalaje().tieneCajaOBolsa() ? SI : NO;
+    public static EstadoDato estandarizadoDe(MedidaSku medida) {
+        return medida != null && medida.embalaje().estandarizado() ? SI : NO;
     }
 
     /**

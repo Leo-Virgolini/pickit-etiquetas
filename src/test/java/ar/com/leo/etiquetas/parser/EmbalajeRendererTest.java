@@ -10,73 +10,74 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class EmbalajeRendererTest {
 
-    private static DatosEmbalaje datos(String nroBolsa, String nombreCaja, String nroCaja,
-                                       String rollo, String cantPanos, String observaciones) {
-        return new DatosEmbalaje(nroBolsa, nombreCaja, nroCaja, rollo, cantPanos, observaciones);
+    private static DatosEmbalaje datos(String envase, String inscripcion, String rollo,
+                                       String cantPanos, String observaciones) {
+        return new DatosEmbalaje(envase, inscripcion, rollo, cantPanos, observaciones, true);
     }
 
     // -------------------------------------------------------------------------------------------
-    // Caja y bolsa
+    // Envase
     // -------------------------------------------------------------------------------------------
 
     @Test
-    void cajaConNumeroYNombre() {
-        List<String> lineas = EmbalajeRenderer.lineas(
-                datos("", "GRANDE", "3", "", "", ""));
-
-        assertEquals(List.of("CAJA: 3 - GRANDE"), lineas);
+    void elEnvaseLlevaSuCodigoYSuInscripcion() {
+        assertEquals(List.of("ENVASE: BOL-1 - 9Y"),
+                EmbalajeRenderer.lineas(datos("BOL-1", "9Y", "", "", "")));
     }
 
     @Test
-    void cajaSoloConNumero() {
-        List<String> lineas = EmbalajeRenderer.lineas(
-                datos("", "", "3", "", "", ""));
-
-        assertEquals(List.of("CAJA: 3"), lineas);
+    void sinInscripcionConocidaVaSoloElCodigo() {
+        assertEquals(List.of("ENVASE: CAJ-9"),
+                EmbalajeRenderer.lineas(datos("CAJ-9", "", "", "", "")));
     }
 
     @Test
-    void cajaSoloConNombre() {
-        List<String> lineas = EmbalajeRenderer.lineas(
-                datos("", "GRANDE", "", "", "", ""));
-
-        assertEquals(List.of("CAJA: GRANDE"), lineas);
+    void unaInscripcionQueEsSoloUnGuionSeIgnora() {
+        // La fila "NO" de la hoja de estandarización tiene "-" en las columnas que no aplican.
+        assertEquals(List.of("ENVASE: NO"),
+                EmbalajeRenderer.lineas(datos("NO", "-", "", "", "")));
     }
 
     @Test
-    void bolsaConNumero() {
-        List<String> lineas = EmbalajeRenderer.lineas(
-                datos("5", "", "", "", "", ""));
+    void unSoloPanoVaEnSingular() {
+        assertEquals(List.of("ENVASE: BOL-1", "ROLLO: DIAMANTES - 1 paño"),
+                EmbalajeRenderer.lineas(datos("BOL-1", "", "DIAMANTES", "1", "")));
+    }
 
-        assertEquals(List.of("BOLSA: 5"), lineas);
+    @Test
+    void unProductoSinEnvaseLoDiceExplicitamente() {
+        // "NO" es una decisión tomada, no un dato faltante: se imprime como cualquier otro valor.
+        assertEquals(List.of("ENVASE: NO"),
+                EmbalajeRenderer.lineas(datos("NO", "", "", "", "")));
     }
 
     // -------------------------------------------------------------------------------------------
-    // Agregados
+    // Rollo y paños
     // -------------------------------------------------------------------------------------------
 
     @Test
-    void rolloConPanos() {
-        List<String> lineas = EmbalajeRenderer.lineas(
-                datos("", "", "3", "DIAMANTE", "3", ""));
-
-        assertEquals(List.of("CAJA: 3", "ROLLO: DIAMANTE - 3 paños"), lineas);
+    void elRolloConPanos() {
+        assertEquals(List.of("ENVASE: BOL-1", "ROLLO: DIAMANTES - 2 paños"),
+                EmbalajeRenderer.lineas(datos("BOL-1", "", "DIAMANTES", "2", "")));
     }
 
     @Test
-    void rolloSinPanos() {
-        List<String> lineas = EmbalajeRenderer.lineas(
-                datos("", "", "3", "CUADRADO", "", ""));
-
-        assertEquals(List.of("CAJA: 3", "ROLLO: CUADRADO"), lineas);
+    void losPanosEnCeroNoSeMuestran() {
+        // La columna trae 0 en las filas sin rollo: "ROLLO: NO - 0 paños" sería ruido.
+        assertEquals(List.of("ENVASE: BOL-1", "ROLLO: DIAMANTES"),
+                EmbalajeRenderer.lineas(datos("BOL-1", "", "DIAMANTES", "0", "")));
     }
 
     @Test
-    void observaciones() {
-        List<String> lineas = EmbalajeRenderer.lineas(
-                datos("", "", "3", "", "", "Colchon + Tapa"));
+    void unRolloEnNoSeImprimeIgual() {
+        assertEquals(List.of("ENVASE: BOL-1", "ROLLO: NO"),
+                EmbalajeRenderer.lineas(datos("BOL-1", "", "NO", "0", "")));
+    }
 
-        assertEquals(List.of("CAJA: 3", "OBS: Colchon + Tapa"), lineas);
+    @Test
+    void unaCantidadDePanosNoNumericaSeIgnora() {
+        assertEquals(List.of("ENVASE: BOL-1", "ROLLO: DIAMANTES"),
+                EmbalajeRenderer.lineas(datos("BOL-1", "", "DIAMANTES", "dos", "")));
     }
 
     // -------------------------------------------------------------------------------------------
@@ -84,55 +85,35 @@ class EmbalajeRendererTest {
     // -------------------------------------------------------------------------------------------
 
     @Test
-    void elOrdenEsCajaPluribolRolloObservaciones() {
-        List<String> lineas = EmbalajeRenderer.lineas(
-                datos("", "GRANDE", "3", "DIAMANTE", "3", "Colchon + Tapa"));
-
+    void elOrdenEsEnvaseRolloObservaciones() {
         assertEquals(List.of(
-                "CAJA: 3 - GRANDE",
-                "ROLLO: DIAMANTE - 3 paños",
-                "OBS: Colchon + Tapa"), lineas);
-    }
-
-    @Test
-    void conCajaYBolsaCargadasGanaLaCaja() {
-        // Puede pasar cuando cambia el embalaje y queda el número de bolsa viejo. Sin esto salen
-        // 5 líneas y la última se imprime sobre el separador y el título del producto.
-        List<String> lineas = EmbalajeRenderer.lineas(
-                datos("5", "GRANDE", "3", "DIAMANTE", "3", "Colchon"));
-
-        assertEquals(3, lineas.size(), lineas.toString());
-        assertEquals("CAJA: 3 - GRANDE", lineas.get(0));
+                        "ENVASE: BOL-1 - 9Y",
+                        "ROLLO: DIAMANTES - 2 paños",
+                        "OBS: Colchon + Tapa"),
+                EmbalajeRenderer.lineas(datos("BOL-1", "9Y", "DIAMANTES", "2", "Colchon + Tapa")));
     }
 
     @Test
     void losSaltosDeLineaDelExcelSeColapsan() {
         // OBSERVACIONES cargado con Alt+Enter: el LF crudo dentro del ^FD pega las palabras.
-        List<String> lineas = EmbalajeRenderer.lineas(
-                datos("", "", "3", "", "", "Colchon\n+ Tapa"));
+        assertEquals(List.of("ENVASE: BOL-1", "OBS: Colchon + Tapa"),
+                EmbalajeRenderer.lineas(datos("BOL-1", "", "", "", "Colchon\n+ Tapa")));
+    }
 
-        assertEquals(List.of("CAJA: 3", "OBS: Colchon + Tapa"), lineas);
+    // -------------------------------------------------------------------------------------------
+    // Sin estandarizar
+    // -------------------------------------------------------------------------------------------
+
+    @Test
+    void sinEstandarizarSoloSeAvisa() {
+        DatosEmbalaje sinEstandarizar = new DatosEmbalaje("BOL-1", "9Y", "DIAMANTES", "2", "Obs", false);
+
+        assertEquals(List.of("NO ESTANDARIZADO"), EmbalajeRenderer.lineas(sinEstandarizar));
     }
 
     @Test
-    void sinCajaNiBolsaSeAvisaEnLaEtiqueta() {
+    void datosVaciosNoEstanEstandarizados() {
         assertEquals(List.of("NO ESTANDARIZADO"), EmbalajeRenderer.lineas(DatosEmbalaje.VACIO));
-    }
-
-    @Test
-    void sinCajaNiBolsaNoSeMuestraNadaMas() {
-        // Sin embalaje definido, el rollo y las observaciones no aplican: la etiqueta solo tiene
-        // que decir que a ese SKU le falta el dato.
-        List<String> lineas = EmbalajeRenderer.lineas(
-                datos("", "", "", "DIAMANTE", "3", "Colchon"));
-
-        assertEquals(List.of("NO ESTANDARIZADO"), lineas);
-    }
-
-    @Test
-    void losEspaciosSobrantesNoCuentanComoDato() {
-        assertEquals(List.of("NO ESTANDARIZADO"), EmbalajeRenderer.lineas(
-                datos("  ", "  ", "  ", "  ", "  ", "  ")));
     }
 
     // -------------------------------------------------------------------------------------------
@@ -141,31 +122,13 @@ class EmbalajeRendererTest {
 
     @Test
     void elCampoZplApilaLasLineas() {
-        String zpl = EmbalajeRenderer.campoZpl(List.of("CAJA: 3", "BOLSA: 5"));
+        String zpl = EmbalajeRenderer.campoZpl(List.of("ENVASE: BOL-1", "OBS: algo"));
 
-        // La última línea se queda con el alto libre restante: si el texto no entra en una línea
-        // sigue abajo, en vez de que ZPL lo reimprima encima de la misma (^FB con maxLines=1
-        // sobreescribe la última línea, no descarta el sobrante).
-        assertEquals("^FO410,20^A0N,22,22^FB380,1,0,L^FDCAJA: 3^FS\n"
-                        + "^FO411,20^A0N,22,22^FB380,1,0,L^FDCAJA:^FS\n"
-                        + "^FO410,44^A0N,22,22^FB380,5,0,L^FDBOLSA: 5^FS\n"
-                        + "^FO411,44^A0N,22,22^FB380,5,0,L^FDBOLSA:^FS\n",
+        assertEquals("^FO410,20^A0N,22,22^FB380,1,0,L^FDENVASE: BOL-1^FS\n"
+                        + "^FO411,20^A0N,22,22^FB380,1,0,L^FDENVASE:^FS\n"
+                        + "^FO410,44^A0N,22,22^FB380,5,0,L^FDOBS: algo^FS\n"
+                        + "^FO411,44^A0N,22,22^FB380,5,0,L^FDOBS:^FS\n",
                 zpl);
-    }
-
-    @Test
-    void laUltimaLineaSeQuedaConElAltoRestante() {
-        String zpl = EmbalajeRenderer.campoZpl(List.of("CAJA: 3", "ROLLO: X", "OBS: larga"));
-
-        assertTrue(zpl.contains("^FO410,68^A0N,22,22^FB380,4,0,L^FDOBS: larga^FS"), zpl);
-    }
-
-    @Test
-    void elBloqueNoLlegaAlSeparadorDeLaZonaDePicking() {
-        String zpl = EmbalajeRenderer.campoZpl(List.of("a", "b", "c", "d", "e", "f"));
-
-        // Seis líneas: la última arranca en y=140 y con fuente 22 termina en 162 (separador: 180).
-        assertTrue(zpl.contains("^FO410,140^A0N,22,22^FB380,1,0,L^FDf^FS"), zpl);
     }
 
     @Test
@@ -178,17 +141,6 @@ class EmbalajeRendererTest {
     }
 
     @Test
-    void elRotuloVaEnNegrita() {
-        String zpl = EmbalajeRenderer.campoZpl(List.of("CAJA: 3 - GRANDE"));
-
-        // La línea completa, y encima solo el rótulo corrido 1px: engrosa "CAJA:" sin tocar el
-        // valor. Evita tener que calcular el ancho del rótulo, que con fuente proporcional no se
-        // puede saber de antemano.
-        assertTrue(zpl.contains("^FO410,20^A0N,22,22^FB380,6,0,L^FDCAJA: 3 - GRANDE^FS"), zpl);
-        assertTrue(zpl.contains("^FO411,20^A0N,22,22^FB380,6,0,L^FDCAJA:^FS"), zpl);
-    }
-
-    @Test
     void unaLineaSinRotuloNoLlevaSegundaPasada() {
         String zpl = EmbalajeRenderer.campoZpl(List.of("SIN DOS PUNTOS"));
 
@@ -196,48 +148,42 @@ class EmbalajeRendererTest {
     }
 
     @Test
-    void elCampoZplNeutralizaLosCaracteresDeControlDeZpl() {
-        String zpl = EmbalajeRenderer.campoZpl(List.of("CAJA: ^3~A"));
+    void elBloqueNoLlegaAlSeparadorDeLaZonaDePicking() {
+        String zpl = EmbalajeRenderer.campoZpl(List.of("a", "b", "c", "d", "e", "f"));
 
-        assertTrue(zpl.contains("^FDCAJA:  3 A^FS"), zpl);
+        // Seis líneas: la última arranca en y=140 y con fuente 22 termina en 162 (separador: 180).
+        assertTrue(zpl.contains("^FO410,140^A0N,22,22^FB380,1,0,L^FDf^FS"), zpl);
+    }
+
+    @Test
+    void elCampoZplNeutralizaLosCaracteresDeControlDeZpl() {
+        String zpl = EmbalajeRenderer.campoZpl(List.of("ENVASE: ^3~A"));
+
+        assertTrue(zpl.contains("^FDENVASE:  3 A^FS"), zpl);
     }
 
     @Test
     void unaLineaQueNoEsLaUltimaSeTruncaEnVezDeSuperponerse() {
-        // El nombre de caja es texto libre del usuario. Con ^FB de una línea, el sobrante se
-        // reimprime encima; como esta línea no puede crecer sin correr las de abajo, se corta.
-        String largo = "CAJA: 3 - CAJA REFORZADA DOBLE CORRUGADO 60x40x40";
+        String largo = "ENVASE: CAJ-1 - INSCRIPCION MUY LARGA QUE NO ENTRA";
         String zpl = EmbalajeRenderer.campoZpl(List.of(largo, "OBS: algo"));
 
-        assertTrue(zpl.contains("^FDCAJA: 3 - CAJA REFORZADA DO...^FS"), zpl);
+        assertTrue(zpl.contains("^FDENVASE: CAJ-1 - INSCRIPCION...^FS"), zpl);
     }
 
     @Test
     void laUltimaLineaSeAcotaALoQueEntraEnSuAlto() {
-        // Sin tope, ZPL reimprime el sobrante encima de la última línea del bloque y lo que queda
-        // abajo es una mancha ilegible sobre la zona de picking.
-        String zpl = EmbalajeRenderer.campoZpl(List.of("CAJA: 3", "ROLLO: X", "OBS: " + "x".repeat(300)));
+        String zpl = EmbalajeRenderer.campoZpl(List.of("ENVASE: X", "ROLLO: X", "OBS: " + "x".repeat(300)));
 
         String impreso = zpl.substring(zpl.indexOf("^FDOBS:") + 3, zpl.indexOf("^FS", zpl.indexOf("^FDOBS:")));
-        // Cuatro líneas de 30 caracteres es todo lo que entra desde y=68.
         assertTrue(impreso.replace(" ", "").length() <= 4 * 30, impreso);
         assertTrue(impreso.endsWith("..."), impreso);
     }
 
     @Test
     void unaPalabraMasLargaQueLaLineaSeParteParaQuePuedaEnvolver() {
-        // ^FB corta por palabras: una palabra que no entra se baja entera a la línea siguiente,
-        // dejando el rótulo solo arriba. Partirla deja que el texto arranque en la misma línea.
-        String zpl = EmbalajeRenderer.campoZpl(List.of("CAJA: 3", "OBS: " + "a".repeat(50)));
+        String zpl = EmbalajeRenderer.campoZpl(List.of("ENVASE: X", "OBS: " + "a".repeat(50)));
 
         assertTrue(zpl.contains("^FDOBS: " + "a".repeat(25) + " " + "a".repeat(25) + "^FS"), zpl);
-    }
-
-    @Test
-    void unTextoConEspaciosNoSeToca() {
-        String zpl = EmbalajeRenderer.campoZpl(List.of("CAJA: 3", "OBS: Colchon + Tapa"));
-
-        assertTrue(zpl.contains("^FDOBS: Colchon + Tapa^FS"), zpl);
     }
 
     @Test

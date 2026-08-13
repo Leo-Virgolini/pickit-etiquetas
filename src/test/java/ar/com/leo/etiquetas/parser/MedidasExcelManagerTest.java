@@ -20,7 +20,10 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -45,8 +48,8 @@ class MedidasExcelManagerTest {
             "Peso físico\n(empaque + producto)\nkg",
             "Ancho +20%", "Alto +20%", "Profunidad +20%",
             "Peso físico (empaque + producto) +20%", "SUBIDO",
-            "N° Bolsa", "Nombre Caja", "N° Caja",
-            "ROLLO INFLABLE", "CANT PAÑOS", "OBSERVACIONES",
+            "ESTANDARIZADO", "ENVASE",
+            "TIPO DE ROLLO", "CANT PAÑOS", "OBSERVACIONES",
             "ERROR"
     };
 
@@ -55,19 +58,85 @@ class MedidasExcelManagerTest {
     // -------------------------------------------------------------------------------------------
 
     @Test
-    void leeLasOchoColumnasDeEmbalaje() throws Exception {
+    void leeLasColumnasDeEmbalaje() throws Exception {
         Path excel = crearExcel("completo.xlsx", HEADERS_CON_EMBALAJE,
                 new String[]{"1241212", "Producto A", "", "", "", "", "", "", "", "", "NO",
-                        "5", "GRANDE", "3", "DIAMANTE", "4", "Colchon + Tapa"});
+                        "SI", "BOL-1", "DIAMANTES", "4", "Colchon + Tapa"});
 
         DatosEmbalaje datos = manager.leerMedidas(excel).get("1241212").embalaje();
 
-        assertEquals("5", datos.nroBolsa());
-        assertEquals("GRANDE", datos.nombreCaja());
-        assertEquals("3", datos.nroCaja());
-        assertEquals("DIAMANTE", datos.rollo());
+        assertEquals("BOL-1", datos.envase());
+        assertEquals("DIAMANTES", datos.rollo());
         assertEquals("4", datos.cantPanos());
         assertEquals("Colchon + Tapa", datos.observaciones());
+        assertTrue(datos.estandarizado());
+    }
+
+    @Test
+    void laInscripcionSaleDeLaHojaDeEstandarizacion() throws Exception {
+        Path excel = crearExcel("con-inscripcion.xlsx", HEADERS_CON_EMBALAJE,
+                new String[]{"1241212", "Producto A", "", "", "", "", "", "", "", "", "NO",
+                        "SI", "CAJ-1"});
+        agregarHojaEstandarizacion(excel, new String[][]{{"CAJ-1", "9Y"}, {"BOL-1", "AYUDIN"}});
+
+        DatosEmbalaje datos = manager.leerMedidas(excel).get("1241212").embalaje();
+
+        assertEquals("CAJ-1", datos.envase());
+        assertEquals("9Y", datos.inscripcion());
+    }
+
+    @Test
+    void sinHojaDeEstandarizacionLaInscripcionQuedaVacia() throws Exception {
+        Path excel = crearExcel("sin-hoja-est.xlsx", HEADERS_CON_EMBALAJE,
+                new String[]{"1241212", "Producto A", "", "", "", "", "", "", "", "", "NO",
+                        "SI", "CAJ-1"});
+
+        assertEquals("", manager.leerMedidas(excel).get("1241212").embalaje().inscripcion());
+    }
+
+    @Test
+    void unCodigoQueNoEstaEnLaHojaNoRompeNada() throws Exception {
+        Path excel = crearExcel("codigo-desconocido.xlsx", HEADERS_CON_EMBALAJE,
+                new String[]{"1241212", "Producto A", "", "", "", "", "", "", "", "", "NO",
+                        "SI", "CAJ-99"});
+        agregarHojaEstandarizacion(excel, new String[][]{{"CAJ-1", "9Y"}});
+
+        DatosEmbalaje datos = manager.leerMedidas(excel).get("1241212").embalaje();
+
+        assertEquals("CAJ-99", datos.envase());
+        assertEquals("", datos.inscripcion());
+    }
+
+    @Test
+    void elPesoConMargenDeCincoPorCientoNoSeConfundeConElPesoBase() throws Exception {
+        // El encabezado del peso base tambien tiene un "+": "(empaque + producto)".
+        String[] headers = {
+                "SKU", "PRODUCTO",
+                "Peso físico (empaque + producto) kg",
+                "Peso físico (empaque + producto) +5%",
+                "SUBIDO"
+        };
+        Path excel = crearExcel("peso-5.xlsx", headers, new String[]{"1241212", "Producto A"});
+        escribirNumero(excel, 1, 2, 0.8);
+        escribirNumero(excel, 1, 3, 0.84);
+
+        MedidaSku medida = manager.leerMedidas(excel).get("1241212");
+
+        assertEquals(0.8, medida.pesoKg());
+        assertEquals(0.84, medida.pesoMasKg());
+    }
+
+    @Test
+    void unaCeldaDeTextoNoCuentaComoMedida() throws Exception {
+        // Solo se sube lo que esta cargado como numero: un texto parseable puede ser un dato mal
+        // pegado, y una medida equivocada llega a la publicacion de ML.
+        Path excel = crearExcel("texto.xlsx", HEADERS_CON_EMBALAJE,
+                new String[]{"1241212", "Producto A", "", "", "", "", "38,4", "24", "10", "0,8"});
+
+        MedidaSku medida = manager.leerMedidas(excel).get("1241212");
+
+        assertNull(medida.anchoMasCm());
+        assertFalse(medida.tieneMedidasParaSubir());
     }
 
     @Test
@@ -89,16 +158,16 @@ class MedidasExcelManagerTest {
                 "Peso físico\n(empaque + producto)\nkg",
                 "Ancho +20%", "Alto +20%", "Profunidad +20%",
                 "Peso físico (empaque + producto) +20%", "SUBIDO", "ERROR",
-                "OBSERVACIONES", "N° Caja", "Nombre Caja"
+                "OBSERVACIONES", "ENVASE", "TIPO DE ROLLO"
         };
         Path excel = crearExcel("desordenado.xlsx", headers,
                 new String[]{"1241212", "Producto A", "", "", "", "", "", "", "", "", "NO", "",
-                        "Colchon", "3", "GRANDE"});
+                        "Colchon", "BOL-1", "DIAMANTES"});
 
         DatosEmbalaje datos = manager.leerMedidas(excel).get("1241212").embalaje();
 
-        assertEquals("3", datos.nroCaja());
-        assertEquals("GRANDE", datos.nombreCaja());
+        assertEquals("BOL-1", datos.envase());
+        assertEquals("DIAMANTES", datos.rollo());
         assertEquals("Colchon", datos.observaciones());
     }
 
@@ -114,24 +183,21 @@ class MedidasExcelManagerTest {
     }
 
     @Test
-    void distingueNombreCajaDeNumeroDeCaja() throws Exception {
-        String[] headers = {"SKU", "PRODUCTO", "SUBIDO", "Nombre Caja", "N° Caja"};
-        Path excel = crearExcel("cajas.xlsx", headers,
-                new String[]{"1241212", "Producto A", "NO", "GRANDE", "3"});
+    void reconoceElEncabezadoDeTipoDeRollo() throws Exception {
+        String[] headers = {"SKU", "PRODUCTO", "SUBIDO", "TIPO DE ROLLO"};
+        Path excel = crearExcel("rollo.xlsx", headers,
+                new String[]{"1241212", "Producto A", "NO", "DIAMANTES"});
 
-        DatosEmbalaje datos = manager.leerMedidas(excel).get("1241212").embalaje();
-
-        assertEquals("GRANDE", datos.nombreCaja());
-        assertEquals("3", datos.nroCaja());
+        assertEquals("DIAMANTES", manager.leerMedidas(excel).get("1241212").embalaje().rollo());
     }
 
     @Test
-    void unNumeroDeCajaNumericoSeLeeSinDecimales() throws Exception {
+    void unaCantidadNumericaSeLeeSinDecimales() throws Exception {
         Path excel = crearExcel("numerico.xlsx", HEADERS_CON_EMBALAJE,
                 new String[]{"1241212", "Producto A"});
-        escribirNumero(excel, 1, 13, 3);
+        escribirNumero(excel, 1, 14, 3);
 
-        assertEquals("3", manager.leerMedidas(excel).get("1241212").embalaje().nroCaja());
+        assertEquals("3", manager.leerMedidas(excel).get("1241212").embalaje().cantPanos());
     }
 
     // -------------------------------------------------------------------------------------------
@@ -168,11 +234,11 @@ class MedidasExcelManagerTest {
     void marcarResultadosNoBorraLosDatosDeEmbalaje() throws Exception {
         Path excel = crearExcel("marcar.xlsx", HEADERS_CON_EMBALAJE,
                 new String[]{"1241212", "Producto A", "", "", "", "", "", "", "", "", "NO",
-                        "", "GRANDE", "3"});
+                        "SI", "BOL-1"});
 
         manager.marcarResultados(excel, List.of("1241212"), Map.of());
 
-        assertEquals("GRANDE", manager.leerMedidas(excel).get("1241212").embalaje().nombreCaja());
+        assertEquals("BOL-1", manager.leerMedidas(excel).get("1241212").embalaje().envase());
     }
 
     @Test
@@ -184,9 +250,9 @@ class MedidasExcelManagerTest {
         try (Workbook wb = WorkbookFactory.create(excel.toFile(), null, true)) {
             Row header = wb.getSheetAt(0).getRow(0);
             assertEquals("SUBIDO", header.getCell(10).getStringCellValue());
-            assertEquals("N° Bolsa", header.getCell(11).getStringCellValue());
-            assertEquals("OBSERVACIONES", header.getCell(16).getStringCellValue());
-            assertEquals("ERROR", header.getCell(17).getStringCellValue());
+            assertEquals("ESTANDARIZADO", header.getCell(11).getStringCellValue());
+            assertEquals("OBSERVACIONES", header.getCell(15).getStringCellValue());
+            assertEquals("ERROR", header.getCell(16).getStringCellValue());
         }
     }
 
@@ -215,17 +281,19 @@ class MedidasExcelManagerTest {
     }
 
     @Test
-    void unaMedidaQueMencionaLaCajaNoSeConfundeConLaColumnaDeCaja() throws Exception {
+    void unaMedidaQueMencionaElEnvaseNoSeConfundeConLaColumnaDeEnvase() throws Exception {
         // "Ancho caja cm" es un nombre natural: lo que se mide es la caja.
-        String[] headers = {"SKU", "PRODUCTO", "Ancho caja cm", "Alto de la caja", "SUBIDO", "N° Caja"};
-        Path excel = crearExcel("medida-caja.xlsx", headers,
-                new String[]{"1241212", "Producto A", "30", "20", "NO", "3"});
+        String[] headers = {"SKU", "PRODUCTO", "Ancho envase cm", "Alto del envase", "SUBIDO", "ENVASE"};
+        Path excel = crearExcel("medida-envase.xlsx", headers,
+                new String[]{"1241212", "Producto A", "", "", "NO", "BOL-1"});
+        escribirNumero(excel, 1, 2, 30);
+        escribirNumero(excel, 1, 3, 20);
 
         MedidaSku medida = manager.leerMedidas(excel).get("1241212");
 
-        assertEquals(30.0, medida.anchoCm(), "la medida no debe ir a parar a la columna de caja");
+        assertEquals(30.0, medida.anchoCm(), "la medida no debe ir a parar a la columna de envase");
         assertEquals(20.0, medida.altoCm());
-        assertEquals("3", medida.embalaje().nroCaja());
+        assertEquals("BOL-1", medida.embalaje().envase());
     }
 
     @Test
@@ -234,20 +302,20 @@ class MedidasExcelManagerTest {
         String[] headers = {
                 "SKU", "PRODUCTO", "Ancho\ncm", "Alto\ncm", "Profundidad\ncm",
                 "Peso físico\n(empaque + producto)\nkg",
-                "N° Bolsa", "Nombre Caja", "N° Caja",
+                "ENVASE", "TIPO DE ROLLO", "CANT PAÑOS",
                 "Ancho +20%", "Alto +20%", "Profunidad +20%",
                 "Peso físico (empaque + producto) +20%", "SUBIDO", "ERROR"
         };
         Path excel = crearExcel("intercaladas.xlsx", headers,
-                new String[]{"", "", "", "", "", "", "5", "GRANDE", "3"});
+                new String[]{"", "", "", "", "", "", "BOL-1", "DIAMANTES", "2"});
 
         manager.agregarPendientes(excel, List.of("999999"));
 
         // La fila con SKU vacío se reusa: los datos de embalaje que el usuario cargó ahí no se pisan.
         MedidaSku medida = manager.leerMedidas(excel).get("999999");
-        assertEquals("GRANDE", medida.embalaje().nombreCaja());
-        assertEquals("3", medida.embalaje().nroCaja());
-        assertEquals("5", medida.embalaje().nroBolsa());
+        assertEquals("BOL-1", medida.embalaje().envase());
+        assertEquals("DIAMANTES", medida.embalaje().rollo());
+        assertEquals("2", medida.embalaje().cantPanos());
     }
 
     @Test
@@ -273,15 +341,15 @@ class MedidasExcelManagerTest {
     @Test
     void noPisaLosEncabezadosCuandoSkuNoEstaEnLaPrimeraColumna() throws Exception {
         // El usuario agregó una columna propia a la izquierda, así que SKU quedó en la B.
-        String[] headers = {"ID interno", "SKU", "PRODUCTO", "SUBIDO", "N° Caja", "ERROR"};
+        String[] headers = {"ID interno", "SKU", "PRODUCTO", "SUBIDO", "ENVASE", "ERROR"};
         Path excel = crearExcel("sku-corrido.xlsx", headers,
-                new String[]{"X-1", "1241212", "Producto A", "NO", "3", ""});
+                new String[]{"X-1", "1241212", "Producto A", "NO", "BOL-1", ""});
 
         manager.agregarPendientes(excel, List.of("999999"));
 
         assertEquals("ID interno", leerHeader(excel, 0), "no se deben reescribir los encabezados");
         assertEquals("SKU", leerHeader(excel, 1));
-        assertEquals("3", manager.leerMedidas(excel).get("1241212").embalaje().nroCaja());
+        assertEquals("BOL-1", manager.leerMedidas(excel).get("1241212").embalaje().envase());
     }
 
     @Test
@@ -309,19 +377,19 @@ class MedidasExcelManagerTest {
                 "Peso físico\n(empaque + producto)\nkg",
                 "Ancho +20%", "Alto +20%", "Profunidad +20%",
                 "Peso físico (empaque + producto) +20%", "SUBIDO",
-                "N° Bolsa", "Nombre Caja", "N° Caja",
-                "ROLLO INFLABLE", "CANT PAÑOS", "OBSERVACIONES",
+                "ESTANDARIZADO", "ENVASE",
+                "TIPO DE ROLLO", "CANT PAÑOS", "OBSERVACIONES",
                 "MI COLUMNA"
         };
         Path excel = crearExcel("sin-error.xlsx", headers,
                 new String[]{"1241212", "Producto A", "", "", "", "", "", "", "", "", "NO",
-                        "", "", "", "", "", "", "dato mio"});
+                        "", "", "", "", "", "dato mio"});
 
         manager.agregarPendientes(excel, List.of("999999"));
 
-        assertEquals("MI COLUMNA", leerHeader(excel, 17), "no se pisa la columna del usuario");
-        assertEquals("ERROR", leerHeader(excel, 18));
-        assertEquals("dato mio", leerCelda(excel, 1, 17));
+        assertEquals("MI COLUMNA", leerHeader(excel, 16), "no se pisa la columna del usuario");
+        assertEquals("ERROR", leerHeader(excel, 17));
+        assertEquals("dato mio", leerCelda(excel, 1, 16));
     }
 
     @Test
@@ -351,16 +419,16 @@ class MedidasExcelManagerTest {
                 "Peso físico\n(empaque + producto)\nkg",
                 "Ancho +20%", "Alto +20%", "Profunidad +20%",
                 "Peso físico (empaque + producto) +20%",
-                "N° Bolsa", "Nombre Caja", "N° Caja"
+                "ENVASE", "TIPO DE ROLLO", "CANT PAÑOS"
         };
         Path excel = crearExcel("sin-subido.xlsx", headers,
                 new String[]{"1241212", "Producto A", "", "", "", "", "", "", "", "",
-                        "5", "GRANDE", "3"});
+                        "BOL-1", "DIAMANTES", "2"});
 
         manager.agregarPendientes(excel, List.of("999999"));
 
-        assertEquals("N° Bolsa", leerHeader(excel, 10), "no se pisa la columna de embalaje");
-        assertEquals("5", manager.leerMedidas(excel).get("1241212").embalaje().nroBolsa());
+        assertEquals("ENVASE", leerHeader(excel, 10), "no se pisa la columna de embalaje");
+        assertEquals("BOL-1", manager.leerMedidas(excel).get("1241212").embalaje().envase());
         assertEquals("SUBIDO", leerHeader(excel, 13));
     }
 
@@ -391,20 +459,20 @@ class MedidasExcelManagerTest {
 
             Sheet medidas = wb.createSheet("MEDIDAS");
             Row header = medidas.createRow(0);
-            String[] headers = {"SKU", "PRODUCTO", "N° Caja"};
+            String[] headers = {"SKU", "PRODUCTO", "ENVASE"};
             for (int i = 0; i < headers.length; i++) {
                 header.createCell(i, CellType.STRING).setCellValue(headers[i]);
             }
             Row fila = medidas.createRow(1);
             fila.createCell(0, CellType.STRING).setCellValue("1241212");
-            fila.createCell(2, CellType.STRING).setCellValue("3");
+            fila.createCell(2, CellType.STRING).setCellValue("BOL-1");
 
             try (FileOutputStream fos = new FileOutputStream(excel.toFile())) {
                 wb.write(fos);
             }
         }
 
-        assertEquals("3", manager.leerMedidas(excel).get("1241212").embalaje().nroCaja());
+        assertEquals("BOL-1", manager.leerMedidas(excel).get("1241212").embalaje().envase());
     }
 
     @Test
@@ -484,6 +552,24 @@ class MedidasExcelManagerTest {
             }
         }
         return excel;
+    }
+
+    private void agregarHojaEstandarizacion(Path excel, String[][] filas) throws Exception {
+        try (Workbook wb = abrirParaEditar(excel)) {
+            Sheet hoja = wb.createSheet("ESTANDARIZACION");
+            Row header = hoja.createRow(0);
+            header.createCell(0, CellType.STRING).setCellValue("N°");
+            header.createCell(1, CellType.STRING).setCellValue("INSCRIPCION");
+            int r = 1;
+            for (String[] fila : filas) {
+                Row row = hoja.createRow(r++);
+                row.createCell(0, CellType.STRING).setCellValue(fila[0]);
+                row.createCell(1, CellType.STRING).setCellValue(fila[1]);
+            }
+            try (FileOutputStream fos = new FileOutputStream(excel.toFile())) {
+                wb.write(fos);
+            }
+        }
     }
 
     private void agregarHojaAuxiliarAlPrincipio(Path excel, String nombre, String[] headers) throws Exception {

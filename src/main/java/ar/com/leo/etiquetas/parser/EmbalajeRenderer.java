@@ -51,31 +51,49 @@ public final class EmbalajeRenderer {
         List<String> lineas = new ArrayList<>();
         if (datos == null) return lineas;
 
-        // Caja y bolsa son excluyentes: si están las dos cargadas gana la caja. Puede pasar cuando
-        // cambia el embalaje y queda el número de bolsa viejo.
-        //
-        // Sin ninguna de las dos la línea igual se imprime, avisando: el operario tiene que poder
-        // distinguir "a este SKU todavía no le cargaron el embalaje" de una etiqueta generada sin
-        // esta función, en vez de embalar a criterio propio.
-        String caja = unir(valor(datos.nroCaja()), valor(datos.nombreCaja()));
-        if (!caja.isEmpty()) lineas.add("CAJA: " + caja);
-        else if (cargado(datos.nroBolsa())) lineas.add("BOLSA: " + valor(datos.nroBolsa()));
-        else {
-            // Sin embalaje definido, el rollo y las observaciones no aplican: la etiqueta solo
-            // tiene que decir que a ese SKU le falta el dato, sin ruido alrededor.
+        // El aviso sale de la columna ESTANDARIZADO y no de si hay envase cargado: es una fórmula
+        // del usuario que resume si completó envase, tipo de rollo y cantidad de paños. Cuando dice
+        // que no, la etiqueta solo tiene que frenar al operario, sin ruido alrededor.
+        if (!datos.estandarizado()) {
             lineas.add(SIN_ESTANDARIZAR);
             return lineas;
         }
 
+        // "NO" en el envase es una decisión tomada —ese producto no lleva caja ni bolsa— así que se
+        // imprime como cualquier otro valor.
+        if (cargado(datos.envase())) {
+            lineas.add("ENVASE: " + unir(valor(datos.envase()), inscripcion(datos.inscripcion())));
+        }
+
         if (cargado(datos.rollo())) {
             String linea = "ROLLO: " + valor(datos.rollo());
-            if (cargado(datos.cantPanos())) linea += " - " + valor(datos.cantPanos()) + " paños";
+            // Los paños solo si son más de cero: la columna trae 0 en las filas sin rollo.
+            int panos = entero(datos.cantPanos());
+            if (panos > 0) linea += " - " + panos + (panos == 1 ? " paño" : " paños");
             lineas.add(linea);
         }
 
         if (cargado(datos.observaciones())) lineas.add("OBS: " + valor(datos.observaciones()));
 
         return lineas;
+    }
+
+    /**
+     * Inscripción a imprimir. Las filas de la hoja de estandarización que no llevan inscripción
+     * —las bolsas, y la fila "NO"— traen un guion, que no aporta nada en la etiqueta.
+     */
+    private static String inscripcion(String raw) {
+        String v = valor(raw);
+        return v.equals("-") ? "" : v;
+    }
+
+    /** Cantidad de paños, o 0 si la celda está vacía o no es un número. */
+    private static int entero(String raw) {
+        try {
+            return (int) Double.parseDouble(valor(raw).replace(',', '.'));
+        } catch (NumberFormatException e) {
+            return 0;
+        }
     }
 
     /**
