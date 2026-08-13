@@ -251,12 +251,24 @@ class EmbalajeRendererTest {
     }
 
     @Test
-    void laLineaDeReferenciaVaEnNegritaEntera() {
-        // No tiene dos puntos, así que la negrita no puede salir del rótulo como en las demás.
+    void laLineaDeReferenciaVaEnOtraFuenteSubrayadaYEnNegrita() {
         String zpl = EmbalajeRenderer.campoZpl(List.of("REFERENCIA", "ENVASE: BOL-1"));
 
-        assertTrue(zpl.contains("^FO400,20^A0N,24,24^FB390,1,0,L^FDREFERENCIA^FS"), zpl);
-        assertTrue(zpl.contains("^FO401,20^A0N,24,24^FB390,1,0,L^FDREFERENCIA^FS"), zpl);
+        // Fuente bitmap B, de trazo más cuadrado que el ^A0 del resto del bloque.
+        assertTrue(zpl.contains("^FO400,20^ABN,22,14^FDREFERENCIA^FS"), zpl);
+        // Negrita: segunda pasada corrida 1px, como en las demás líneas.
+        assertTrue(zpl.contains("^FO401,20^ABN,22,14^FDREFERENCIA^FS"), zpl);
+        // Subrayado: ZPL no lo tiene como atributo, así que es una línea dibujada. La fuente es
+        // monoespaciada, así que el ancho es exacto: 10 caracteres por 14.
+        assertTrue(zpl.contains("^FO400,42^GB140,2,2^FS"), zpl);
+    }
+
+    @Test
+    void laReferenciaNoCorreLasLineasDeAbajo() {
+        String zpl = EmbalajeRenderer.campoZpl(List.of("REFERENCIA", "ENVASE: BOL-1"));
+
+        // El encabezado ocupa un alto de línea normal: la primera línea de datos sigue en y=46.
+        assertTrue(zpl.contains("^FO400,46^A0N,24,24^FB390,5,0,L^FDENVASE: BOL-1^FS"), zpl);
     }
 
     // -------------------------------------------------------------------------------------------

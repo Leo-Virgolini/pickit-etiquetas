@@ -51,6 +51,13 @@ public final class EmbalajeRenderer {
     private static final String SIN_ESTANDARIZAR = "NO ESTANDARIZADO";
     /** Encabeza el bloque cuando la etiqueta es de más de una unidad. */
     private static final String REFERENCIA = "REFERENCIA";
+    // El encabezado va en la fuente residual B, de trazo más cuadrado que el ^A0 del resto, para
+    // que se lea como un rótulo y no como un dato más. Las fuentes bitmap de Zebra escalan solo en
+    // múltiplos enteros de su base (11x7), así que 22x14 es el tamaño más cercano al cuerpo: dos
+    // píxeles más bajo, con lo que entra en el mismo alto de línea sin correr nada.
+    private static final char FUENTE_REFERENCIA = 'B';
+    private static final int ALTO_REFERENCIA = 22;
+    private static final int ANCHO_REFERENCIA = 14;
 
     private EmbalajeRenderer() {
     }
@@ -165,6 +172,12 @@ public final class EmbalajeRenderer {
                 continue;
             }
 
+            if (REFERENCIA.equals(linea)) {
+                zpl.append(referencia(y));
+                y += ALTO_LINEA;
+                continue;
+            }
+
             boolean ultima = i == lineas.size() - 1;
             // La última línea se queda con todo el alto libre que sobra, así que puede repartirse
             // en varias. Las anteriores no pueden crecer sin correr las de abajo, así que entran
@@ -175,17 +188,32 @@ public final class EmbalajeRenderer {
             String texto = truncar(partirPalabrasLargas(linea), maxLineas * MAX_CARACTERES);
 
             zpl.append(campo(X, y, maxLineas, texto));
-            // Negrita simulada con una segunda pasada corrida 1px, igual que ZONA y COD.EXT. El
-            // encabezado de referencia va entero porque no tiene rótulo del que salir; en las demás
-            // líneas se repasa solo el rótulo, que se superpone exactamente sobre el de la primera
-            // pasada. Así no hay que calcular su ancho, que con una fuente proporcional no se puede
-            // saber de antemano.
-            String negrita = REFERENCIA.equals(linea) ? texto : rotulo(texto);
+            // Negrita simulada con una segunda pasada corrida 1px, igual que ZONA y COD.EXT. Se
+            // repasa solo el rótulo, que se superpone exactamente sobre el de la primera pasada.
+            // Así no hay que calcular su ancho, que con una fuente proporcional no se puede saber
+            // de antemano.
+            String negrita = rotulo(texto);
             if (!negrita.isEmpty()) zpl.append(campo(X + 1, y, maxLineas, negrita));
 
             y += ALTO_LINEA;
         }
         return zpl.toString();
+    }
+
+    /**
+     * Encabezado de referencia: fuente bitmap, en negrita y subrayado.
+     *
+     * ZPL no tiene subrayado como atributo, así que se dibuja. Con la fuente proporcional del resto
+     * del bloque habría que estimar el ancho de la palabra; la bitmap es monoespaciada, así que sale
+     * exacto y la línea termina donde termina el texto.
+     */
+    private static String referencia(int y) {
+        String campo = "^A" + FUENTE_REFERENCIA + "N," + ALTO_REFERENCIA + ',' + ANCHO_REFERENCIA
+                + "^FD" + REFERENCIA + "^FS\n";
+        int ancho = REFERENCIA.length() * ANCHO_REFERENCIA;
+        return "^FO" + X + ',' + y + campo
+                + "^FO" + (X + 1) + ',' + y + campo
+                + "^FO" + X + ',' + (y + ALTO_REFERENCIA) + "^GB" + ancho + ",2,2^FS\n";
     }
 
     /** Recuadro relleno con el aviso en video inverso, centrado vertical y horizontalmente. */

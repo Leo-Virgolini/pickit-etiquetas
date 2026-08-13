@@ -229,3 +229,23 @@ tomado de donde realmente se sabe: `cols.estandarizado() != -1`. La inferencia s
 - Las anclas `Unidad` y `SKU:` se buscan solo en el ZPL de ML, a partir del final de lo inyectado.
   `OBS` es texto libre del Excel y una observación del tipo "2 Unidades por caja" hacía que ZONA se
   posicionara tomando como referencia la línea de embalaje.
+
+## Adenda 2026-08-13 (4) — Formato del encabezado REFERENCIA
+
+`REFERENCIA` pasa a la fuente residual **B** de Zebra (`^ABN,22,14`), subrayada, además de la negrita
+que ya tenía. Se lee como un rótulo y no como un dato más.
+
+Las fuentes bitmap de Zebra escalan solo en múltiplos enteros de su base (B es 11×7), así que 22×14
+es el tamaño más cercano al cuerpo del bloque: dos píxeles más bajo que los 24 de `^A0`, con lo que
+entra en el mismo alto de línea y no corre nada.
+
+El subrayado se dibuja con `^GB`, porque ZPL no lo tiene como atributo. Con la fuente proporcional
+del resto habría que estimar el ancho de la palabra; la bitmap es monoespaciada, así que sale exacto
+—10 caracteres × 14 = 140— y la línea termina justo donde termina el texto.
+
+```
+^FO400,20^ABN,22,14^FDREFERENCIA^FS
+^FO401,20^ABN,22,14^FDREFERENCIA^FS
+^FO400,42^GB140,2,2^FS
+^FO400,46^A0N,24,24^FB390,1,0,L^FDENVASE: BOL-1 - 9Y^FS
+```
