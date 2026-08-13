@@ -224,10 +224,21 @@ class EmbalajeRendererTest {
     }
 
     @Test
+    void unaPalabraComunNoSeParteAunqueNoEntreEnLoQueQuedaDeLaFila() {
+        // "OBS: 3 COLCHON 1 TAPA." deja 4 caracteres libres y "AJUSTAR" son 7. Partirla en
+        // "AJUS TAR" para no desperdiciar ese margen se lee mucho peor que bajarla entera.
+        String zpl = EmbalajeRenderer.campoZpl(List.of("OBS: 3 COLCHON 1 TAPA. AJUSTAR PAÑO"));
+
+        assertTrue(zpl.contains("^FDOBS: 3 COLCHON 1 TAPA. AJUSTAR PAÑO^FS"), zpl);
+    }
+
+    @Test
     void unaPalabraMasLargaQueLaLineaSeParteParaQuePuedaEnvolver() {
         String zpl = EmbalajeRenderer.campoZpl(List.of("ENVASE: X", "OBS: " + "a".repeat(50)));
 
-        assertTrue(zpl.contains("^FDOBS: " + "a".repeat(22) + " " + "a".repeat(22) + " " + "a".repeat(6) + "^FS"), zpl);
+        // La primera pieza comparte fila con el rótulo, así que entra lo que sobra de los 27; las
+        // siguientes se quedan con la fila entera.
+        assertTrue(zpl.contains("^FDOBS: " + "a".repeat(22) + " " + "a".repeat(27) + " a^FS"), zpl);
     }
 
     @Test

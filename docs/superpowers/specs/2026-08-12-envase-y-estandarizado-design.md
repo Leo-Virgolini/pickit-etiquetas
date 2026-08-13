@@ -344,3 +344,36 @@ Se descartó. Es convención de markdown: significa "negrita" para quien conoce 
 etiqueta impresa son dos asteriscos y nada más. `REFERENCIA` ya va en negrita de verdad, así que
 estaría marcando algo ya marcado. El asterisco sí funciona en papel como delimitador
 (`*** REFERENCIA ***`, convención de tickets), pero eso es otra cosa que lo que se buscaba.
+
+## Adenda 2026-08-13 (9) — El reparto en filas desperdiciaba ancho
+
+Una impresión de prueba con una observación de dígitos seguidos mostró todas las filas cortando
+antes del margen derecho.
+
+La causa: `partirPalabrasLargas` cortaba las palabras largas en pedazos de `MAX_PALABRA` = 22 y los
+unía con espacios, y como `^FB` corta por palabras metía **un pedazo por fila**. Cada fila de
+continuación usaba 22 de los 27 caracteres disponibles.
+
+`partirPalabrasLargas` y `truncar` se reemplazan por `envolver`, que reparte el texto en filas del
+ancho real: la primera pieza comparte fila con el rótulo y entra lo que sobre, y las siguientes se
+quedan con la fila entera. `MAX_PALABRA` desaparece.
+
+Una palabra se parte **solo si no entra ni en una fila entera** —códigos, URLs—. Una palabra común
+que no entra en lo que queda se baja entera: partir "AJUSTAR" en "AJUS TAR" para no dejar cuatro
+caracteres de margen se lee mucho peor.
+
+Las filas se unen con espacios y `^FB` reproduce el mismo reparto: una fila solo se cierra cuando lo
+que sigue no entraba, así que la impresora tampoco lo puede subir.
+
+Reverificado contra el Excel real: 58 bloques, **0 desbordes**.
+
+### Lo que sigue quedando de margen, y por qué
+
+`MAX_CARACTERES` es un promedio para una fuente proporcional, dimensionado para **mayúsculas**, que
+es lo que tienen las observaciones reales. Los dígitos son bastante más angostos, así que una
+observación de puros números deja margen visible a la derecha. Subir el número por ese caso haría
+que las observaciones en mayúscula desbordaran, que es el error caro: `^FB` no descarta lo que no
+entra, lo reimprime encima.
+
+El espacio libre abajo del bloque tampoco es aprovechable: en una etiqueta de 2+ unidades a `OBS` le
+quedan 22 puntos hasta el separador de picking y una fila necesita 26.

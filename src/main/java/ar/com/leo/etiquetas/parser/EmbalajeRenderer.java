@@ -32,15 +32,10 @@ public final class EmbalajeRenderer {
      */
     private static final int MAX_CARACTERES = 27;
     /**
-     * Largo máximo de una palabra sin cortar. Deja lugar para "OBS: " —5 caracteres— en la misma
-     * fila que la primera pieza.
-     *
-     * Se dimensiona por ese rótulo y no por el más largo ("ENVASE: ", 8) a propósito: las palabras
-     * que hay que partir son códigos y URLs, y esos aparecen en las observaciones. Restar 8 haría
-     * más angostos los pedazos de toda observación larga, que es donde el alto escasea. El costo es
-     * que un envase con una inscripción larguísima sin espacios arranca en la fila de abajo.
+     * Pedazo más chico en el que vale la pena partir una palabra. Si en la fila quedan menos
+     * caracteres que esto, la palabra arranca abajo en vez de dejar un cachito suelto arriba.
      */
-    private static final int MAX_PALABRA = MAX_CARACTERES - 5;
+    private static final int MIN_PIEZA = 4;
     /** Marca de texto cortado. Tres puntos y no "…": la fuente residual puede no traer ese glifo. */
     private static final String ELIPSIS = "...";
 
@@ -203,7 +198,7 @@ public final class EmbalajeRenderer {
             int maxLineas = ultima ? Math.max(1, (Y_LIMITE - y) / ALTO_LINEA) : 1;
             // En los dos casos se acota: con ^FB, ZPL no descarta lo que no entra, lo reimprime
             // encima de la última fila y queda una mancha ilegible.
-            String texto = acotar(partirPalabrasLargas(linea), maxLineas);
+            String texto = acotar(linea, maxLineas);
 
             zpl.append(campo(X, y, maxLineas, texto));
             // Negrita simulada con una segunda pasada corrida 1px, igual que ZONA y COD.EXT. Se
@@ -267,61 +262,68 @@ public final class EmbalajeRenderer {
     }
 
     /**
-     * Inserta cortes en las palabras que no entran en una línea. ^FB corta por palabras: una
-     * palabra más larga que el ancho se baja entera a la línea siguiente, dejando el rótulo solo
-     * arriba ("OBS:" en una línea y el texto en la de abajo). Pasa con códigos y URLs, que no
-     * tienen espacios donde cortar.
-     */
-    private static String partirPalabrasLargas(String texto) {
-        StringBuilder salida = new StringBuilder(texto.length() + 8);
-        for (String palabra : texto.split(" ")) {
-            if (!salida.isEmpty()) salida.append(' ');
-            for (int i = 0; i < palabra.length(); i += MAX_PALABRA) {
-                if (i > 0) salida.append(' ');
-                salida.append(palabra, i, Math.min(i + MAX_PALABRA, palabra.length()));
-            }
-        }
-        return salida.toString();
-    }
-
-    /**
-     * Acota el texto a las filas que el ^FB tiene permitido imprimir.
+     * Reparte el texto en las filas que el ^FB tiene permitido imprimir, y recorta lo que sobra.
      *
      * No alcanza con contar caracteres. ^FB corta por palabras, así que un texto de
      * {@code maxFilas · MAX_CARACTERES} caracteres puede necesitar una fila más: "OBS: 3 COLCHON 1
      * TAPA. AJUSTAR PAÑO SEGÚN CANT VENDIDA" mide 54 y entra en 2 x 27 por cuenta de caracteres,
-     * pero al cortarse por palabras ocupa tres filas. Por eso se simula el corte.
+     * pero al cortarse por palabras ocupa tres filas.
+     *
+     * Las filas se devuelven unidas por espacios, que es donde ^FB va a cortar. Reproduce el mismo
+     * reparto: una fila solo se corta cuando la palabra que sigue no entraba, así que la impresora
+     * tampoco la va a poder subir.
      */
     private static String acotar(String texto, int maxFilas) {
         List<String> filas = envolver(texto);
-        if (filas.size() <= maxFilas) return texto;
 
-        String ultima = filas.get(maxFilas - 1);
-        if (ultima.length() + ELIPSIS.length() > MAX_CARACTERES) {
-            ultima = ultima.substring(0, MAX_CARACTERES - ELIPSIS.length()).stripTrailing();
+        if (filas.size() > maxFilas) {
+            String ultima = filas.get(maxFilas - 1);
+            if (ultima.length() + ELIPSIS.length() > MAX_CARACTERES) {
+                ultima = ultima.substring(0, MAX_CARACTERES - ELIPSIS.length()).stripTrailing();
+            }
+            filas = new ArrayList<>(filas.subList(0, maxFilas - 1));
+            filas.add(ultima + ELIPSIS);
         }
-        List<String> acotadas = new ArrayList<>(filas.subList(0, maxFilas - 1));
-        acotadas.add(ultima + ELIPSIS);
-        return String.join(" ", acotadas);
+
+        return String.join(" ", filas);
     }
 
     /**
-     * Cómo va a repartir ^FB el texto en filas: mete palabras mientras entren en el ancho.
-     * {@link #partirPalabrasLargas} ya garantiza que ninguna palabra supere el ancho por sí sola.
+     * Cómo queda repartido el texto en filas del ancho disponible.
+     *
+     * Una palabra que no entra en lo que queda de la fila se parte ahí mismo y sigue abajo, en vez
+     * de bajarse entera: pasa con códigos y URLs, que no tienen espacios donde cortar, y bajarlos
+     * enteros dejaría el rótulo solo arriba y desperdiciaría el resto de cada fila.
      */
     private static List<String> envolver(String texto) {
         List<String> filas = new ArrayList<>();
         StringBuilder fila = new StringBuilder();
+
         for (String palabra : texto.split(" ")) {
-            if (fila.isEmpty()) {
-                fila.append(palabra);
-            } else if (fila.length() + 1 + palabra.length() <= MAX_CARACTERES) {
-                fila.append(' ').append(palabra);
-            } else {
-                filas.add(fila.toString());
-                fila = new StringBuilder(palabra);
+            while (!palabra.isEmpty()) {
+                int libre = MAX_CARACTERES - fila.length() - (fila.isEmpty() ? 0 : 1);
+
+                if (palabra.length() <= libre) {
+                    if (!fila.isEmpty()) fila.append(' ');
+                    fila.append(palabra);
+                    palabra = "";
+                } else if (palabra.length() <= MAX_CARACTERES || libre < MIN_PIEZA) {
+                    // Entra sola en una fila, o queda tan poco que partirla no vale la pena:
+                    // arranca abajo. Partir una palabra común se lee peor que dejar margen.
+                    filas.add(fila.toString());
+                    fila = new StringBuilder();
+                } else {
+                    // No entra ni en una fila entera, así que hay que partirla igual. Se aprovecha
+                    // lo que queda de esta.
+                    if (!fila.isEmpty()) fila.append(' ');
+                    fila.append(palabra, 0, libre);
+                    palabra = palabra.substring(libre);
+                    filas.add(fila.toString());
+                    fila = new StringBuilder();
+                }
             }
         }
+
         if (!fila.isEmpty()) filas.add(fila.toString());
         return filas;
     }
