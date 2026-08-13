@@ -4,7 +4,11 @@ import ar.com.leo.etiquetas.model.DatosEmbalaje;
 import ar.com.leo.etiquetas.model.MedidaSku;
 import org.junit.jupiter.api.Test;
 
+import java.util.Map;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class EstadoDatoTest {
 
@@ -68,23 +72,18 @@ class EstadoDatoTest {
 
     @Test
     void conLaFormulaEnSiElEstadoEsSi() {
-        assertEquals(EstadoDato.SI, EstadoDato.estandarizadoDe(medida(null, estandarizado())));
+        assertEquals(EstadoDato.SI, EstadoDato.estandarizadoDe(estandarizado()));
     }
 
     @Test
     void conLaFormulaEnNoElEstadoEsNo() {
         // Aunque tenga envase y rollo cargados: la fórmula del Excel es la fuente de verdad.
-        assertEquals(EstadoDato.NO, EstadoDato.estandarizadoDe(medida(null, sinEstandarizar())));
+        assertEquals(EstadoDato.NO, EstadoDato.estandarizadoDe(sinEstandarizar()));
     }
 
     @Test
     void sinLaColumnaEnElExcelNoAplica() {
-        assertEquals(EstadoDato.NO_APLICA, EstadoDato.estandarizadoDe(medida(null, DatosEmbalaje.VACIO)));
-    }
-
-    @Test
-    void unSkuQueNoFiguraEnElExcelNoEstaEstandarizado() {
-        assertEquals(EstadoDato.NO, EstadoDato.estandarizadoDe(null));
+        assertEquals(EstadoDato.NO_APLICA, EstadoDato.estandarizadoDe(DatosEmbalaje.VACIO));
     }
 
     // -------------------------------------------------------------------------------------------
@@ -116,5 +115,67 @@ class EstadoDatoTest {
     void unSkuVacioNoEsElegible() {
         assertEquals(false, EstadoDato.esSkuElegible("J1-D", "  "));
         assertEquals(false, EstadoDato.esSkuElegible("J1-D", null));
+    }
+
+    // -------------------------------------------------------------------------------------------
+    // Qué etiqueta lleva la sección de embalaje
+    // -------------------------------------------------------------------------------------------
+
+    @Test
+    void soloLlevaEmbalajeLaEtiquetaDeUnaUnidad() {
+        // Con dos o más unidades el operario no está embalando un producto suelto: la instrucción
+        // de envase no le sirve y ocuparía lugar en la etiqueta.
+        assertTrue(EstadoDato.llevaEmbalaje("J1-D", "1241212", 1));
+        assertFalse(EstadoDato.llevaEmbalaje("J1-D", "1241212", 2));
+    }
+
+    @Test
+    void unCarroNoLlevaEmbalajeAunqueSeaDeUnaUnidad() {
+        assertFalse(EstadoDato.llevaEmbalaje("CARROS", "1241212", 1));
+    }
+
+    // -------------------------------------------------------------------------------------------
+    // Módulo de embalaje activo
+    // -------------------------------------------------------------------------------------------
+
+    @Test
+    void elModuloEstaActivoSiElExcelTieneLaColumna() {
+        Map<String, MedidaSku> medidas = Map.of("1241212", medida(null, sinEstandarizar()));
+
+        assertTrue(EstadoDato.moduloEmbalajeActivo(medidas));
+    }
+
+    @Test
+    void elModuloEstaApagadoSiNingunaFilaTieneLaColumna() {
+        Map<String, MedidaSku> medidas = Map.of("1241212", medida(null, DatosEmbalaje.VACIO));
+
+        assertFalse(EstadoDato.moduloEmbalajeActivo(medidas));
+        assertFalse(EstadoDato.moduloEmbalajeActivo(Map.of()));
+        assertFalse(EstadoDato.moduloEmbalajeActivo(null));
+    }
+
+    // -------------------------------------------------------------------------------------------
+    // SKU que no figura en el Excel
+    // -------------------------------------------------------------------------------------------
+
+    @Test
+    void unSkuAusenteDelExcelCuentaComoSinEstandarizar() {
+        // Todavía no tiene fila, así que nadie le cargó el envase: la etiqueta tiene que avisarlo.
+        assertEquals(DatosEmbalaje.SIN_CARGAR, EstadoDato.embalajeDe(null, true));
+        assertEquals(EstadoDato.NO, EstadoDato.estandarizadoDe(EstadoDato.embalajeDe(null, true)));
+    }
+
+    @Test
+    void unSkuAusenteConElModuloApagadoNoInformaNada() {
+        // Sin la columna en el Excel la función no está en uso: reclamar embalaje sería ruido.
+        assertEquals(DatosEmbalaje.VACIO, EstadoDato.embalajeDe(null, false));
+        assertEquals(EstadoDato.NO_APLICA, EstadoDato.estandarizadoDe(EstadoDato.embalajeDe(null, false)));
+    }
+
+    @Test
+    void unSkuPresenteUsaElEmbalajeDeSuFila() {
+        MedidaSku medida = medida(null, estandarizado());
+
+        assertEquals(estandarizado(), EstadoDato.embalajeDe(medida, true));
     }
 }

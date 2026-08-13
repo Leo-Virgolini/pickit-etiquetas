@@ -127,6 +127,12 @@ class EmbalajeRendererTest {
     }
 
     @Test
+    void unSkuQueNoEstaEnElExcelAvisaQueNoEstaEstandarizado() {
+        // Recién se lo agrega al Excel en este mismo lote, así que nadie le cargó el envase todavía.
+        assertEquals(List.of("NO ESTANDARIZADO"), EmbalajeRenderer.lineas(DatosEmbalaje.SIN_CARGAR));
+    }
+
+    @Test
     void sinLasColumnasEnElExcelNoSeImprimeNada() {
         // Distinto de "no estandarizado": el archivo no tiene la columna, así que la función no
         // está en uso y la etiqueta no tiene nada que decir.

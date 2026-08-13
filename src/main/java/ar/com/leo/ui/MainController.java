@@ -1607,6 +1607,9 @@ public class MainController {
                                         Set<String> embalajesFaltantesOut) {
         Map<String, String> skuToExtCode = excelMapping.skuToExternalCode();
         Map<String, ComboProduct> normalizedCombos = loadNormalizedCombos();
+        // Hace falta para los SKU que todavía no figuran en el Excel: sin ninguna fila propia, es
+        // lo único que dice si la función está en uso o si no hay nada que reclamar.
+        boolean moduloEmbalajeActivo = EstadoDato.moduloEmbalajeActivo(medidas);
         List<SortedLabelGroup> newGroups = new ArrayList<>();
         int labelPosition = 1;
         Set<String> skusYaMarcados = new HashSet<>();
@@ -1627,33 +1630,37 @@ public class MainController {
                 extCodeText = "COD.EXT.: " + (extCode.isEmpty() ? "-" : extCode);
             }
 
-            // Detectar si el SKU individual está pendiente de medición (MEDIR tag).
-            // Solo aplica a productos individuales (no CARROS) con SKU numérico válido,
-            // y solo se marca/guarda cuando el pedido es de 1 unidad (se evalúa por etiqueta).
-            // Un SKU es elegible si tiene número propio y su etiqueta corresponde a un solo
-            // producto. Los no numéricos son sentinelas del parser ("SKU INVALIDO: ...") que nunca
+            // Un SKU es elegible para el banner MEDIR y para las líneas de embalaje si tiene
+            // número propio y su etiqueta corresponde a un solo producto. Los carros listan
+            // varios; los no numéricos son sentinelas del parser ("SKU INVALIDO: ...") que nunca
             // llegan al Excel de medidas, así que no se les puede cargar ni medida ni embalaje.
-            // La condición es una sola para los dos usos: si divergen, una etiqueta podría salir
-            // con banner MEDIR pero sin líneas de embalaje, o al revés.
+            // Los dos datos exigen además que la etiqueta sea de una unidad, y eso se evalúa por
+            // etiqueta más abajo: si las condiciones divergieran, una podría salir con banner
+            // MEDIR pero sin líneas de embalaje, o al revés.
             boolean skuElegible = medidas != null && EstadoDato.esSkuElegible(zone, sku);
             ar.com.leo.etiquetas.model.MedidaSku medidaSku = skuElegible ? medidas.get(sku) : null;
 
             boolean skuPendienteMedicion = skuElegible && (medidaSku == null || !medidaSku.estaMedido());
 
-            // Datos de embalaje del SKU. Se resuelven una vez por grupo: las líneas son iguales en
-            // todas las etiquetas del grupo.
-            String embalajeZpl = "";
-            if (skuElegible) {
-                DatosEmbalaje datos = medidaSku == null ? DatosEmbalaje.VACIO : medidaSku.embalaje();
-                embalajeZpl = EmbalajeRenderer.campoZpl(EmbalajeRenderer.lineas(datos));
-                if (datos.aplica() && !datos.estandarizado() && embalajesFaltantesOut != null) {
-                    embalajesFaltantesOut.add(sku);
-                }
-            }
+            // Datos de embalaje del SKU. Se resuelven una vez por grupo —las líneas son iguales en
+            // todas sus etiquetas— pero solo se inyectan en las de una unidad.
+            DatosEmbalaje datosEmbalaje = skuElegible
+                    ? EstadoDato.embalajeDe(medidaSku, moduloEmbalajeActivo)
+                    : DatosEmbalaje.VACIO;
+            String embalajeZpl = EmbalajeRenderer.campoZpl(EmbalajeRenderer.lineas(datosEmbalaje));
+            boolean faltaEmbalaje = datosEmbalaje.aplica() && !datosEmbalaje.estandarizado();
 
             List<ZplLabel> newLabels = new ArrayList<>();
             for (ZplLabel label : group.labels()) {
                 String raw = label.rawZpl();
+                // Un pedido de dos o más unidades no es un producto suelto: la instrucción de
+                // envase no le sirve al operario y le sacaría lugar al resto de la etiqueta.
+                boolean llevaEmbalaje = !embalajeZpl.isEmpty()
+                        && EstadoDato.llevaEmbalaje(zone, sku, label.quantity());
+                // El aviso final tiene que listar los mismos SKU que salieron avisados en papel.
+                if (llevaEmbalaje && faltaEmbalaje && embalajesFaltantesOut != null) {
+                    embalajesFaltantesOut.add(sku);
+                }
                 boolean necesitaMedir = skuPendienteMedicion && label.quantity() == 1;
                 if (necesitaMedir) {
                     skusPendientesOut.putIfAbsent(sku, group.productDescription() != null ? group.productDescription() : "");
@@ -1661,7 +1668,7 @@ public class MainController {
                 // Las líneas de embalaje ocupan la franja donde ML imprime "Recortá esta parte...",
                 // que no le sirve al operario. Se quita antes de calcular el punto de inserción para
                 // que el índice corresponda al texto que efectivamente se va a partir.
-                if (!embalajeZpl.isEmpty()) {
+                if (llevaEmbalaje) {
                     raw = quitarTextoRecorte(raw, sku);
                 }
                 // Inyectar número de posición (#1, #2, ...) arriba a la izquierda en negrita
@@ -1688,7 +1695,7 @@ public class MainController {
                             "^FO20,70^GB380,52,52^FS\n"
                             + "^FO20,75^A0N,42,42^FB380,1,0,C^FR^FD" + medirText + "^FS\n";
                 }
-                raw = raw.substring(0, insertIdx) + "^LH0,0\n" + posField1 + "\n" + posField2 + "\n" + posField3 + "\n" + embalajeZpl + medirPrefix + raw.substring(insertIdx);
+                raw = raw.substring(0, insertIdx) + "^LH0,0\n" + posField1 + "\n" + posField2 + "\n" + posField3 + "\n" + (llevaEmbalaje ? embalajeZpl : "") + medirPrefix + raw.substring(insertIdx);
                 labelPosition++;
 
                 // Parsear ^LH original para convertir coordenadas relativas a absolutas
@@ -2179,6 +2186,7 @@ public class MainController {
 
     private void displayResult(SortResult result, Map<String, ar.com.leo.etiquetas.model.MedidaSku> medidas) {
         ObservableList<LabelTableRow> rows = FXCollections.observableArrayList();
+        boolean moduloEmbalajeActivo = EstadoDato.moduloEmbalajeActivo(medidas);
         List<Integer> groupSizes = result.groups().stream()
                 .map(g -> g.labels().size())
                 .toList();
@@ -2188,6 +2196,11 @@ public class MainController {
             // Sin módulo de medidas activo no hay nada que informar: las dos columnas quedan en "—".
             boolean elegible = medidas != null && EstadoDato.esSkuElegible(group.zone(), group.sku());
             ar.com.leo.etiquetas.model.MedidaSku medida = elegible ? medidas.get(group.sku()) : null;
+            // La columna informa sobre el SKU, no sobre una etiqueta puntual: un grupo puede tener
+            // etiquetas de una unidad y de varias, y el dato cargado es el mismo para todas.
+            DatosEmbalaje embalaje = elegible
+                    ? EstadoDato.embalajeDe(medida, moduloEmbalajeActivo)
+                    : DatosEmbalaje.VACIO;
 
             rows.add(new LabelTableRow(
                     printNumbers.get(i++),
@@ -2198,7 +2211,7 @@ public class MainController {
                     group.details(),
                     extractQuantityFromLabels(group.labels()),
                     elegible ? EstadoDato.medidasDe(medida) : EstadoDato.NO_APLICA,
-                    elegible ? EstadoDato.estandarizadoDe(medida) : EstadoDato.NO_APLICA));
+                    EstadoDato.estandarizadoDe(embalaje)));
         }
         filteredLabels = new FilteredList<>(rows, p -> true);
         SortedList<LabelTableRow> sortedLabels = new SortedList<>(filteredLabels);

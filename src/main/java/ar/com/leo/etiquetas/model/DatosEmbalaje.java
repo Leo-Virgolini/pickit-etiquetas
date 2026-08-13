@@ -26,4 +26,10 @@ public record DatosEmbalaje(
 
     /** El Excel no tiene las columnas de embalaje: la función no está en uso. */
     public static final DatosEmbalaje VACIO = new DatosEmbalaje("", "", "", "", "", false, false);
+
+    /**
+     * El SKU todavía no tiene fila en el Excel, así que nadie le cargó el envase. Distinto de
+     * {@link #VACIO}: acá la función sí está en uso, y la etiqueta tiene que avisar que falta.
+     */
+    public static final DatosEmbalaje SIN_CARGAR = new DatosEmbalaje("", "", "", "", "", false, true);
 }

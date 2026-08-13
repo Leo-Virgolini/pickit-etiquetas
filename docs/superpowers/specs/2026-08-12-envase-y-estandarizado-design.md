@@ -108,3 +108,49 @@ una celda de texto o una fórmula con error no habiliten la subida.
 | `ui/MainController.java` | Columna renombrada, aviso |
 | `resources/ar/com/leo/ui/MainView.fxml` | Columna renombrada |
 | `README.md` | Columnas y líneas nuevas |
+
+## Adenda 2026-08-13 — Alcance de la sección de embalaje
+
+### Solo etiquetas de un producto suelto
+
+La sección se imprime únicamente en etiquetas de **1 SKU y cantidad 1**. Con dos o más unidades el
+operario no está embalando un producto suelto, así que la instrucción de envase no le sirve y le
+saca lugar al resto de la etiqueta. Es el mismo criterio que ya usaba el banner MEDIR.
+
+Antes se resolvía una vez por grupo y se inyectaba en todas sus etiquetas. Ahora las líneas se
+siguen armando una vez por grupo —son iguales para todas— pero la inyección se decide por etiqueta
+con `EstadoDato.llevaEmbalaje(zona, sku, cantidad)`.
+
+Las etiquetas **turbo** siguen llevándola: se tratan como cualquier otra zona.
+
+### SKU que no figura en el Excel
+
+Un SKU elegible que todavía no tiene fila imprime `NO ESTANDARIZADO`. Antes no imprimía nada, que
+era indistinguible de tener el embalaje resuelto.
+
+Se lo agrega al Excel en ese mismo lote —eso ya funcionaba, por el flujo de pendientes de medición—
+pero recién después alguien va a poder cargarle el envase, así que mientras tanto el operario tiene
+que enterarse.
+
+Con una salvaguarda: si el Excel no tiene la columna `ESTANDARIZADO`, la función no está en uso y no
+hay nada que reclamar. Como un SKU ausente no trae ninguna fila de donde deducirlo, el dato se saca
+de las filas que sí se leyeron (`EstadoDato.moduloEmbalajeActivo`), una vez por lote.
+
+### Un solo origen para los dos consumidores
+
+`EstadoDato.embalajeDe(medida, moduloActivo)` devuelve el `DatosEmbalaje` a usar, y tanto la etiqueta
+como la columna de la tabla parten de ese objeto: `estandarizadoDe` pasa a recibirlo en vez del
+`MedidaSku`. La constante nueva `DatosEmbalaje.SIN_CARGAR` (`aplica = true`, `estandarizado = false`)
+representa al SKU ausente, frente a `VACIO`, que representa a la función apagada.
+
+La tabla **no** mira la cantidad: una fila es un grupo que puede mezclar etiquetas de una unidad y de
+varias, y la columna informa sobre el SKU, no sobre una etiqueta puntual.
+
+### Testing
+
+`EstadoDatoTest`: la cantidad decide (`1` sí, `2` no), un carro nunca lleva; el módulo activo se
+deduce de las filas leídas; un SKU ausente da `SIN_CARGAR` con el módulo activo y `VACIO` sin él.
+`EmbalajeRendererTest`: `SIN_CARGAR` produce `NO ESTANDARIZADO`.
+
+La inyección en sí sigue sin cobertura automática —`injectZplHeaders` es privado y necesita JavaFX
+inicializado—, así que hace falta una impresión de prueba real.
