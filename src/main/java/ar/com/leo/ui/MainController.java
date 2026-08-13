@@ -1878,7 +1878,8 @@ public class MainController {
                 }
                 newLabels.add(new ZplLabel(raw, label.sku(), label.productDescription(), label.details(), label.quantity(), label.turbo(), label.orderIds()));
             }
-            newGroups.add(new SortedLabelGroup(zone, group.sku(), group.productDescription(), group.details(), group.orderIds(), newLabels));
+            newGroups.add(new SortedLabelGroup(zone, group.sku(), group.productDescription(),
+                    group.details(), newLabels));
         }
         return new SortResult(newGroups, result.statistics());
     }
@@ -2294,11 +2295,12 @@ public class MainController {
     private void displayResult(SortResult result, MedidasExcelManager.Medidas medidas) {
         ObservableList<LabelTableRow> rows = FXCollections.observableArrayList();
         boolean moduloEmbalajeActivo = medidas != null && medidas.embalajeEnUso();
-        List<Integer> groupSizes = result.groups().stream()
-                .map(g -> g.labels().size())
-                .toList();
-        List<String> printNumbers = ar.com.leo.etiquetas.model.PrintNumbering.compute(groupSizes);
-        int i = 0;
+        // Una fila por etiqueta, no por grupo: cada fila es un paquete, con su número impreso, su
+        // venta y las unidades que van adentro. Agrupar obligaba a mostrar el # como rango, la
+        // cantidad como suma y la orden como lista, tres cosas distintas en la misma fila.
+        //
+        // La agrupación se mantiene para el ZPL: es la que define el orden de impresión.
+        int posicion = 1;
         for (SortedLabelGroup group : result.groups()) {
             // Sin módulo de medidas activo no hay nada que informar: las dos columnas quedan en "—".
             boolean elegible = medidas != null && EstadoDato.esSkuElegible(group.zone(), group.sku());
@@ -2309,15 +2311,22 @@ public class MainController {
                     ? EstadoDato.embalajeDe(medida, moduloEmbalajeActivo)
                     : DatosEmbalaje.VACIO;
 
-            rows.add(new LabelTableRow(
-                    printNumbers.get(i++),
-                    group.orderIds(),
-                    group.zone(),
-                    group.sku(),
-                    group.productDescription(),
-                    group.details(),
-                    extractQuantityFromLabels(group.labels()),
-                    EstadoDato.estandarizadoDe(embalaje)));
+            // El estado es del SKU, así que se resuelve una vez para todas sus etiquetas.
+            EstadoDato estandarizado = EstadoDato.estandarizadoDe(embalaje);
+
+            for (ZplLabel label : group.labels()) {
+                // El número sale del mismo contador que inyecta el #N en la etiqueta, así que la
+                // fila y el papel dicen lo mismo.
+                rows.add(new LabelTableRow(
+                        String.valueOf(posicion++),
+                        label.orderIds(),
+                        group.zone(),
+                        group.sku(),
+                        group.productDescription(),
+                        group.details(),
+                        label.quantity(),
+                        estandarizado));
+            }
         }
         mostrarFilas(rows);
 
