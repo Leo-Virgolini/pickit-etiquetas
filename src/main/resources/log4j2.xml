@@ -13,7 +13,16 @@
                 <SizeBasedTriggeringPolicy size="5 MB"/>
                 <TimeBasedTriggeringPolicy/>
             </Policies>
-            <DefaultRolloverStrategy max="10"/>
+            <!-- max="10" es el tope del contador %i dentro de una misma fecha, no una cantidad
+                 de dias: sin el bloque Delete los .gz viejos no se borraban nunca. La limpieza
+                 corre al rotar, asi que si la app no se usa por un tiempo los archivos quedan
+                 hasta el proximo arranque que rote. -->
+            <DefaultRolloverStrategy max="10">
+                <Delete basePath="logs" maxDepth="1">
+                    <IfFileName glob="app-*.log.gz"/>
+                    <IfLastModified age="P7D"/>
+                </Delete>
+            </DefaultRolloverStrategy>
         </RollingFile>
 
         <Console name="Console" target="SYSTEM_OUT">

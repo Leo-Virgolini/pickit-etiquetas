@@ -164,6 +164,15 @@ Credenciales almacenadas en `%PROGRAMDATA%\SuperMaster\secrets\`. Tokens ML se r
 
 `HttpRetryHandler` implementa: rate limiting (Guava `RateLimiter`), refresh automatico de token en 401, backoff exponencial con jitter en 429/503/5xx.
 
+## Logs
+
+`logs/app.log`, junto al jar. Rota al cambiar el dia o al llegar a 5 MB, y comprime el anterior en
+`app-AAAA-MM-DD-N.log.gz`. Los comprimidos con mas de **7 dias** se borran solos.
+
+La limpieza corre **al rotar**, no al arrancar: si la app estuvo sin usarse un tiempo, los archivos
+viejos siguen ahi hasta la primera rotacion. Ojo con el `max="10"` de `DefaultRolloverStrategy`, que
+no son 10 dias sino el tope del contador `N` dentro de una misma fecha.
+
 ## Requisitos
 
 - Java 25+
