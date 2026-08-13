@@ -27,12 +27,13 @@ class EmbalajeRendererTest {
 
     @Test
     void elEnvaseLlevaSuCodigoYSuInscripcion() {
-        assertEquals(List.of("ENVASE: BOL-1 - 9Y"),
+        assertEquals(List.of("ENVASE: BOL-1 \"9Y\""),
                 lineas(datos("BOL-1", "9Y", "", "", "")));
     }
 
     @Test
     void sinInscripcionConocidaVaSoloElCodigo() {
+        // Sin comillas vacías colgando del código.
         assertEquals(List.of("ENVASE: CAJ-9"),
                 lineas(datos("CAJ-9", "", "", "", "")));
     }
@@ -108,7 +109,7 @@ class EmbalajeRendererTest {
     @Test
     void elOrdenEsEnvaseRolloObservaciones() {
         assertEquals(List.of(
-                        "ENVASE: BOL-1 - 9Y",
+                        "ENVASE: BOL-1 \"9Y\"",
                         "ROLLO: DIAMANTES - 2 paños",
                         "OBS: Colchon + Tapa"),
                 lineas(datos("BOL-1", "9Y", "DIAMANTES", "2", "Colchon + Tapa")));
@@ -228,7 +229,7 @@ class EmbalajeRendererTest {
     @Test
     void conMasDeUnaUnidadLosDatosVanComoReferencia() {
         // El operario no está embalando un producto suelto, así que el envase es orientativo.
-        assertEquals(List.of("REFERENCIA", "ENVASE: BOL-1 - 9Y", "ROLLO: DIAMANTES - 2 paños"),
+        assertEquals(List.of("REFERENCIA", "ENVASE: BOL-1 \"9Y\"", "ROLLO: DIAMANTES - 2 paños"),
                 EmbalajeRenderer.lineas(datos("BOL-1", "9Y", "DIAMANTES", "2", ""), 2));
     }
 

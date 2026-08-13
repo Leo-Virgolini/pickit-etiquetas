@@ -100,7 +100,7 @@ Dos sub-pestañas para obtener etiquetas ZPL, procesarlas y enviarlas a la impre
      | SKU que todavia no figura en el Excel | `NO ESTANDARIZADO` (se lo agrega al Excel en el mismo lote) |
      | pedido de 2+ unidades, con embalaje cargado | `REFERENCIA` en negrita como primera linea, y debajo las demas |
      | pedido de 2+ unidades, sin embalaje cargado | no se imprime nada |
-     | `ENVASE` | `ENVASE: CAJ-1 - 9Y` (la inscripcion sale de la hoja `ESTANDARIZACION`) |
+     | `ENVASE` | `ENVASE: CAJ-1 "9Y"` (la inscripcion sale de la hoja `ESTANDARIZACION` y va entre comillas: es lo que esta escrito en el envase fisico) |
      | `ENVASE` en `NO` | `ENVASE: NO` |
      | `TIPO DE ROLLO` | `ROLLO: DIAMANTES - 2 paños` (con 0 paños: `ROLLO: DIAMANTES`) |
      | `OBSERVACIONES` | `OBS: Colchon + Tapa` |

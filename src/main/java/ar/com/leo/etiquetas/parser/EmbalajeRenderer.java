@@ -91,7 +91,7 @@ public final class EmbalajeRenderer {
         // "NO" en el envase es una decisión tomada —ese producto no lleva caja ni bolsa— así que se
         // imprime como cualquier otro valor.
         if (cargado(datos.envase())) {
-            lineas.add("ENVASE: " + unir(valor(datos.envase()), inscripcion(datos.inscripcion())));
+            lineas.add("ENVASE: " + envase(datos));
         }
 
         if (cargado(datos.rollo())) {
@@ -269,11 +269,17 @@ public final class EmbalajeRenderer {
         return texto.substring(0, maxCaracteres - ELIPSIS.length()) + ELIPSIS;
     }
 
-    /** Une número y nombre con " - ", omitiendo el separador si falta alguno. */
-    private static String unir(String primero, String segundo) {
-        if (primero.isEmpty()) return segundo;
-        if (segundo.isEmpty()) return primero;
-        return primero + " - " + segundo;
+    /**
+     * Código del envase con su inscripción entre comillas, del tipo {@code CAJ-1 "9Y"}. Las comillas
+     * marcan que eso es lo que está escrito en el envase físico, que es como lo busca el operario.
+     * Sin inscripción va el código solo, sin comillas vacías colgando.
+     */
+    private static String envase(DatosEmbalaje datos) {
+        String codigo = valor(datos.envase());
+        String inscripcion = inscripcion(datos.inscripcion());
+        if (inscripcion.isEmpty()) return codigo;
+        if (codigo.isEmpty()) return "\"" + inscripcion + "\"";
+        return codigo + " \"" + inscripcion + "\"";
     }
 
     private static boolean cargado(String valor) {

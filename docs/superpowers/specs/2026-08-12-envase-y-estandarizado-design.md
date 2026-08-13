@@ -249,3 +249,12 @@ del resto habría que estimar el ancho de la palabra; la bitmap es monoespaciada
 ^FO400,42^GB140,2,2^FS
 ^FO400,46^A0N,24,24^FB390,1,0,L^FDENVASE: BOL-1 - 9Y^FS
 ```
+
+## Adenda 2026-08-13 (5) — Formato de la línea de envase
+
+El separador `" - "` entre el código y la inscripción se reemplaza por comillas alrededor de la
+inscripción: `ENVASE: CAJ-1 "9Y"` en vez de `ENVASE: CAJ-1 - 9Y`. Las comillas marcan que eso es lo
+que está escrito en el envase físico, que es como lo busca el operario.
+
+Sin inscripción va el código solo, sin comillas vacías colgando. El `" - "` de la línea de rollo
+—`ROLLO: DIAMANTES - 2 paños`— no cambia.
