@@ -1077,11 +1077,11 @@ public class MainController {
         if (hayEmbalajes) {
             if (!msg.isEmpty()) msg.append("\n");
             msg.append(embalajesFaltantes.size())
-                    .append(" SKU(s) sin caja/bolsa asignada en este lote:\n");
+                    .append(" SKU(s) sin estandarizar en este lote:\n");
             for (String sku : embalajesFaltantes) msg.append("  ").append(sku).append("\n");
         }
 
-        String titulo = faltantesCount > 0 ? "Medidas pendientes" : "Embalajes pendientes";
+        String titulo = faltantesCount > 0 ? "Medidas pendientes" : "Estandarización pendiente";
         AlertHelper.showInfoScrollable(titulo, msg.toString());
     }
 
@@ -1646,7 +1646,7 @@ public class MainController {
             if (skuElegible) {
                 DatosEmbalaje datos = medidaSku == null ? DatosEmbalaje.VACIO : medidaSku.embalaje();
                 embalajeZpl = EmbalajeRenderer.campoZpl(EmbalajeRenderer.lineas(datos));
-                if (!datos.estandarizado() && embalajesFaltantesOut != null) {
+                if (datos.aplica() && !datos.estandarizado() && embalajesFaltantesOut != null) {
                     embalajesFaltantesOut.add(sku);
                 }
             }

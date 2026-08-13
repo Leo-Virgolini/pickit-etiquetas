@@ -10,6 +10,9 @@ package ar.com.leo.etiquetas.model;
  * @param estandarizado lo calcula una fórmula del usuario y resume si el embalaje está cargado.
  *                      Es la única fuente de verdad al respecto: la app no lo deduce de los
  *                      demás campos.
+ * @param aplica        el Excel tiene la columna ESTANDARIZADO. Distinguirlo de "la columna dice
+ *                      NO" evita que un archivo anterior a esta función marque todos los SKU como
+ *                      sin estandarizar, cuando en realidad no está en uso.
  */
 public record DatosEmbalaje(
         String envase,
@@ -17,8 +20,10 @@ public record DatosEmbalaje(
         String rollo,
         String cantPanos,
         String observaciones,
-        boolean estandarizado
+        boolean estandarizado,
+        boolean aplica
 ) {
 
-    public static final DatosEmbalaje VACIO = new DatosEmbalaje("", "", "", "", "", false);
+    /** El Excel no tiene las columnas de embalaje: la función no está en uso. */
+    public static final DatosEmbalaje VACIO = new DatosEmbalaje("", "", "", "", "", false, false);
 }

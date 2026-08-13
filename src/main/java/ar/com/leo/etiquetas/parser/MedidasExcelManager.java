@@ -69,7 +69,7 @@ public class MedidasExcelManager {
     /**
      * Índices de todas las columnas de una hoja, resueltos por encabezado. Se usa tanto para leer
      * como para escribir: la app no puede asumir posiciones fijas porque el usuario agrega y
-     * reordena columnas propias (las ocho de embalaje son suyas).
+     * reordena columnas propias (las de embalaje son suyas).
      */
     private record Columnas(int sku, int producto,
                             int ancho, int alto, int profundidad, int peso,
@@ -202,7 +202,8 @@ public class MedidasExcelManager {
                     celda(row, cols.rollo()),
                     celda(row, cols.panos()),
                     celda(row, cols.observaciones()),
-                    esSubido(celda(row, cols.estandarizado())));
+                    esSubido(celda(row, cols.estandarizado())),
+                    cols.estandarizado() != -1);
             if (embalaje.equals(DatosEmbalaje.VACIO)) embalaje = DatosEmbalaje.VACIO;
 
             medidas.put(sku, new MedidaSku(sku,
@@ -423,7 +424,7 @@ public class MedidasExcelManager {
      * Escribe los encabezados por defecto solo en una hoja que todavía no los tiene. La condición
      * es que no haya columna SKU en ninguna posición, no que SKU esté en la A: el usuario puede
      * tener columnas propias a la izquierda, y reescribir la fila le borraría sus encabezados
-     * —incluidos los ocho de embalaje— dejando cada valor bajo el título equivocado.
+     * —incluidos los de embalaje— dejando cada valor bajo el título equivocado.
      */
     private void asegurarHeaders(Workbook workbook, Sheet sheet) {
         if (buscarColumna(sheet, "SKU") != -1) return;
@@ -569,7 +570,7 @@ public class MedidasExcelManager {
         Sheet conSku = null;
         for (int i = 0; i < workbook.getNumberOfSheets(); i++) {
             Sheet sheet = workbook.getSheetAt(i);
-            if (sheet == null) continue;
+            if (esCatalogo(sheet)) continue;
             Columnas cols = resolverColumnas(sheet);
             if (cols.sku() == -1) continue;
             if (cols.esDeLaApp()) return sheet;
@@ -587,7 +588,7 @@ public class MedidasExcelManager {
         Sheet soloConSku = null;
         for (int i = 0; i < workbook.getNumberOfSheets(); i++) {
             Sheet sheet = workbook.getSheetAt(i);
-            if (sheet == null) continue;
+            if (esCatalogo(sheet)) continue;
             Columnas cols = resolverColumnas(sheet);
             if (cols.sku() == -1) continue;
             if (cols.esDeLaApp()) return sheet;
@@ -598,6 +599,15 @@ public class MedidasExcelManager {
         // para que el error de "falta la columna SKU" salga con un mensaje entendible.
         if (soloConSku != null) return soloConSku;
         return workbook.getNumberOfSheets() == 0 ? null : workbook.getSheetAt(0);
+    }
+
+    /**
+     * La hoja de envases no es candidata a hoja de medidas: sus columnas LARGO/ANCHO/ALTO ya la
+     * harían pasar por una, y basta con que algún día gane una columna SKU para que la app le
+     * empiece a escribir encima.
+     */
+    private boolean esCatalogo(Sheet sheet) {
+        return sheet == null || HOJA_ESTANDARIZACION.equalsIgnoreCase(sheet.getSheetName());
     }
 
     /** Índice de una columna buscándola por su header normalizado, o -1 si no existe. */
@@ -712,8 +722,10 @@ public class MedidasExcelManager {
             Cell cell = header.getCell(i);
             if (cell == null) continue;
             String h = normalizarHeader(getCellString(cell));
-            if (h.startsWith("N°") || h.equals("N") || h.startsWith("CODIGO")) codigoCol = i;
-            else if (h.startsWith("INSCRIP")) inscripcionCol = i;
+            // Primera coincidencia: un segundo encabezado que empiece igual (p. ej. "N° ROLLOS")
+            // no debe robarle la columna al código.
+            if (codigoCol == -1 && (h.startsWith("N°") || h.equals("N") || h.startsWith("COD"))) codigoCol = i;
+            else if (inscripcionCol == -1 && h.startsWith("INSCRIP")) inscripcionCol = i;
         }
         if (codigoCol == -1 || inscripcionCol == -1) return inscripciones;
 

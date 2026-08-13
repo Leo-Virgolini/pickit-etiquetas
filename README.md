@@ -14,32 +14,33 @@ Tres selectores de archivo persistentes (guardados en `Preferences`) disponibles
   |---|---|---|
   | 0 | `SKU` | Clave. |
   | 1 | `PRODUCTO` | Descripcion del producto. La app no escribe esta columna: usualmente se delega a una formula del usuario (ej: `=BUSCARX(A2;Hoja2!A:A;Hoja2!B:B)`) que la resuelve automaticamente al escribir el SKU. |
-  | 2 | `Ancho cm` | Medida real (base). |
-  | 3 | `Alto cm` | Medida real (base). |
-  | 4 | `Profundidad cm` | Medida real (base). |
+  | 2 | `Largo cm` | Medida real (base). |
+  | 3 | `Ancho cm` | Medida real (base). |
+  | 4 | `Alto cm` | Medida real (base). |
   | 5 | `Peso físico (empaque + producto) kg` | Medida real (base). |
-  | 6 | `Ancho +20%` | Valor que se sube a ML. |
-  | 7 | `Alto +20%` | Valor que se sube a ML. |
-  | 8 | `Profunidad +20%` | Valor que se sube a ML. |
-  | 9 | `Peso físico (empaque + producto) +20%` | Valor que se sube a ML. |
+  | 6 | `Largo +20%` | Valor que se sube a ML. |
+  | 7 | `Ancho +20%` | Valor que se sube a ML. |
+  | 8 | `Alto +20%` | Valor que se sube a ML. |
+  | 9 | `Peso físico (empaque + producto) +5%` | Valor que se sube a ML. |
   | 10 | `SUBIDO` | `NO` al agregar (rojo tenue), `SI` al subir OK (verde tenue). |
   | 11 | `ESTANDARIZADO` | `SI`/`NO`, calculado por una formula del usuario: resume si completo envase, tipo de rollo y cantidad de paños. Es la unica fuente de verdad sobre si el embalaje esta cargado. |
   | 12 | `ENVASE` | Codigo del envase (`BOL-1`, `CAJ-1`), o `NO` si el producto no lleva. |
   | 13 | `TIPO DE ROLLO` | Tipo de rollo (`DIAMANTES`, `CUADRADOS`), o `NO`. |
-  | 14 | `CANT PAÑOS` | Cantidad de paños; solo se imprime si es mayor a cero. |
+  | 14 | `CANT PAÑOS` | Cantidad de paños; solo se imprime si es mayor a cero. Si no es un numero, se imprime tal cual. |
   | 15 | `OBSERVACIONES` | Texto libre. |
   | 16 | `ERROR` | Mensaje de ML en rojo cuando falla la subida. Se limpia al pasar a `SUBIDO=SI` en un reintento exitoso. |
 
-  - Las 4 columnas base cm/kg son los valores reales medidos por el deposito. Las `+20%` son los valores efectivos declarados a ML (margen por variaciones de armado).
+  - Las 4 columnas base cm/kg son los valores reales medidos por el deposito. Las columnas con porcentaje (`+20%` en las dimensiones, `+5%` en el peso) son los valores efectivos declarados a ML. Se ubican por ese porcentaje en el encabezado, no por el texto exacto.
   - Si el archivo no existe se crea automaticamente con headers en la primera ejecucion. Los SKUs nuevos se insertan primero en filas con SKU vacio (reutilizando slots pre-cargados con formulas) y si se agotan se appendean al final. En ambos casos las celdas de medidas faltantes quedan en amarillo y `SUBIDO=NO`. Las celdas que contengan una formula se preservan intactas.
   - El lector tolera variantes: "Largo" o "Profundidad", espacios y saltos de linea dentro del header, y el typo "Profunidad" en la columna +20%.
   - Si el archivo existente no tiene columna `ERROR`, se agrega automaticamente en la primera escritura (migracion silenciosa).
   - Las columnas de embalaje (11 a 15) **las crea y carga el usuario a mano**: la app solo las lee. Se ubican por su encabezado, no por posicion, asi que se pueden reordenar o intercalar columnas propias. Si alguna falta, ese dato no se muestra y el resto sigue funcionando. Solo se crean automaticamente cuando la app genera el archivo desde cero.
+  - Escritura serializada con lock interno y reintentos con backoff (500/1000/1500/2000 ms) si el archivo esta abierto en Excel (sharing violation).
+  - Las medidas se leen **solo de celdas numericas**, incluidas las formulas con resultado numerico (que es como estan cargadas las columnas con porcentaje). Un valor escrito como texto —aunque parezca un numero, como `"3,006"`— se ignora y ese SKU no se sube a ML: suele ser un dato mal pegado, y de ahi sale la medida que se publica.
+  - Si falta la columna `ESTANDARIZADO`, la funcion de embalaje se considera apagada: no se imprimen lineas ni se reclama nada.
   - Con el checkbox desactivado se saltea el marcado MEDIR, las lineas de embalaje y la subida a ML.
 
-- **Hoja `ESTANDARIZACION`** (dentro del mismo archivo de medidas): catalogo de envases. La app usa dos columnas: `N°` con el codigo (`CAJ-1`, `BOL-1`) e `INSCRIPCION` con el texto escrito en el envase fisico (`9Y`, `AYUDIN`). Las bolsas no llevan inscripcion y las filas que no la tienen traen un guion, que se ignora. Si falta la hoja o el codigo no figura, la etiqueta muestra solo el codigo.
-  - Escritura serializada con lock interno y reintentos con backoff (500/1000/1500/2000 ms) si el archivo esta abierto en Excel (sharing violation).
-  - Los decimales con coma ("3,006" = 3.006 kg) se leen correctamente tanto si la celda es numerica (POI devuelve el valor crudo) como si es texto (se normaliza `,` → `.`).
+- **Hoja `ESTANDARIZACION`** (dentro del mismo archivo de medidas): catalogo de envases. La app usa dos columnas: `N°` con el codigo (`CAJ-1`, `BOL-1`) e `INSCRIPCION` con el texto escrito en el envase fisico (`9Y`, `AYUDIN`). Las bolsas no llevan inscripcion y las filas que no la tienen traen un guion, que se ignora. Si falta la hoja o el codigo no figura, la etiqueta muestra solo el codigo. La app nunca le escribe.
 
 ## Funcionalidades
 

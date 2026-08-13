@@ -12,7 +12,7 @@ class EmbalajeRendererTest {
 
     private static DatosEmbalaje datos(String envase, String inscripcion, String rollo,
                                        String cantPanos, String observaciones) {
-        return new DatosEmbalaje(envase, inscripcion, rollo, cantPanos, observaciones, true);
+        return new DatosEmbalaje(envase, inscripcion, rollo, cantPanos, observaciones, true, true);
     }
 
     // -------------------------------------------------------------------------------------------
@@ -75,9 +75,11 @@ class EmbalajeRendererTest {
     }
 
     @Test
-    void unaCantidadDePanosNoNumericaSeIgnora() {
-        assertEquals(List.of("ENVASE: BOL-1", "ROLLO: DIAMANTES"),
-                EmbalajeRenderer.lineas(datos("BOL-1", "", "DIAMANTES", "dos", "")));
+    void unaCantidadDePanosNoNumericaSeImprimeTalCual() {
+        // CANT PAÑOS es texto libre del usuario: si escribió "2-3", esconderlo sería peor que
+        // mostrarlo, porque el dato existe y el operario lo necesita.
+        assertEquals(List.of("ENVASE: BOL-1", "ROLLO: DIAMANTES - 2-3 paños"),
+                EmbalajeRenderer.lineas(datos("BOL-1", "", "DIAMANTES", "2-3", "")));
     }
 
     // -------------------------------------------------------------------------------------------
@@ -106,14 +108,16 @@ class EmbalajeRendererTest {
 
     @Test
     void sinEstandarizarSoloSeAvisa() {
-        DatosEmbalaje sinEstandarizar = new DatosEmbalaje("BOL-1", "9Y", "DIAMANTES", "2", "Obs", false);
+        DatosEmbalaje sinEstandarizar = new DatosEmbalaje("BOL-1", "9Y", "DIAMANTES", "2", "Obs", false, true);
 
         assertEquals(List.of("NO ESTANDARIZADO"), EmbalajeRenderer.lineas(sinEstandarizar));
     }
 
     @Test
-    void datosVaciosNoEstanEstandarizados() {
-        assertEquals(List.of("NO ESTANDARIZADO"), EmbalajeRenderer.lineas(DatosEmbalaje.VACIO));
+    void sinLasColumnasEnElExcelNoSeImprimeNada() {
+        // Distinto de "no estandarizado": el archivo no tiene la columna, así que la función no
+        // está en uso y la etiqueta no tiene nada que decir.
+        assertEquals(List.of(), EmbalajeRenderer.lineas(DatosEmbalaje.VACIO));
     }
 
     // -------------------------------------------------------------------------------------------

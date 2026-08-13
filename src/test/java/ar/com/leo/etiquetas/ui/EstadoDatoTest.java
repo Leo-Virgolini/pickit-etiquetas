@@ -16,12 +16,12 @@ class EstadoDatoTest {
     }
 
     private static DatosEmbalaje estandarizado() {
-        return new DatosEmbalaje("BOL-1", "9Y", "DIAMANTES", "2", "", true);
+        return new DatosEmbalaje("BOL-1", "9Y", "DIAMANTES", "2", "", true, true);
     }
 
     private static DatosEmbalaje sinEstandarizar() {
         // Con datos cargados pero la fórmula del Excel diciendo que falta algo.
-        return new DatosEmbalaje("BOL-1", "9Y", "DIAMANTES", "2", "", false);
+        return new DatosEmbalaje("BOL-1", "9Y", "DIAMANTES", "2", "", false, true);
     }
 
     // -------------------------------------------------------------------------------------------
@@ -78,8 +78,8 @@ class EstadoDatoTest {
     }
 
     @Test
-    void sinNingunDatoElEstadoEsNo() {
-        assertEquals(EstadoDato.NO, EstadoDato.estandarizadoDe(medida(null, DatosEmbalaje.VACIO)));
+    void sinLaColumnaEnElExcelNoAplica() {
+        assertEquals(EstadoDato.NO_APLICA, EstadoDato.estandarizadoDe(medida(null, DatosEmbalaje.VACIO)));
     }
 
     @Test

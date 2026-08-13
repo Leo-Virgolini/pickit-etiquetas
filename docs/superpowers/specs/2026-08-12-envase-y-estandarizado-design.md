@@ -15,7 +15,7 @@ sobre si el embalaje de un SKU está cargado.
 
 ## Estructura real del Excel
 
-**Hoja de medidas** (18 columnas):
+**Hoja de medidas** (17 columnas):
 
 `SKU | PRODUCTO | Largo cm | Ancho cm | Alto cm | Peso físico (empaque + producto) kg |
 Largo +20% | Ancho +20% | Alto +20% | Peso físico (empaque + producto) +5% |
@@ -59,6 +59,8 @@ validación, y no vale la pena frenar por eso.
 | inscripción `-` en la hoja | se ignora: las bolsas y la fila `NO` la traen así |
 | `TIPO DE ROLLO` cargado, con paños > 0 | `ROLLO: DIAMANTES - 2 paños` (un solo paño va en singular) |
 | `TIPO DE ROLLO` cargado, paños 0 o vacío | `ROLLO: DIAMANTES` / `ROLLO: NO` |
+| `CANT PAÑOS` con texto libre (`2-3`) | se imprime tal cual: es una columna de texto del usuario |
+| sin columna `ESTANDARIZADO` en el archivo | no se imprime nada y no se reclama nada |
 | `OBSERVACIONES` cargado | `OBS: Colchon + Tapa` |
 
 `ENVASE: NO` se imprime como cualquier otro valor: que el producto no lleve envase es una decisión

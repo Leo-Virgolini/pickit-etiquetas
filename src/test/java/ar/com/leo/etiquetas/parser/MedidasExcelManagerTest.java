@@ -140,14 +140,27 @@ class MedidasExcelManagerTest {
     }
 
     @Test
-    void unArchivoSinLasColumnasDeEmbalajeDevuelveDatosVacios() throws Exception {
+    void unArchivoSinLaColumnaEstandarizadoNoMarcaNada() throws Exception {
+        // Un Excel anterior a esta función no tiene ESTANDARIZADO. Sin esto, todos los SKU
+        // saldrían con el cartel NO ESTANDARIZADO y el aviso reclamaría el lote entero.
         Path excel = crearExcel("sin-embalaje.xlsx", HEADERS_BASE,
                 new String[]{"1241212", "Producto A"});
 
         MedidaSku medida = manager.leerMedidas(excel).get("1241212");
 
-        assertSame(DatosEmbalaje.VACIO, medida.embalaje());
+        assertFalse(medida.embalaje().aplica(), "sin la columna, la función no aplica");
         assertEquals("Producto A", medida.producto(), "el resto de la fila se sigue leyendo");
+    }
+
+    @Test
+    void conLaColumnaEstandarizadoEnNoSiAplica() throws Exception {
+        Path excel = crearExcel("estandarizado-no.xlsx", HEADERS_CON_EMBALAJE,
+                new String[]{"1241212", "Producto A", "", "", "", "", "", "", "", "", "NO", "NO"});
+
+        DatosEmbalaje datos = manager.leerMedidas(excel).get("1241212").embalaje();
+
+        assertTrue(datos.aplica(), "la columna está: el SKU sí se reclama");
+        assertFalse(datos.estandarizado());
     }
 
     @Test
@@ -212,7 +225,8 @@ class MedidasExcelManagerTest {
         manager.agregarPendientes(excel, List.of("999999"));
 
         DatosEmbalaje datos = manager.leerMedidas(excel).get("999999").embalaje();
-        assertSame(DatosEmbalaje.VACIO, datos);
+        assertEquals("", datos.envase(), "las columnas de embalaje quedan como estaban");
+        assertFalse(datos.estandarizado());
     }
 
     @Test

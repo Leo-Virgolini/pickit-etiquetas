@@ -7,8 +7,8 @@ import java.util.List;
 
 /**
  * Arma las líneas de embalaje que van en la etiqueta a partir de lo cargado en el Excel, y su
- * fragmento ZPL. Solo aparecen las líneas cuyos datos estén cargados: un SKU lleva entre una y tres
- * (caja o bolsa, rollo y observaciones), o una sola con el aviso si no tiene embalaje asignado.
+ * fragmento ZPL. Un SKU lleva entre una y tres líneas —envase, rollo y observaciones—, o una sola
+ * con el aviso si su columna ESTANDARIZADO dice que el embalaje todavía no está cargado.
  */
 public final class EmbalajeRenderer {
 
@@ -41,7 +41,7 @@ public final class EmbalajeRenderer {
     /** Marca de texto cortado. Tres puntos y no "…": la fuente residual puede no traer ese glifo. */
     private static final String ELIPSIS = "...";
 
-    /** Reemplaza a la línea de caja o bolsa cuando el SKU no tiene ninguna de las dos cargada. */
+    /** Reemplaza a todo el bloque cuando la columna ESTANDARIZADO no dice que sí. */
     private static final String SIN_ESTANDARIZAR = "NO ESTANDARIZADO";
 
     private EmbalajeRenderer() {
@@ -49,7 +49,9 @@ public final class EmbalajeRenderer {
 
     public static List<String> lineas(DatosEmbalaje datos) {
         List<String> lineas = new ArrayList<>();
-        if (datos == null) return lineas;
+        // Sin la columna ESTANDARIZADO en el Excel la función no está en uso: la etiqueta sale como
+        // antes de existir, en vez de reclamar algo que el usuario todavía no puede cargar.
+        if (datos == null || !datos.aplica()) return lineas;
 
         // El aviso sale de la columna ESTANDARIZADO y no de si hay envase cargado: es una fórmula
         // del usuario que resume si completó envase, tipo de rollo y cantidad de paños. Cuando dice
@@ -67,9 +69,7 @@ public final class EmbalajeRenderer {
 
         if (cargado(datos.rollo())) {
             String linea = "ROLLO: " + valor(datos.rollo());
-            // Los paños solo si son más de cero: la columna trae 0 en las filas sin rollo.
-            int panos = entero(datos.cantPanos());
-            if (panos > 0) linea += " - " + panos + (panos == 1 ? " paño" : " paños");
+            linea += panos(datos.cantPanos());
             lineas.add(linea);
         }
 
@@ -87,12 +87,22 @@ public final class EmbalajeRenderer {
         return v.equals("-") ? "" : v;
     }
 
-    /** Cantidad de paños, o 0 si la celda está vacía o no es un número. */
-    private static int entero(String raw) {
+    /**
+     * Sufijo con la cantidad de paños, o vacío si no hay ninguno.
+     *
+     * Se omite cuando es cero —la columna trae 0 en las filas sin rollo y "0 paños" sería ruido—
+     * pero un valor no numérico se imprime tal cual: es una columna de texto libre y si el usuario
+     * escribió "2-3", esconderlo sería peor que mostrarlo.
+     */
+    private static String panos(String raw) {
+        String v = valor(raw);
+        if (v.isEmpty()) return "";
         try {
-            return (int) Double.parseDouble(valor(raw).replace(',', '.'));
+            int cantidad = (int) Double.parseDouble(v.replace(',', '.'));
+            if (cantidad <= 0) return "";
+            return " - " + cantidad + (cantidad == 1 ? " paño" : " paños");
         } catch (NumberFormatException e) {
-            return 0;
+            return " - " + v + " paños";
         }
     }
 
@@ -116,7 +126,7 @@ public final class EmbalajeRenderer {
             int fuente = aviso ? FUENTE_AVISO : FUENTE;
             // La última línea se queda con todo el alto libre que sobra, así que puede repartirse
             // en varias. Las anteriores no pueden crecer sin correr las de abajo, así que entran
-            // en una sola — el nombre de caja también es texto libre del usuario.
+            // en una sola — la inscripción del envase también es texto libre del usuario.
             int maxLineas = ultima ? Math.max(1, (Y_LIMITE - y) / ALTO_LINEA) : 1;
             // En los dos casos se acota el largo: con ^FB, ZPL no descarta lo que no entra, lo
             // reimprime encima de la última línea y queda una mancha ilegible.

@@ -46,7 +46,10 @@ public enum EstadoDato {
      * que la tabla y la etiqueta siempre dicen lo mismo.
      */
     public static EstadoDato estandarizadoDe(MedidaSku medida) {
-        return medida != null && medida.embalaje().estandarizado() ? SI : NO;
+        if (medida == null) return NO;
+        // Sin la columna en el Excel no hay nada que informar: la función no está en uso.
+        if (!medida.embalaje().aplica()) return NO_APLICA;
+        return medida.embalaje().estandarizado() ? SI : NO;
     }
 
     /**
