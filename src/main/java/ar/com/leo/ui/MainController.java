@@ -128,8 +128,6 @@ public class MainController {
     @FXML
     private TableColumn<LabelTableRow, Integer> countCol;
     @FXML
-    private TableColumn<LabelTableRow, EstadoDato> medidasCol;
-    @FXML
     private TableColumn<LabelTableRow, EstadoDato> estandarizadoCol;
     @FXML
     private Button fetchOrdersBtn;
@@ -293,8 +291,6 @@ public class MainController {
             }
         });
 
-        medidasCol.setCellValueFactory(cd -> cd.getValue().medidasProperty());
-        medidasCol.setCellFactory(col -> estadoDatoCell());
         estandarizadoCol.setCellValueFactory(cd -> cd.getValue().estandarizadoProperty());
         estandarizadoCol.setCellFactory(col -> estadoDatoCell());
 
@@ -792,8 +788,7 @@ public class MainController {
             int agregadosExcel = guardarSkusPendientesMedicion(skusPendientes);
             showLabelTable();
             displayResult(currentResult, medidas);
-            mostrarMensajeSkusFaltantes(skusPendientes.size(), agregadosExcel,
-                    new ArrayList<>(skusPendientes.keySet()), embalajesFaltantes);
+            mostrarMensajeSkusFaltantes(agregadosExcel, embalajesFaltantes);
         } catch (Exception e) {
             AlertHelper.showError("Error al procesar", e.getMessage(), e);
         }
@@ -1035,8 +1030,7 @@ public class MainController {
                     if (finalSaveError != null) {
                         AlertHelper.showError("Error al guardar", "No se pudo guardar el archivo automáticamente:\n" + finalSaveError);
                     }
-                    mostrarMensajeSkusFaltantes(skusFaltantesCount, agregadosCount, skusFaltantesList,
-                            embalajesFaltantesFinal);
+                    mostrarMensajeSkusFaltantes(agregadosCount, embalajesFaltantesFinal);
                 });
             } catch (Exception e) {
                 Platform.runLater(() -> {
@@ -1048,30 +1042,17 @@ public class MainController {
     }
 
     /**
-     * Muestra un diálogo informativo con la cantidad de SKU detectados sin medidas completas
-     * en el lote de etiquetas recién procesado. Solo se muestra si hay al menos uno.
+     * Diálogo del final del lote: los SKU que salieron avisados como sin estandarizar y las filas
+     * nuevas que se agregaron al Excel, que son justamente las que hay que completar con el envase.
+     * No se muestra si no hay ninguna de las dos cosas.
      */
-    private void mostrarMensajeSkusFaltantes(int faltantesCount, int agregadosExcel, List<String> skus,
-                                             Set<String> embalajesFaltantes) {
+    private void mostrarMensajeSkusFaltantes(int agregadosExcel, Set<String> embalajesFaltantes) {
         boolean hayEmbalajes = embalajesFaltantes != null && !embalajesFaltantes.isEmpty();
-        if (faltantesCount <= 0 && !hayEmbalajes) return;
+        if (agregadosExcel <= 0 && !hayEmbalajes) return;
 
         StringBuilder msg = new StringBuilder();
-        if (faltantesCount > 0) {
-            int yaExistentes = Math.max(0, faltantesCount - agregadosExcel);
-            msg.append(faltantesCount).append(" SKU(s) sin medidas detectados en este lote.\n\n");
-            if (agregadosExcel > 0) {
-                msg.append("• ").append(agregadosExcel).append(" nuevo(s) agregado(s) al Excel de medidas.\n");
-            }
-            if (yaExistentes > 0) {
-                msg.append("• ").append(yaExistentes).append(" ya figuraba(n) en el Excel.\n");
-            }
-            if (skus != null && !skus.isEmpty()) {
-                msg.append("\nSKUs:\n");
-                for (String sku : skus) {
-                    msg.append("  ").append(sku).append("\n");
-                }
-            }
+        if (agregadosExcel > 0) {
+            msg.append(agregadosExcel).append(" SKU(s) nuevo(s) agregado(s) al Excel de medidas.\n");
         }
 
         if (hayEmbalajes) {
@@ -1081,7 +1062,7 @@ public class MainController {
             for (String sku : embalajesFaltantes) msg.append("  ").append(sku).append("\n");
         }
 
-        String titulo = faltantesCount > 0 ? "Medidas pendientes" : "Estandarización pendiente";
+        String titulo = hayEmbalajes ? "Estandarización pendiente" : "Excel de medidas actualizado";
         AlertHelper.showInfoScrollable(titulo, msg.toString());
     }
 
@@ -2214,7 +2195,6 @@ public class MainController {
                     group.productDescription(),
                     group.details(),
                     extractQuantityFromLabels(group.labels()),
-                    elegible ? EstadoDato.medidasDe(medida) : EstadoDato.NO_APLICA,
                     EstadoDato.estandarizadoDe(embalaje)));
         }
         filteredLabels = new FilteredList<>(rows, p -> true);

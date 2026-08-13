@@ -48,25 +48,6 @@ class EstadoDatoTest {
     }
 
     // -------------------------------------------------------------------------------------------
-    // Medidas
-    // -------------------------------------------------------------------------------------------
-
-    @Test
-    void unSkuMedidoEstaEnSi() {
-        assertEquals(EstadoDato.SI, EstadoDato.medidasDe(medida(10.0, DatosEmbalaje.VACIO)));
-    }
-
-    @Test
-    void unSkuSinMedidasEstaEnNo() {
-        assertEquals(EstadoDato.NO, EstadoDato.medidasDe(medida(null, DatosEmbalaje.VACIO)));
-    }
-
-    @Test
-    void unSkuQueNoFiguraEnElExcelEstaEnNo() {
-        assertEquals(EstadoDato.NO, EstadoDato.medidasDe(null));
-    }
-
-    // -------------------------------------------------------------------------------------------
     // Embalaje
     // -------------------------------------------------------------------------------------------
 

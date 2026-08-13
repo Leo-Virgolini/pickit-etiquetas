@@ -38,11 +38,6 @@ public enum EstadoDato {
         return texto;
     }
 
-    /** Las cuatro columnas base cm/kg cargadas. Un SKU que no figura en el Excel cuenta como NO. */
-    public static EstadoDato medidasDe(MedidaSku medida) {
-        return medida != null && medida.estaMedido() ? SI : NO;
-    }
-
     /**
      * Sale de la columna ESTANDARIZADO del Excel, que es una fórmula del usuario: resume si
      * completó envase, tipo de rollo y cantidad de paños. La app no lo deduce por su cuenta, así

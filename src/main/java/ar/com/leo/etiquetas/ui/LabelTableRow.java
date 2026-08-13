@@ -11,11 +11,10 @@ public class LabelTableRow {
     private final StringProperty productDescription;
     private final StringProperty details;
     private final IntegerProperty quantity;
-    private final ObjectProperty<EstadoDato> medidas;
     private final ObjectProperty<EstadoDato> estandarizado;
 
     public LabelTableRow(String printNumber, String orderIds, String zone, String sku, String productDescription, String details, int quantity,
-                         EstadoDato medidas, EstadoDato estandarizado) {
+                         EstadoDato estandarizado) {
         this.printNumber = new SimpleStringProperty(printNumber);
         this.orderIds = new SimpleStringProperty(orderIds);
         this.zone = new SimpleStringProperty(zone);
@@ -23,7 +22,6 @@ public class LabelTableRow {
         this.productDescription = new SimpleStringProperty(productDescription);
         this.details = new SimpleStringProperty(details);
         this.quantity = new SimpleIntegerProperty(quantity);
-        this.medidas = new SimpleObjectProperty<>(medidas);
         this.estandarizado = new SimpleObjectProperty<>(estandarizado);
     }
 
@@ -34,7 +32,6 @@ public class LabelTableRow {
     public StringProperty productDescriptionProperty() { return productDescription; }
     public StringProperty detailsProperty() { return details; }
     public IntegerProperty quantityProperty() { return quantity; }
-    public ObjectProperty<EstadoDato> medidasProperty() { return medidas; }
     public ObjectProperty<EstadoDato> estandarizadoProperty() { return estandarizado; }
 
     public String getPrintNumber() { return printNumber.get(); }
@@ -44,6 +41,5 @@ public class LabelTableRow {
     public String getProductDescription() { return productDescription.get(); }
     public String getDetails() { return details.get(); }
     public int getQuantity() { return quantity.get(); }
-    public EstadoDato getMedidas() { return medidas.get(); }
     public EstadoDato getEstandarizado() { return estandarizado.get(); }
 }
