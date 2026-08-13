@@ -1012,9 +1012,7 @@ public class MainController {
 
                 final String finalSaveError = saveError;
                 final File finalSavedFile = savedFile;
-                final int skusFaltantesCount = skusPendientes.size();
                 final int agregadosCount = agregadosExcel;
-                final List<String> skusFaltantesList = new ArrayList<>(skusPendientes.keySet());
                 final Set<String> embalajesFaltantesFinal = new LinkedHashSet<>(embalajesFaltantes);
                 Platform.runLater(() -> {
                     setLoading(false);
@@ -2044,7 +2042,14 @@ public class MainController {
                 }
             }
         } catch (Exception e) {
+            // Se avisa además de loguear. El caso habitual es tener el Excel abierto en otra
+            // ventana: sin aviso, el lote termina sin diálogo y el operario supone que los SKU
+            // nuevos quedaron cargados cuando en realidad no se escribió nada.
             AppLogger.warn("No se pudo actualizar el Excel de medidas: " + e.getMessage());
+            String detalle = e.getMessage();
+            Platform.runLater(() -> AlertHelper.showError("Excel de medidas",
+                    "No se pudieron agregar los SKU nuevos al Excel de medidas. Si lo tenés abierto, "
+                    + "cerralo y volvé a procesar el lote.\n\n" + detalle));
         }
         Platform.runLater(this::actualizarBotonSubirMedidas);
         return agregados;

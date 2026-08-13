@@ -32,8 +32,13 @@ public final class EmbalajeRenderer {
      */
     private static final int MAX_CARACTERES = 27;
     /**
-     * Largo máximo de una palabra sin cortar. Deja lugar para el rótulo más largo ("OBS: ", 5
-     * caracteres) en la misma línea que la primera pieza.
+     * Largo máximo de una palabra sin cortar. Deja lugar para "OBS: " —5 caracteres— en la misma
+     * fila que la primera pieza.
+     *
+     * Se dimensiona por ese rótulo y no por el más largo ("ENVASE: ", 8) a propósito: las palabras
+     * que hay que partir son códigos y URLs, y esos aparecen en las observaciones. Restar 8 haría
+     * más angostos los pedazos de toda observación larga, que es donde el alto escasea. El costo es
+     * que un envase con una inscripción larguísima sin espacios arranca en la fila de abajo.
      */
     private static final int MAX_PALABRA = MAX_CARACTERES - 5;
     /** Marca de texto cortado. Tres puntos y no "…": la fuente residual puede no traer ese glifo. */
@@ -58,6 +63,15 @@ public final class EmbalajeRenderer {
     private static final char FUENTE_REFERENCIA = 'B';
     private static final int ALTO_REFERENCIA = 22;
     private static final int ANCHO_REFERENCIA = 14;
+    /**
+     * Cuánto avanza el cursor por carácter, que es lo que hay que multiplicar para saber dónde
+     * termina la palabra y hasta dónde llega el subrayado.
+     *
+     * Vale lo mismo que el ancho porque la matriz 11x7 de la fuente B ya incluiría el espacio entre
+     * caracteres. Si no lo incluyera, cada carácter avanzaría 18 en vez de 14 y el subrayado saldría
+     * corto por unos dos caracteres: es lo primero que hay que mirar en la impresión de prueba.
+     */
+    private static final int AVANCE_REFERENCIA = ANCHO_REFERENCIA;
 
     private EmbalajeRenderer() {
     }
@@ -188,9 +202,9 @@ public final class EmbalajeRenderer {
             // en varias. Las anteriores no pueden crecer sin correr las de abajo, así que entran
             // en una sola — la inscripción del envase también es texto libre del usuario.
             int maxLineas = ultima ? Math.max(1, (Y_LIMITE - y) / ALTO_LINEA) : 1;
-            // En los dos casos se acota el largo: con ^FB, ZPL no descarta lo que no entra, lo
-            // reimprime encima de la última línea y queda una mancha ilegible.
-            String texto = truncar(partirPalabrasLargas(linea), maxLineas * MAX_CARACTERES);
+            // En los dos casos se acota: con ^FB, ZPL no descarta lo que no entra, lo reimprime
+            // encima de la última fila y queda una mancha ilegible.
+            String texto = acotar(partirPalabrasLargas(linea), maxLineas);
 
             zpl.append(campo(X, y, maxLineas, texto));
             // Negrita simulada con una segunda pasada corrida 1px, igual que ZONA y COD.EXT. Se
@@ -209,13 +223,13 @@ public final class EmbalajeRenderer {
      * Encabezado de referencia: fuente bitmap, en negrita y subrayado.
      *
      * ZPL no tiene subrayado como atributo, así que se dibuja. Con la fuente proporcional del resto
-     * del bloque habría que estimar el ancho de la palabra; la bitmap es monoespaciada, así que sale
-     * exacto y la línea termina donde termina el texto.
+     * del bloque habría que estimar el ancho de la palabra; la bitmap es monoespaciada, así que
+     * alcanza con multiplicar por {@link #AVANCE_REFERENCIA}.
      */
     private static String referencia(int y) {
         String campo = "^A" + FUENTE_REFERENCIA + "N," + ALTO_REFERENCIA + ',' + ANCHO_REFERENCIA
                 + "^FD" + REFERENCIA + "^FS\n";
-        int ancho = REFERENCIA.length() * ANCHO_REFERENCIA;
+        int ancho = REFERENCIA.length() * AVANCE_REFERENCIA;
         return "^FO" + X + ',' + y + campo
                 + "^FO" + (X + 1) + ',' + y + campo
                 + "^FO" + X + ',' + (y + ALTO_REFERENCIA) + "^GB" + ancho + ",2,2^FS\n";
@@ -269,9 +283,46 @@ public final class EmbalajeRenderer {
         return salida.toString();
     }
 
-    private static String truncar(String texto, int maxCaracteres) {
-        if (texto.length() <= maxCaracteres) return texto;
-        return texto.substring(0, maxCaracteres - ELIPSIS.length()) + ELIPSIS;
+    /**
+     * Acota el texto a las filas que el ^FB tiene permitido imprimir.
+     *
+     * No alcanza con contar caracteres. ^FB corta por palabras, así que un texto de
+     * {@code maxFilas · MAX_CARACTERES} caracteres puede necesitar una fila más: "OBS: 3 COLCHON 1
+     * TAPA. AJUSTAR PAÑO SEGÚN CANT VENDIDA" mide 54 y entra en 2 x 27 por cuenta de caracteres,
+     * pero al cortarse por palabras ocupa tres filas. Por eso se simula el corte.
+     */
+    private static String acotar(String texto, int maxFilas) {
+        List<String> filas = envolver(texto);
+        if (filas.size() <= maxFilas) return texto;
+
+        String ultima = filas.get(maxFilas - 1);
+        if (ultima.length() + ELIPSIS.length() > MAX_CARACTERES) {
+            ultima = ultima.substring(0, MAX_CARACTERES - ELIPSIS.length()).stripTrailing();
+        }
+        List<String> acotadas = new ArrayList<>(filas.subList(0, maxFilas - 1));
+        acotadas.add(ultima + ELIPSIS);
+        return String.join(" ", acotadas);
+    }
+
+    /**
+     * Cómo va a repartir ^FB el texto en filas: mete palabras mientras entren en el ancho.
+     * {@link #partirPalabrasLargas} ya garantiza que ninguna palabra supere el ancho por sí sola.
+     */
+    private static List<String> envolver(String texto) {
+        List<String> filas = new ArrayList<>();
+        StringBuilder fila = new StringBuilder();
+        for (String palabra : texto.split(" ")) {
+            if (fila.isEmpty()) {
+                fila.append(palabra);
+            } else if (fila.length() + 1 + palabra.length() <= MAX_CARACTERES) {
+                fila.append(' ').append(palabra);
+            } else {
+                filas.add(fila.toString());
+                fila = new StringBuilder(palabra);
+            }
+        }
+        if (!fila.isEmpty()) filas.add(fila.toString());
+        return filas;
     }
 
     /**

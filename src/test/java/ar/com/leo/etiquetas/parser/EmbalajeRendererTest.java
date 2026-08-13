@@ -213,6 +213,17 @@ class EmbalajeRendererTest {
     }
 
     @Test
+    void laUltimaLineaSeAcotaPorFilasYNoPorCaracteres() {
+        // ^FB corta por palabras: estos 54 caracteres entran en dos filas por cuenta de caracteres
+        // (2 x 27) pero necesitan tres, y lo que no entra ZPL lo reimprime encima de la última.
+        // Es una observación real del Excel.
+        String obs = "OBS: 3 COLCHON 1 TAPA. AJUSTAR PAÑO SEGÚN CANT VENDIDA";
+        String zpl = EmbalajeRenderer.campoZpl(List.of("REFERENCIA", "ENVASE: X", "ROLLO: X", obs));
+
+        assertTrue(zpl.contains("^FB390,2,0,L^FDOBS: 3 COLCHON 1 TAPA. AJUSTAR PAÑO SEGÚN CANT...^FS"), zpl);
+    }
+
+    @Test
     void unaPalabraMasLargaQueLaLineaSeParteParaQuePuedaEnvolver() {
         String zpl = EmbalajeRenderer.campoZpl(List.of("ENVASE: X", "OBS: " + "a".repeat(50)));
 

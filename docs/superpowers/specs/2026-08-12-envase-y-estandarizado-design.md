@@ -285,3 +285,36 @@ perder una línea es preferible a imprimir sobre la zona de picking.
 
 `REFERENCIA` sigue en `^ABN,22,14`: las fuentes bitmap escalan en múltiplos enteros y el siguiente
 —33×21— no entra en el alto de línea.
+
+## Adenda 2026-08-13 (7) — Correcciones de review
+
+### El recorte se hace por filas, no por caracteres
+
+`truncar(texto, maxLineas · MAX_CARACTERES)` acotaba **caracteres**, pero `^FB` corta por
+**palabras**: un texto que entra por cuenta de caracteres puede necesitar una fila más, y lo que no
+entra ZPL lo reimprime encima de la última en vez de descartarlo — justo la mancha que ese recorte
+existía para evitar.
+
+La adenda (6) lo volvió alcanzable: al pasar el alto de línea de 26 a 28, en una etiqueta de 2+
+unidades `OBS` bajó de 3 filas permitidas a 2. `OBS: 3 COLCHON 1 TAPA. AJUSTAR PAÑO SEGÚN CANT
+VENDIDA` mide 54 = 2 × 27, así que pasaba el tope, pero al cortarse por palabras ocupa tres filas:
+`OBS: 3 COLCHON 1 TAPA.` / `AJUSTAR PAÑO SEGÚN CANT` / `VENDIDA`.
+
+`acotar(texto, maxFilas)` simula ahora el corte de `^FB` (`envolver`) y recorta por filas. La
+verificación contra el Excel real se rehízo contando filas y no caracteres: de los 56 bloques
+posibles, **0 desbordan** y **1 se recorta** —esa misma observación en etiqueta de 2+ unidades, que
+pierde "VENDIDA"—. La verificación anterior, que solo miraba si aparecía `...`, no podía detectarlo.
+
+### Otros
+
+- Un alta fallida en el Excel dejaba el lote sin ningún diálogo: `agregarPendientes` traga la
+  excepción y devuelve 0, y el diálogo no se muestra con 0 agregados y sin avisos. El caso habitual
+  es tener el Excel abierto. Ahora se avisa.
+- `MAX_PALABRA` se dimensiona por `"OBS: "` y no por el rótulo más largo (`"ENVASE: "`) a propósito:
+  las palabras que hay que partir son códigos y URLs, y aparecen en las observaciones, que es donde
+  el alto escasea. Queda documentado con su costo.
+- El ancho del subrayado de `REFERENCIA` sale de `AVANCE_REFERENCIA`, que asume que la matriz 11x7
+  de la fuente B ya incluye el espacio entre caracteres. Si no lo incluyera, el avance sería 18 y el
+  subrayado quedaría corto por unos dos caracteres. **Confirmar en la impresión de prueba.**
+- Locales muertos en el hilo de descarga, y los tests nuevos que habían quedado bajo el separador de
+  helpers.
