@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class EmbalajeRendererTest {
@@ -15,6 +16,11 @@ class EmbalajeRendererTest {
         return new DatosEmbalaje(envase, inscripcion, rollo, cantPanos, observaciones, true, true);
     }
 
+    /** Etiqueta de un producto suelto, que es el caso base. */
+    private static List<String> lineas(DatosEmbalaje datos) {
+        return EmbalajeRenderer.lineas(datos, 1);
+    }
+
     // -------------------------------------------------------------------------------------------
     // Envase
     // -------------------------------------------------------------------------------------------
@@ -22,33 +28,33 @@ class EmbalajeRendererTest {
     @Test
     void elEnvaseLlevaSuCodigoYSuInscripcion() {
         assertEquals(List.of("ENVASE: BOL-1 - 9Y"),
-                EmbalajeRenderer.lineas(datos("BOL-1", "9Y", "", "", "")));
+                lineas(datos("BOL-1", "9Y", "", "", "")));
     }
 
     @Test
     void sinInscripcionConocidaVaSoloElCodigo() {
         assertEquals(List.of("ENVASE: CAJ-9"),
-                EmbalajeRenderer.lineas(datos("CAJ-9", "", "", "", "")));
+                lineas(datos("CAJ-9", "", "", "", "")));
     }
 
     @Test
     void unaInscripcionQueEsSoloUnGuionSeIgnora() {
         // La fila "NO" de la hoja de estandarización tiene "-" en las columnas que no aplican.
         assertEquals(List.of("ENVASE: NO"),
-                EmbalajeRenderer.lineas(datos("NO", "-", "", "", "")));
+                lineas(datos("NO", "-", "", "", "")));
     }
 
     @Test
     void unSoloPanoVaEnSingular() {
         assertEquals(List.of("ENVASE: BOL-1", "ROLLO: DIAMANTES - 1 paño"),
-                EmbalajeRenderer.lineas(datos("BOL-1", "", "DIAMANTES", "1", "")));
+                lineas(datos("BOL-1", "", "DIAMANTES", "1", "")));
     }
 
     @Test
     void unProductoSinEnvaseLoDiceExplicitamente() {
         // "NO" es una decisión tomada, no un dato faltante: se imprime como cualquier otro valor.
         assertEquals(List.of("ENVASE: NO"),
-                EmbalajeRenderer.lineas(datos("NO", "", "", "", "")));
+                lineas(datos("NO", "", "", "", "")));
     }
 
     // -------------------------------------------------------------------------------------------
@@ -58,33 +64,33 @@ class EmbalajeRendererTest {
     @Test
     void elRolloConPanos() {
         assertEquals(List.of("ENVASE: BOL-1", "ROLLO: DIAMANTES - 2 paños"),
-                EmbalajeRenderer.lineas(datos("BOL-1", "", "DIAMANTES", "2", "")));
+                lineas(datos("BOL-1", "", "DIAMANTES", "2", "")));
     }
 
     @Test
     void losPanosEnCeroNoSeMuestran() {
         // La columna trae 0 en las filas sin rollo: "ROLLO: NO - 0 paños" sería ruido.
         assertEquals(List.of("ENVASE: BOL-1", "ROLLO: DIAMANTES"),
-                EmbalajeRenderer.lineas(datos("BOL-1", "", "DIAMANTES", "0", "")));
+                lineas(datos("BOL-1", "", "DIAMANTES", "0", "")));
     }
 
     @Test
     void unRolloEnNoSeImprimeIgual() {
         assertEquals(List.of("ENVASE: BOL-1", "ROLLO: NO"),
-                EmbalajeRenderer.lineas(datos("BOL-1", "", "NO", "0", "")));
+                lineas(datos("BOL-1", "", "NO", "0", "")));
     }
 
     @Test
     void unaCantidadCombinadaSeImprimeTalCual() {
         // "2 Y 1" es el valor que aparece en el Excel real.
         assertEquals(List.of("ENVASE: BOL-1", "ROLLO: MIXTO - 2 Y 1 paños"),
-                EmbalajeRenderer.lineas(datos("BOL-1", "", "MIXTO", "2 Y 1", "")));
+                lineas(datos("BOL-1", "", "MIXTO", "2 Y 1", "")));
     }
 
     @Test
     void noSeRepiteLaPalabraPanosSiYaEstaEnElTexto() {
         assertEquals(List.of("ENVASE: BOL-1", "ROLLO: MIXTO - 2 PAÑOS GRANDES"),
-                EmbalajeRenderer.lineas(datos("BOL-1", "", "MIXTO", "2 PAÑOS GRANDES", "")));
+                lineas(datos("BOL-1", "", "MIXTO", "2 PAÑOS GRANDES", "")));
     }
 
     @Test
@@ -92,7 +98,7 @@ class EmbalajeRendererTest {
         // CANT PAÑOS es texto libre del usuario: si escribió "2-3", esconderlo sería peor que
         // mostrarlo, porque el dato existe y el operario lo necesita.
         assertEquals(List.of("ENVASE: BOL-1", "ROLLO: DIAMANTES - 2-3 paños"),
-                EmbalajeRenderer.lineas(datos("BOL-1", "", "DIAMANTES", "2-3", "")));
+                lineas(datos("BOL-1", "", "DIAMANTES", "2-3", "")));
     }
 
     // -------------------------------------------------------------------------------------------
@@ -105,14 +111,14 @@ class EmbalajeRendererTest {
                         "ENVASE: BOL-1 - 9Y",
                         "ROLLO: DIAMANTES - 2 paños",
                         "OBS: Colchon + Tapa"),
-                EmbalajeRenderer.lineas(datos("BOL-1", "9Y", "DIAMANTES", "2", "Colchon + Tapa")));
+                lineas(datos("BOL-1", "9Y", "DIAMANTES", "2", "Colchon + Tapa")));
     }
 
     @Test
     void losSaltosDeLineaDelExcelSeColapsan() {
         // OBSERVACIONES cargado con Alt+Enter: el LF crudo dentro del ^FD pega las palabras.
         assertEquals(List.of("ENVASE: BOL-1", "OBS: Colchon + Tapa"),
-                EmbalajeRenderer.lineas(datos("BOL-1", "", "", "", "Colchon\n+ Tapa")));
+                lineas(datos("BOL-1", "", "", "", "Colchon\n+ Tapa")));
     }
 
     // -------------------------------------------------------------------------------------------
@@ -123,20 +129,20 @@ class EmbalajeRendererTest {
     void sinEstandarizarSoloSeAvisa() {
         DatosEmbalaje sinEstandarizar = new DatosEmbalaje("BOL-1", "9Y", "DIAMANTES", "2", "Obs", false, true);
 
-        assertEquals(List.of("NO ESTANDARIZADO"), EmbalajeRenderer.lineas(sinEstandarizar));
+        assertEquals(List.of("NO ESTANDARIZADO"), lineas(sinEstandarizar));
     }
 
     @Test
     void unSkuQueNoEstaEnElExcelAvisaQueNoEstaEstandarizado() {
         // Recién se lo agrega al Excel en este mismo lote, así que nadie le cargó el envase todavía.
-        assertEquals(List.of("NO ESTANDARIZADO"), EmbalajeRenderer.lineas(DatosEmbalaje.SIN_CARGAR));
+        assertEquals(List.of("NO ESTANDARIZADO"), lineas(DatosEmbalaje.SIN_CARGAR));
     }
 
     @Test
     void sinLasColumnasEnElExcelNoSeImprimeNada() {
         // Distinto de "no estandarizado": el archivo no tiene la columna, así que la función no
         // está en uso y la etiqueta no tiene nada que decir.
-        assertEquals(List.of(), EmbalajeRenderer.lineas(DatosEmbalaje.VACIO));
+        assertEquals(List.of(), lineas(DatosEmbalaje.VACIO));
     }
 
     // -------------------------------------------------------------------------------------------
@@ -147,20 +153,21 @@ class EmbalajeRendererTest {
     void elCampoZplApilaLasLineas() {
         String zpl = EmbalajeRenderer.campoZpl(List.of("ENVASE: BOL-1", "OBS: algo"));
 
-        assertEquals("^FO410,20^A0N,22,22^FB380,1,0,L^FDENVASE: BOL-1^FS\n"
-                        + "^FO411,20^A0N,22,22^FB380,1,0,L^FDENVASE:^FS\n"
-                        + "^FO410,44^A0N,22,22^FB380,5,0,L^FDOBS: algo^FS\n"
-                        + "^FO411,44^A0N,22,22^FB380,5,0,L^FDOBS:^FS\n",
+        assertEquals("^FO400,20^A0N,24,24^FB390,1,0,L^FDENVASE: BOL-1^FS\n"
+                        + "^FO401,20^A0N,24,24^FB390,1,0,L^FDENVASE:^FS\n"
+                        + "^FO400,46^A0N,24,24^FB390,5,0,L^FDOBS: algo^FS\n"
+                        + "^FO401,46^A0N,24,24^FB390,5,0,L^FDOBS:^FS\n",
                 zpl);
     }
 
     @Test
-    void elAvisoDeNoEstandarizadoVaMasGrandeYEnNegrita() {
+    void elAvisoDeNoEstandarizadoSaleComoRecuadroNegro() {
         String zpl = EmbalajeRenderer.campoZpl(List.of("NO ESTANDARIZADO"));
 
-        // Doble pasada con 1px de offset: es como se simula la negrita en ZPL.
-        assertTrue(zpl.contains("^FO410,20^A0N,30,30"), zpl);
-        assertTrue(zpl.contains("^FO411,20^A0N,30,30"), zpl);
+        // Mismo formato que tenía el banner MEDIR: recuadro relleno y texto en video inverso,
+        // centrado, para que frene al operario.
+        assertTrue(zpl.contains("^FO400,20^GB390,52,52^FS"), zpl);
+        assertTrue(zpl.contains("^FO400,27^A0N,38,38^FB390,1,0,C^FR^FDNO ESTANDARIZADO^FS"), zpl);
     }
 
     @Test
@@ -174,8 +181,8 @@ class EmbalajeRendererTest {
     void elBloqueNoLlegaAlSeparadorDeLaZonaDePicking() {
         String zpl = EmbalajeRenderer.campoZpl(List.of("a", "b", "c", "d", "e", "f"));
 
-        // Seis líneas: la última arranca en y=140 y con fuente 22 termina en 162 (separador: 180).
-        assertTrue(zpl.contains("^FO410,140^A0N,22,22^FB380,1,0,L^FDf^FS"), zpl);
+        // Seis líneas: la última arranca en y=150 y con fuente 24 termina en 174 (separador: 180).
+        assertTrue(zpl.contains("^FO400,150^A0N,24,24^FB390,1,0,L^FDf^FS"), zpl);
     }
 
     @Test
@@ -190,7 +197,7 @@ class EmbalajeRendererTest {
         String largo = "ENVASE: CAJ-1 - INSCRIPCION MUY LARGA QUE NO ENTRA";
         String zpl = EmbalajeRenderer.campoZpl(List.of(largo, "OBS: algo"));
 
-        assertTrue(zpl.contains("^FDENVASE: CAJ-1 - INSCRIPCION...^FS"), zpl);
+        assertTrue(zpl.contains("^FDENVASE: CAJ-1 - INSCRIPCIO...^FS"), zpl);
     }
 
     @Test
@@ -198,7 +205,7 @@ class EmbalajeRendererTest {
         String zpl = EmbalajeRenderer.campoZpl(List.of("ENVASE: X", "ROLLO: X", "OBS: " + "x".repeat(300)));
 
         String impreso = zpl.substring(zpl.indexOf("^FDOBS:") + 3, zpl.indexOf("^FS", zpl.indexOf("^FDOBS:")));
-        assertTrue(impreso.replace(" ", "").length() <= 4 * 30, impreso);
+        assertTrue(impreso.replace(" ", "").length() <= 4 * 29, impreso);
         assertTrue(impreso.endsWith("..."), impreso);
     }
 
@@ -206,11 +213,52 @@ class EmbalajeRendererTest {
     void unaPalabraMasLargaQueLaLineaSeParteParaQuePuedaEnvolver() {
         String zpl = EmbalajeRenderer.campoZpl(List.of("ENVASE: X", "OBS: " + "a".repeat(50)));
 
-        assertTrue(zpl.contains("^FDOBS: " + "a".repeat(25) + " " + "a".repeat(25) + "^FS"), zpl);
+        assertTrue(zpl.contains("^FDOBS: " + "a".repeat(24) + " " + "a".repeat(24) + " aa^FS"), zpl);
     }
 
     @Test
     void sinLineasNoHayCampo() {
         assertEquals("", EmbalajeRenderer.campoZpl(List.of()));
+    }
+
+    // -------------------------------------------------------------------------------------------
+    // Etiquetas de más de una unidad
+    // -------------------------------------------------------------------------------------------
+
+    @Test
+    void conMasDeUnaUnidadLosDatosVanComoReferencia() {
+        // El operario no está embalando un producto suelto, así que el envase es orientativo.
+        assertEquals(List.of("REFERENCIA", "ENVASE: BOL-1 - 9Y", "ROLLO: DIAMANTES - 2 paños"),
+                EmbalajeRenderer.lineas(datos("BOL-1", "9Y", "DIAMANTES", "2", ""), 2));
+    }
+
+    @Test
+    void conMasDeUnaUnidadYSinEmbalajeCargadoNoSeImprimeNada() {
+        DatosEmbalaje sinEstandarizar = new DatosEmbalaje("BOL-1", "9Y", "DIAMANTES", "2", "", false, true);
+
+        assertEquals(List.of(), EmbalajeRenderer.lineas(sinEstandarizar, 2));
+        assertEquals(List.of(), EmbalajeRenderer.lineas(DatosEmbalaje.SIN_CARGAR, 2));
+    }
+
+    @Test
+    void laLineaDeReferenciaVaEnNegritaEntera() {
+        // No tiene dos puntos, así que la negrita no puede salir del rótulo como en las demás.
+        String zpl = EmbalajeRenderer.campoZpl(List.of("REFERENCIA", "ENVASE: BOL-1"));
+
+        assertTrue(zpl.contains("^FO400,20^A0N,24,24^FB390,1,0,L^FDREFERENCIA^FS"), zpl);
+        assertTrue(zpl.contains("^FO401,20^A0N,24,24^FB390,1,0,L^FDREFERENCIA^FS"), zpl);
+    }
+
+    // -------------------------------------------------------------------------------------------
+    // Qué SKU se lista en el aviso final
+    // -------------------------------------------------------------------------------------------
+
+    @Test
+    void soloSeAvisaPorLoQueSalioImpreso() {
+        assertTrue(EmbalajeRenderer.avisaSinEstandarizar(lineas(DatosEmbalaje.SIN_CARGAR)));
+        // Con más de una unidad no se imprime nada, así que tampoco hay nada que listar.
+        assertFalse(EmbalajeRenderer.avisaSinEstandarizar(
+                EmbalajeRenderer.lineas(DatosEmbalaje.SIN_CARGAR, 2)));
+        assertFalse(EmbalajeRenderer.avisaSinEstandarizar(lineas(datos("BOL-1", "", "", "", ""))));
     }
 }

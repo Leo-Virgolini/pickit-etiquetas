@@ -15,24 +15,22 @@ public final class EmbalajeRenderer {
     // Bloque en el margen superior derecho, entre el borde de la etiqueta y el separador de la zona
     // de picking (y=180).
     //
-    // x=410 es el límite por la izquierda: entre y=129 y y=160 está el bloque "Pack ID: ..." de ML,
-    // cuyo número llega hasta x≈400 con su fuente 30. Arriba no hay nada de ML —el texto "Recortá
-    // esta parte..." se elimina— y el banner MEDIR se ubica a la izquierda, debajo del #N.
-    private static final int X = 410;
+    // x=400 es el límite por la izquierda: entre y=129 y y=160 está el bloque "Pack ID: ..." de ML
+    // —o "Venta ID: ...", según el tipo de envío—, cuyo número llega hasta x≈380 con sus 11 dígitos
+    // y su fuente 30. Los 20 de diferencia son el margen por si alguna vez viene de 12. Arriba no
+    // hay nada de ML: el texto "Recortá esta parte..." se elimina.
+    private static final int X = 400;
     private static final int Y_INICIAL = 20;
     /** Hasta dónde puede llegar el bloque: el separador de la zona de picking está en y=180. */
     private static final int Y_LIMITE = 178;
-    private static final int ALTO_LINEA = 24;
-    private static final int FUENTE = 22;
-    // El aviso de embalaje sin cargar va más grande y en negrita: es lo que tiene que frenar al
-    // operario, no un dato más de la lista. Siempre es la única línea del bloque.
-    private static final int FUENTE_AVISO = 30;
-    private static final int ANCHO = 380;
+    private static final int ALTO_LINEA = 26;
+    private static final int FUENTE = 24;
+    private static final int ANCHO = 390;
     /**
      * Caracteres que entran en una línea. Con la fuente 0 de ZPL, proporcional, un carácter ocupa
-     * poco más de la mitad del alto nominal: 380 / (22 · 0,55) ≈ 31, redondeado para abajo.
+     * poco más de la mitad del alto nominal: 390 / (24 · 0,55) ≈ 29.
      */
-    private static final int MAX_CARACTERES = 30;
+    private static final int MAX_CARACTERES = 29;
     /**
      * Largo máximo de una palabra sin cortar. Deja lugar para el rótulo más largo ("OBS: ", 5
      * caracteres) en la misma línea que la primera pieza.
@@ -41,25 +39,47 @@ public final class EmbalajeRenderer {
     /** Marca de texto cortado. Tres puntos y no "…": la fuente residual puede no traer ese glifo. */
     private static final String ELIPSIS = "...";
 
+    // El aviso de embalaje sin cargar no es un dato más de la lista: tiene que frenar al operario.
+    // Va en un recuadro relleno con el texto en video inverso y centrado, y siempre es la única
+    // línea del bloque. Con fuente 38 sus 16 caracteres en mayúscula ocupan ~365 de los 390 de
+    // ancho; más grande arañaría el borde, y ^FB no descarta lo que no entra sino que lo reimprime
+    // encima.
+    private static final int FUENTE_AVISO = 38;
+    private static final int ALTO_AVISO = 52;
+
     /** Reemplaza a todo el bloque cuando la columna ESTANDARIZADO no dice que sí. */
     private static final String SIN_ESTANDARIZAR = "NO ESTANDARIZADO";
+    /** Encabeza el bloque cuando la etiqueta es de más de una unidad. */
+    private static final String REFERENCIA = "REFERENCIA";
 
     private EmbalajeRenderer() {
     }
 
-    public static List<String> lineas(DatosEmbalaje datos) {
+    /**
+     * Líneas a imprimir para un SKU en una etiqueta de {@code cantidad} unidades.
+     *
+     * Con más de una unidad el operario no está embalando un producto suelto, así que el envase
+     * cargado es orientativo: las líneas salen igual pero encabezadas por "REFERENCIA", y si no hay
+     * nada cargado no sale nada, en vez del aviso que frena.
+     */
+    public static List<String> lineas(DatosEmbalaje datos, int cantidad) {
         List<String> lineas = new ArrayList<>();
         // Sin la columna ESTANDARIZADO en el Excel la función no está en uso: la etiqueta sale como
         // antes de existir, en vez de reclamar algo que el usuario todavía no puede cargar.
         if (datos == null || !datos.aplica()) return lineas;
 
+        boolean referencia = cantidad > 1;
+
         // El aviso sale de la columna ESTANDARIZADO y no de si hay envase cargado: es una fórmula
         // del usuario que resume si completó envase, tipo de rollo y cantidad de paños. Cuando dice
         // que no, la etiqueta solo tiene que frenar al operario, sin ruido alrededor.
         if (!datos.estandarizado()) {
+            if (referencia) return lineas;
             lineas.add(SIN_ESTANDARIZAR);
             return lineas;
         }
+
+        if (referencia) lineas.add(REFERENCIA);
 
         // "NO" en el envase es una decisión tomada —ese producto no lleva caja ni bolsa— así que se
         // imprime como cualquier otro valor.
@@ -76,6 +96,15 @@ public final class EmbalajeRenderer {
         if (cargado(datos.observaciones())) lineas.add("OBS: " + valor(datos.observaciones()));
 
         return lineas;
+    }
+
+    /**
+     * Si esas líneas son el aviso de embalaje sin cargar. El diálogo del final del lote lista
+     * exactamente los SKU que salieron avisados en papel, así que se pregunta por lo que se imprime
+     * y no por lo que dice el Excel.
+     */
+    public static boolean avisaSinEstandarizar(List<String> lineas) {
+        return lineas != null && lineas.size() == 1 && SIN_ESTANDARIZAR.equals(lineas.get(0));
     }
 
     /**
@@ -124,10 +153,14 @@ public final class EmbalajeRenderer {
         int y = Y_INICIAL;
         for (int i = 0; i < lineas.size(); i++) {
             String linea = lineas.get(i);
-            boolean aviso = SIN_ESTANDARIZAR.equals(linea);
-            boolean ultima = i == lineas.size() - 1;
 
-            int fuente = aviso ? FUENTE_AVISO : FUENTE;
+            if (SIN_ESTANDARIZAR.equals(linea)) {
+                zpl.append(aviso(y));
+                y += ALTO_AVISO;
+                continue;
+            }
+
+            boolean ultima = i == lineas.size() - 1;
             // La última línea se queda con todo el alto libre que sobra, así que puede repartirse
             // en varias. Las anteriores no pueden crecer sin correr las de abajo, así que entran
             // en una sola — la inscripción del envase también es texto libre del usuario.
@@ -136,22 +169,31 @@ public final class EmbalajeRenderer {
             // reimprime encima de la última línea y queda una mancha ilegible.
             String texto = truncar(partirPalabrasLargas(linea), maxLineas * MAX_CARACTERES);
 
-            zpl.append(campo(X, y, fuente, maxLineas, texto));
+            zpl.append(campo(X, y, maxLineas, texto));
             // Negrita simulada con una segunda pasada corrida 1px, igual que ZONA y COD.EXT. El
-            // aviso va entero; en las demás líneas se repasa solo el rótulo, que se superpone
-            // exactamente sobre el de la primera pasada. Así no hay que calcular su ancho, que con
-            // una fuente proporcional no se puede saber de antemano.
-            String negrita = aviso ? texto : rotulo(texto);
-            if (!negrita.isEmpty()) zpl.append(campo(X + 1, y, fuente, maxLineas, negrita));
+            // encabezado de referencia va entero porque no tiene rótulo del que salir; en las demás
+            // líneas se repasa solo el rótulo, que se superpone exactamente sobre el de la primera
+            // pasada. Así no hay que calcular su ancho, que con una fuente proporcional no se puede
+            // saber de antemano.
+            String negrita = REFERENCIA.equals(linea) ? texto : rotulo(texto);
+            if (!negrita.isEmpty()) zpl.append(campo(X + 1, y, maxLineas, negrita));
 
             y += ALTO_LINEA;
         }
         return zpl.toString();
     }
 
-    private static String campo(int x, int y, int fuente, int maxLineas, String texto) {
+    /** Recuadro relleno con el aviso en video inverso, centrado vertical y horizontalmente. */
+    private static String aviso(int y) {
+        return "^FO" + X + ',' + y + "^GB" + ANCHO + ',' + ALTO_AVISO + ',' + ALTO_AVISO + "^FS\n"
+                + "^FO" + X + ',' + (y + (ALTO_AVISO - FUENTE_AVISO) / 2)
+                + "^A0N," + FUENTE_AVISO + ',' + FUENTE_AVISO
+                + "^FB" + ANCHO + ",1,0,C^FR^FD" + SIN_ESTANDARIZAR + "^FS\n";
+    }
+
+    private static String campo(int x, int y, int maxLineas, String texto) {
         return "^FO" + x + ',' + y
-                + "^A0N," + fuente + ',' + fuente
+                + "^A0N," + FUENTE + ',' + FUENTE
                 + "^FB" + ANCHO + ',' + maxLineas + ",0,L"
                 + "^FD" + sanitizar(texto) + "^FS\n";
     }

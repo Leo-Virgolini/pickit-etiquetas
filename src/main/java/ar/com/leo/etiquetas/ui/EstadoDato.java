@@ -77,15 +77,6 @@ public enum EstadoDato {
     }
 
     /**
-     * Si esa etiqueta lleva la sección de embalaje. Además de ser un SKU elegible, tiene que ser de
-     * una sola unidad: con dos o más el operario no está embalando un producto suelto, así que la
-     * instrucción de envase no le sirve.
-     */
-    public static boolean llevaEmbalaje(String zona, String sku, int cantidad) {
-        return cantidad == 1 && esSkuElegible(zona, sku);
-    }
-
-    /**
      * Un SKU lleva medidas y embalaje si tiene número propio y su etiqueta corresponde a un solo
      * producto. Los carros listan varios; los no numéricos son sentinelas del parser
      * ("SKU INVALIDO: ...") que nunca llegan al Excel de medidas.

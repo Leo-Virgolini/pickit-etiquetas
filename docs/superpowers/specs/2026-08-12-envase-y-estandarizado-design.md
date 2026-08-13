@@ -154,3 +154,51 @@ deduce de las filas leídas; un SKU ausente da `SIN_CARGAR` con el módulo activ
 
 La inyección en sí sigue sin cobertura automática —`injectZplHeaders` es privado y necesita JavaFX
 inicializado—, así que hace falta una impresión de prueba real.
+
+## Adenda 2026-08-13 (2) — Referencia, banner y geometría
+
+Corrige la adenda anterior sobre la etiqueta real.
+
+### Cantidad > 1: referencia en vez de nada
+
+La regla de "solo etiquetas de una unidad" se afloja: con dos o más unidades la sección **sí** sale,
+encabezada por `REFERENCIA` en negrita, porque el envase cargado sirve de orientación aunque el
+operario no esté embalando un producto suelto. Lo que no sale es el reclamo: si ese SKU no tiene el
+embalaje cargado, la etiqueta queda limpia en vez de imprimir el aviso.
+
+La decisión se mudó de `EstadoDato.llevaEmbalaje` —que se elimina— a
+`EmbalajeRenderer.lineas(datos, cantidad)`, que es donde se puede testear.
+
+### El aviso final sigue lo impreso
+
+`EmbalajeRenderer.avisaSinEstandarizar(lineas)` decide qué SKU entra al diálogo del final del lote:
+se pregunta por lo que se imprimió y no por lo que dice el Excel. Un SKU cuyas etiquetas son todas
+de 2+ unidades no aparece, porque en papel nunca se reclamó.
+
+### `NO ESTANDARIZADO` como recuadro
+
+Pasa al formato que tenía el banner MEDIR: `^GB390,52,52` relleno y el texto en video inverso (`^FR`)
+centrado, fuente **38**. No 42: son 16 caracteres en mayúscula que a esa altura ocupan ~403 de los
+390 disponibles, y `^FB` no descarta lo que no entra sino que lo reimprime encima.
+
+### Banner MEDIR fuera de uso
+
+Queda detrás de `MainController.BANNER_MEDIR = false`, con el código intacto. La **detección** de
+pendientes sigue activa: es la que agrega los SKU nuevos al Excel y la que alimenta el diálogo.
+
+### Geometría
+
+El bloque se queda a la derecha: el `Pack ID: …` / `Venta ID: …` de ML ocupa `x=30..380, y=129..160`
+y no se toca. Se corre lo que el margen permite y se agranda la fuente.
+
+| | Antes | Ahora |
+|---|---|---|
+| x | 410 | 400 |
+| ancho | 380 | 390 |
+| fuente | 22 | 24 |
+| alto de línea | 24 | 26 |
+| caracteres por línea | 30 | 29 |
+| líneas | 6 | 6 |
+
+Los 20px entre el fin del número de ML (x≈380 con sus 11 dígitos en fuente 30) y el borde del bloque
+son el margen por si alguna vez viene de 12 dígitos.

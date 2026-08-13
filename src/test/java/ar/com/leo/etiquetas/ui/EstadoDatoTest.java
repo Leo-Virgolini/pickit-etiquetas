@@ -118,23 +118,6 @@ class EstadoDatoTest {
     }
 
     // -------------------------------------------------------------------------------------------
-    // Qué etiqueta lleva la sección de embalaje
-    // -------------------------------------------------------------------------------------------
-
-    @Test
-    void soloLlevaEmbalajeLaEtiquetaDeUnaUnidad() {
-        // Con dos o más unidades el operario no está embalando un producto suelto: la instrucción
-        // de envase no le sirve y ocuparía lugar en la etiqueta.
-        assertTrue(EstadoDato.llevaEmbalaje("J1-D", "1241212", 1));
-        assertFalse(EstadoDato.llevaEmbalaje("J1-D", "1241212", 2));
-    }
-
-    @Test
-    void unCarroNoLlevaEmbalajeAunqueSeaDeUnaUnidad() {
-        assertFalse(EstadoDato.llevaEmbalaje("CARROS", "1241212", 1));
-    }
-
-    // -------------------------------------------------------------------------------------------
     // Módulo de embalaje activo
     // -------------------------------------------------------------------------------------------
 

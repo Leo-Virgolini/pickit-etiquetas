@@ -1599,6 +1599,13 @@ public class MainController {
     private static final String ANCHOR_RECORTE = "ecort";
 
     /**
+     * El banner MEDIR quedó fuera de uso. El código que lo arma se conserva entero: alcanza con
+     * poner esto en true para que vuelva. Lo que sigue activo es lo demás que dispara la detección
+     * de pendientes: el alta en el Excel y el diálogo del final del lote.
+     */
+    private static final boolean BANNER_MEDIR = false;
+
+    /**
      * @param embalajesFaltantesOut se completa con los SKU cuya columna ESTANDARIZADO no dice SI.
      */
     private SortResult injectZplHeaders(SortResult result, ExcelMapping excelMapping,
@@ -1630,35 +1637,32 @@ public class MainController {
                 extCodeText = "COD.EXT.: " + (extCode.isEmpty() ? "-" : extCode);
             }
 
-            // Un SKU es elegible para el banner MEDIR y para las líneas de embalaje si tiene
-            // número propio y su etiqueta corresponde a un solo producto. Los carros listan
-            // varios; los no numéricos son sentinelas del parser ("SKU INVALIDO: ...") que nunca
-            // llegan al Excel de medidas, así que no se les puede cargar ni medida ni embalaje.
-            // Los dos datos exigen además que la etiqueta sea de una unidad, y eso se evalúa por
-            // etiqueta más abajo: si las condiciones divergieran, una podría salir con banner
-            // MEDIR pero sin líneas de embalaje, o al revés.
+            // Un SKU es elegible para las líneas de embalaje y para la detección de pendientes de
+            // medición si tiene número propio y su etiqueta corresponde a un solo producto. Los
+            // carros listan varios; los no numéricos son sentinelas del parser ("SKU INVALIDO:
+            // ...") que nunca llegan al Excel de medidas, así que no se les puede cargar ni medida
+            // ni embalaje. La condición es una sola para los dos usos, para que no diverjan.
             boolean skuElegible = medidas != null && EstadoDato.esSkuElegible(zone, sku);
             ar.com.leo.etiquetas.model.MedidaSku medidaSku = skuElegible ? medidas.get(sku) : null;
 
             boolean skuPendienteMedicion = skuElegible && (medidaSku == null || !medidaSku.estaMedido());
 
-            // Datos de embalaje del SKU. Se resuelven una vez por grupo —las líneas son iguales en
-            // todas sus etiquetas— pero solo se inyectan en las de una unidad.
+            // Datos de embalaje del SKU. Son los mismos para todas las etiquetas del grupo, pero
+            // las líneas dependen de la cantidad de cada una, así que se arman más abajo.
             DatosEmbalaje datosEmbalaje = skuElegible
                     ? EstadoDato.embalajeDe(medidaSku, moduloEmbalajeActivo)
                     : DatosEmbalaje.VACIO;
-            String embalajeZpl = EmbalajeRenderer.campoZpl(EmbalajeRenderer.lineas(datosEmbalaje));
-            boolean faltaEmbalaje = datosEmbalaje.aplica() && !datosEmbalaje.estandarizado();
 
             List<ZplLabel> newLabels = new ArrayList<>();
             for (ZplLabel label : group.labels()) {
                 String raw = label.rawZpl();
-                // Un pedido de dos o más unidades no es un producto suelto: la instrucción de
-                // envase no le sirve al operario y le sacaría lugar al resto de la etiqueta.
-                boolean llevaEmbalaje = !embalajeZpl.isEmpty()
-                        && EstadoDato.llevaEmbalaje(zone, sku, label.quantity());
-                // El aviso final tiene que listar los mismos SKU que salieron avisados en papel.
-                if (llevaEmbalaje && faltaEmbalaje && embalajesFaltantesOut != null) {
+                // Un pedido de dos o más unidades no es un producto suelto, así que el envase sale
+                // como referencia, y no sale nada si todavía no está cargado.
+                List<String> lineasEmbalaje = EmbalajeRenderer.lineas(datosEmbalaje, label.quantity());
+                String embalajeZpl = EmbalajeRenderer.campoZpl(lineasEmbalaje);
+                // El aviso final lista exactamente los SKU que salieron avisados en papel.
+                if (embalajesFaltantesOut != null
+                        && EmbalajeRenderer.avisaSinEstandarizar(lineasEmbalaje)) {
                     embalajesFaltantesOut.add(sku);
                 }
                 boolean necesitaMedir = skuPendienteMedicion && label.quantity() == 1;
@@ -1668,7 +1672,7 @@ public class MainController {
                 // Las líneas de embalaje ocupan la franja donde ML imprime "Recortá esta parte...",
                 // que no le sirve al operario. Se quita antes de calcular el punto de inserción para
                 // que el índice corresponda al texto que efectivamente se va a partir.
-                if (llevaEmbalaje) {
+                if (!embalajeZpl.isEmpty()) {
                     raw = quitarTextoRecorte(raw, sku);
                 }
                 // Inyectar número de posición (#1, #2, ...) arriba a la izquierda en negrita
@@ -1683,7 +1687,7 @@ public class MainController {
                 String medirPrefix = "";
                 // Solo marcamos una etiqueta por SKU aunque haya varias elegibles (todas de 1 unidad).
                 // Alcanza con una sola medición para cargar las dimensiones del SKU.
-                if (necesitaMedir && skusYaMarcados.add(sku)) {
+                if (BANNER_MEDIR && necesitaMedir && skusYaMarcados.add(sku)) {
                     // Banner MEDIR: [SKU] en video inverso (blanco sobre negro), bien visible.
                     // Va debajo del #X (que termina en y=65) y encima del "Pack ID:" de ML (y=129),
                     // ocupando el ancho hasta x=400. El margen superior derecho quedó para las
@@ -1695,7 +1699,7 @@ public class MainController {
                             "^FO20,70^GB380,52,52^FS\n"
                             + "^FO20,75^A0N,42,42^FB380,1,0,C^FR^FD" + medirText + "^FS\n";
                 }
-                raw = raw.substring(0, insertIdx) + "^LH0,0\n" + posField1 + "\n" + posField2 + "\n" + posField3 + "\n" + (llevaEmbalaje ? embalajeZpl : "") + medirPrefix + raw.substring(insertIdx);
+                raw = raw.substring(0, insertIdx) + "^LH0,0\n" + posField1 + "\n" + posField2 + "\n" + posField3 + "\n" + embalajeZpl + medirPrefix + raw.substring(insertIdx);
                 labelPosition++;
 
                 // Parsear ^LH original para convertir coordenadas relativas a absolutas
