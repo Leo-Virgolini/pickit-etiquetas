@@ -27,10 +27,18 @@ public final class EmbalajeRenderer {
     private static final int FUENTE = 26;
     private static final int ANCHO = 390;
     /**
-     * Caracteres que entran en una línea. Con la fuente 0 de ZPL, proporcional, un carácter ocupa
-     * poco más de la mitad del alto nominal: 390 / (26 · 0,55) ≈ 27.
+     * Caracteres que entran en una fila.
+     *
+     * Es un número plano para una fuente proporcional, así que es una aproximación: medido sobre
+     * una impresión real, un dígito ocupa ~13,4 puntos —entran 29 en los 390— y una mayúscula ~15,
+     * con lo que de esas entrarían 25. Se eligió el valor de los dígitos, que es el que aprovecha
+     * el ancho. El costo es que una fila de puras mayúsculas puede pasarse, y ^FB no descarta lo
+     * que sobra sino que lo reimprime encima de la fila.
+     *
+     * Las observaciones del Excel son en mayúscula, así que si alguna vez aparece una fila
+     * ilegible, este es el número a bajar.
      */
-    private static final int MAX_CARACTERES = 27;
+    private static final int MAX_CARACTERES = 29;
     /**
      * Pedazo más chico en el que vale la pena partir una palabra. Si en la fila quedan menos
      * caracteres que esto, la palabra arranca abajo en vez de dejar un cachito suelto arriba.

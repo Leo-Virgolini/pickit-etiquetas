@@ -377,3 +377,22 @@ entra, lo reimprime encima.
 
 El espacio libre abajo del bloque tampoco es aprovechable: en una etiqueta de 2+ unidades a `OBS` le
 quedan 22 puntos hasta el separador de picking y una fila necesita 26.
+
+## Adenda 2026-08-13 (10) — 29 caracteres por fila
+
+Medido sobre una impresión real a fuente 26: un dígito ocupa ~13,4 puntos, así que en los 390 de
+ancho entran **29**; una mayúscula ocupa ~15, así que de esas entrarían 25.
+
+Un número plano no puede servir a los dos. Se elige el de los dígitos —el que aprovecha el ancho—
+sabiendo que una fila de puras mayúsculas puede pasarse, y que `^FB` no descarta lo que sobra sino
+que lo reimprime encima.
+
+Verificado con el Excel real: de las **284 filas** que produce, **ninguna supera los 390 puntos**. La
+más ancha da 389 y es una observación de puros dígitos. Las observaciones reales, aunque estén en
+mayúscula, llevan espacios —7 puntos contra 15— y eso baja bastante el promedio:
+`AJUSTAR PAÑO SEGÚN CANT` son 321 puntos.
+
+El caso que quedaría al filo es una tirada larga de mayúsculas sin espacios, que se parte en pedazos
+del ancho de la fila: 29 mayúsculas serían 435 puntos. No es un riesgo nuevo de este cambio —con 27
+ya eran 405— pero es más ancho. Si alguna vez aparece una fila ilegible, `MAX_CARACTERES` es el
+número a bajar.

@@ -200,7 +200,7 @@ class EmbalajeRendererTest {
         String largo = "ENVASE: CAJ-1 - INSCRIPCION MUY LARGA QUE NO ENTRA";
         String zpl = EmbalajeRenderer.campoZpl(List.of(largo, "OBS: algo"));
 
-        assertTrue(zpl.contains("^FDENVASE: CAJ-1 - INSCRIPC...^FS"), zpl);
+        assertTrue(zpl.contains("^FDENVASE: CAJ-1 - INSCRIPCIO...^FS"), zpl);
     }
 
     @Test
@@ -208,7 +208,7 @@ class EmbalajeRendererTest {
         String zpl = EmbalajeRenderer.campoZpl(List.of("ENVASE: X", "ROLLO: X", "OBS: " + "x".repeat(300)));
 
         String impreso = zpl.substring(zpl.indexOf("^FDOBS:") + 3, zpl.indexOf("^FS", zpl.indexOf("^FDOBS:")));
-        assertTrue(impreso.replace(" ", "").length() <= 3 * 27, impreso);
+        assertTrue(impreso.replace(" ", "").length() <= 3 * 29, impreso);
         assertTrue(impreso.endsWith("..."), impreso);
     }
 
@@ -238,7 +238,7 @@ class EmbalajeRendererTest {
 
         // La primera pieza comparte fila con el rótulo, así que entra lo que sobra de los 27; las
         // siguientes se quedan con la fila entera.
-        assertTrue(zpl.contains("^FDOBS: " + "a".repeat(22) + " " + "a".repeat(27) + " a^FS"), zpl);
+        assertTrue(zpl.contains("^FDOBS: " + "a".repeat(24) + " " + "a".repeat(26) + "^FS"), zpl);
     }
 
     @Test
