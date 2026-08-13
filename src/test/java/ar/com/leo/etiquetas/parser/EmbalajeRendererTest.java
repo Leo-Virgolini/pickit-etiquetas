@@ -273,8 +273,9 @@ class EmbalajeRendererTest {
         // Negrita: segunda pasada corrida 1px, como en las demás líneas.
         assertTrue(zpl.contains("^FO401,20^ABN,22,14^FDREFERENCIA^FS"), zpl);
         // Subrayado: ZPL no lo tiene como atributo, así que es una línea dibujada. La fuente es
-        // monoespaciada, así que el ancho es exacto: 10 caracteres por 14.
-        assertTrue(zpl.contains("^FO400,42^GB140,2,2^FS"), zpl);
+        // monoespaciada, así que el ancho es exacto: 10 glifos de 14 más los 9 espacios de 4 que
+        // la fuente B deja entre caracteres.
+        assertTrue(zpl.contains("^FO400,42^GB176,2,2^FS"), zpl);
     }
 
     @Test

@@ -316,5 +316,31 @@ pierde "VENDIDA"—. La verificación anterior, que solo miraba si aparecía `..
 - El ancho del subrayado de `REFERENCIA` sale de `AVANCE_REFERENCIA`, que asume que la matriz 11x7
   de la fuente B ya incluye el espacio entre caracteres. Si no lo incluyera, el avance sería 18 y el
   subrayado quedaría corto por unos dos caracteres. **Confirmar en la impresión de prueba.**
+  *(Confirmado, y la suposición era errónea: ver la adenda 8.)*
 - Locales muertos en el hilo de descarga, y los tests nuevos que habían quedado bajo el separador de
   helpers.
+
+## Adenda 2026-08-13 (8) — Ancho del subrayado, medido en papel
+
+La impresión de prueba mostró el subrayado llegando hasta la **C** de `REFEREN`**C**`IA`, o sea
+cubriendo 8 de los 10 caracteres. Eso resuelve la duda de la adenda anterior: la matriz 11x7 de la
+fuente B es **el glifo solo**, y el espacio entre caracteres son 2 dots aparte, escalados por la
+misma magnificación (4 a ×2).
+
+La cuenta cierra exacta: 8 glifos más sus 7 huecos son `8 · 14 + 7 · 4 = 140`, que era justo el
+ancho que se estaba dibujando.
+
+El ancho pasa a contar glifos y huecos, sin el hueco que sobraría al final:
+
+```
+10 · 14 + 9 · 4 = 176
+```
+
+`AVANCE_REFERENCIA` se reemplaza por `GAP_REFERENCIA = 4`, que es el dato que faltaba.
+
+### Sobre usar `**` en vez del subrayado
+
+Se descartó. Es convención de markdown: significa "negrita" para quien conoce el formato, y en una
+etiqueta impresa son dos asteriscos y nada más. `REFERENCIA` ya va en negrita de verdad, así que
+estaría marcando algo ya marcado. El asterisco sí funciona en papel como delimitador
+(`*** REFERENCIA ***`, convención de tickets), pero eso es otra cosa que lo que se buscaba.

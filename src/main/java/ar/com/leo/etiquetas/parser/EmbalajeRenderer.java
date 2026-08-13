@@ -64,14 +64,13 @@ public final class EmbalajeRenderer {
     private static final int ALTO_REFERENCIA = 22;
     private static final int ANCHO_REFERENCIA = 14;
     /**
-     * Cuánto avanza el cursor por carácter, que es lo que hay que multiplicar para saber dónde
-     * termina la palabra y hasta dónde llega el subrayado.
+     * Espacio que la fuente B deja entre caracteres. La matriz 11x7 es el glifo solo: el hueco son
+     * 2 dots aparte, escalados por la misma magnificación que el resto.
      *
-     * Vale lo mismo que el ancho porque la matriz 11x7 de la fuente B ya incluiría el espacio entre
-     * caracteres. Si no lo incluyera, cada carácter avanzaría 18 en vez de 14 y el subrayado saldría
-     * corto por unos dos caracteres: es lo primero que hay que mirar en la impresión de prueba.
+     * Confirmado en impresión: sin contarlo, el subrayado llegaba hasta la octava letra, que es
+     * justo donde termina el glifo número ocho sin sus huecos (8 · 14 + 7 · 4 = 140).
      */
-    private static final int AVANCE_REFERENCIA = ANCHO_REFERENCIA;
+    private static final int GAP_REFERENCIA = 4;
 
     private EmbalajeRenderer() {
     }
@@ -223,13 +222,15 @@ public final class EmbalajeRenderer {
      * Encabezado de referencia: fuente bitmap, en negrita y subrayado.
      *
      * ZPL no tiene subrayado como atributo, así que se dibuja. Con la fuente proporcional del resto
-     * del bloque habría que estimar el ancho de la palabra; la bitmap es monoespaciada, así que
-     * alcanza con multiplicar por {@link #AVANCE_REFERENCIA}.
+     * del bloque habría que estimar el ancho de la palabra; la bitmap es monoespaciada, así que sale
+     * exacto contando glifos y huecos.
      */
     private static String referencia(int y) {
         String campo = "^A" + FUENTE_REFERENCIA + "N," + ALTO_REFERENCIA + ',' + ANCHO_REFERENCIA
                 + "^FD" + REFERENCIA + "^FS\n";
-        int ancho = REFERENCIA.length() * AVANCE_REFERENCIA;
+        // Los glifos más los huecos que quedan entre ellos, sin el que sobraría al final.
+        int ancho = REFERENCIA.length() * ANCHO_REFERENCIA
+                + (REFERENCIA.length() - 1) * GAP_REFERENCIA;
         return "^FO" + X + ',' + y + campo
                 + "^FO" + (X + 1) + ',' + y + campo
                 + "^FO" + X + ',' + (y + ALTO_REFERENCIA) + "^GB" + ancho + ",2,2^FS\n";
