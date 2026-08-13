@@ -45,11 +45,15 @@ public class LabelSorter {
                             .filter(Objects::nonNull)
                             .findFirst()
                             .orElse("");
+                    // Todas las ventas del grupo, no la primera: la fila junta las etiquetas del
+                    // mismo SKU, y con una sola a la vista el operario no encuentra las otras.
+                    // Se separan con un salto igual que los SKU de un carro, para que cada una
+                    // caiga en su renglón.
                     String orderIds = entry.getValue().stream()
                             .map(ZplLabel::orderIds)
                             .filter(o -> o != null && !o.isEmpty())
-                            .findFirst()
-                            .orElse("");
+                            .distinct()
+                            .collect(Collectors.joining("\n"));
                     return new SortedLabelGroup(zone, sku, desc, details, orderIds, entry.getValue());
                 })
                 .sorted(Comparator
