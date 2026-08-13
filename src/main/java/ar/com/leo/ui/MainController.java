@@ -231,6 +231,9 @@ public class MainController {
     private List<OrdenML> fetchedOrders;
     private Set<Long> turboShipmentIds = Set.of();
 
+    /** Separador entre los datos del resumen. El tooltip lo usa para partirlo en renglones. */
+    private static final String SEP_RESUMEN = "  \u2502  ";
+
     /** Los dos sub-tabs de Etiquetas, en el orden en que están en el FXML. */
     private static final int SUBTAB_API = 0;
     private static final int SUBTAB_LOCAL = 1;
@@ -808,6 +811,23 @@ public class MainController {
         return excelReader.readMapping(Path.of(config.stock()));
     }
 
+    /**
+     * Lee el Excel de stock avisando con su propio título, o devuelve null si no pudo.
+     *
+     * Adentro del hilo, el catch de más afuera reporta todo como "Error API ML" y mandaría al
+     * operario a mirar MercadoLibre cuando el problema es la planilla abierta en otra ventana.
+     */
+    private ExcelMapping leerStock(ConfigExcel config) {
+        try {
+            return loadExcelMapping(config);
+        } catch (Exception e) {
+            AppLogger.error("No se pudo leer el Excel de stock", e);
+            mostrarError("Excel de stock",
+                    "No se pudo leer el Excel de stock (SKU -> Zona).\n\n" + e.getMessage());
+            return null;
+        }
+    }
+
     @FXML
     private void onProcessLocal() {
         String zplPath = zplFileField.getText();
@@ -885,7 +905,11 @@ public class MainController {
 
         new Thread(() -> {
             try {
-                ExcelMapping excelMapping = loadExcelMapping(config);
+                ExcelMapping excelMapping = leerStock(config);
+                if (excelMapping == null) {
+                    Platform.runLater(() -> setLoading(false));
+                    return;
+                }
                 String userId = MercadoLibreAPI.getUserId();
                 MercadoLibreAPI.MLOrderResult result = MercadoLibreAPI.obtenerVentasReadyToPrint(userId, incluirImpresas);
                 List<OrdenML> ordenes = result.ordenes();
@@ -1052,7 +1076,11 @@ public class MainController {
             try {
                 // Leer los Excel también tarda, así que va adentro del hilo: si no, la ventana
                 // queda congelada un rato antes de que el spinner alcance a pintarse.
-                ExcelMapping excelMapping = loadExcelMapping(config);
+                ExcelMapping excelMapping = leerStock(config);
+                if (excelMapping == null) {
+                    Platform.runLater(() -> setLoading(false));
+                    return;
+                }
                 MedidasExcelManager.Medidas medidas = loadMedidas(config);
                 List<ZplLabel> labels = MercadoLibreAPI.descargarEtiquetasZplParaOrdenes(seleccionadas, turboShipmentIds);
                 Map<String, String> skusPendientes = new LinkedHashMap<>();
@@ -1405,10 +1433,14 @@ public class MainController {
             fileLinkBar.setManaged(false);
         }
         searchBar.setDisable(loading);
-        downloadLabelsBtn.setDisable(loading);
-        comboSheetBtn.setDisable(loading);
-        printDirectBtn.setDisable(loading);
-        backToOrdersBtn.setDisable(loading);
+        if (loading) {
+            downloadLabelsBtn.setDisable(true);
+            comboSheetBtn.setDisable(true);
+            printDirectBtn.setDisable(true);
+            backToOrdersBtn.setDisable(true);
+        } else {
+            restaurarEstadoDeVista();
+        }
         searchField.setDisable(loading);
         estadoFilterCombo.setDisable(loading);
         despachoFilterCombo.setDisable(loading);
@@ -1436,42 +1468,62 @@ public class MainController {
         statsBar.setManaged(hayOrdenesBuscadas);
         searchBar.setVisible(hayOrdenesBuscadas);
         searchBar.setManaged(hayOrdenesBuscadas);
-        // El link apunta al lote descargado, que no es lo que se está mostrando.
-        mostrarLinkArchivo(null);
-        downloadLabelsBtn.setVisible(true);
-        downloadLabelsBtn.setManaged(true);
         orderTable.setVisible(true);
         orderTable.setManaged(true);
         labelTable.setVisible(false);
         labelTable.setManaged(false);
         searchField.clear();
-        boolean hayOrdenes = !orderTable.getItems().isEmpty();
-        downloadLabelsBtn.setDisable(!hayOrdenes);
-        comboSheetBtn.setDisable(true);
-        printDirectBtn.setDisable(true);
-        backToOrdersBtn.setVisible(false);
-        backToOrdersBtn.setManaged(false);
+        restaurarEstadoDeVista();
         setShippingFilterDisabled(false);
     }
 
+    /**
+     * Repone lo que depende de lo que hay cargado: los botones de acción y el link al archivo.
+     *
+     * {@code setLoading(false)} no puede saberlo —habilita todo por igual— y así "Descargar
+     * Etiquetas" quedaba clickeable sobre un lote ya descargado, que al tocarlo lo vuelve a bajar y
+     * a marcar las órdenes como impresas en ML. El link al archivo, que setLoading esconde al
+     * empezar, tampoco volvía nunca.
+     */
+    private void restaurarEstadoDeVista() {
+        boolean enApi = subTabActual() == SUBTAB_API;
+        boolean hayOrdenes = enApi && !orderTable.getItems().isEmpty();
+        boolean hayEtiquetas = currentResult != null && !currentResult.groups().isEmpty();
+
+        // Descargar etiquetas y volver a las órdenes son pasos del flujo de la API: en Archivo
+        // Local no tienen sentido.
+        downloadLabelsBtn.setVisible(enApi);
+        downloadLabelsBtn.setManaged(enApi);
+
+        if (enApi && apiMostrandoOrdenes) {
+            downloadLabelsBtn.setDisable(!hayOrdenes);
+            comboSheetBtn.setDisable(true);
+            printDirectBtn.setDisable(true);
+            backToOrdersBtn.setVisible(false);
+            backToOrdersBtn.setManaged(false);
+            // El link apunta al lote descargado, que no es lo que se está mostrando.
+            mostrarLinkArchivo(null);
+        } else {
+            downloadLabelsBtn.setDisable(true);
+            comboSheetBtn.setDisable(!hayEtiquetas);
+            printDirectBtn.setDisable(!hayEtiquetas);
+            backToOrdersBtn.setVisible(hayOrdenes);
+            backToOrdersBtn.setManaged(hayOrdenes);
+            VistaEtiquetas vista = vistasEtiquetas.get(subTabActual());
+            mostrarLinkArchivo(vista == null ? null : vista.archivoGuardado());
+        }
+    }
+
     private void showLabelTable() {
+        // Es la vista de etiquetas, así que el sub-tab de API deja de estar en las órdenes. Solo
+        // se toca estando ahí: entrar a Archivo Local no cambia en qué quedó la otra pestaña.
+        if (subTabActual() == SUBTAB_API) apiMostrandoOrdenes = false;
         labelTable.setVisible(true);
         labelTable.setManaged(true);
         orderTable.setVisible(false);
         orderTable.setManaged(false);
         searchField.clear();
-        downloadLabelsBtn.setDisable(true);
-        boolean hayEtiquetas = currentResult != null && !currentResult.groups().isEmpty();
-        comboSheetBtn.setDisable(!hayEtiquetas);
-        printDirectBtn.setDisable(!hayEtiquetas);
-        // Descargar etiquetas y volver a las órdenes son pasos del flujo de la API: en Archivo
-        // Local no tienen sentido.
-        boolean enApi = subTabActual() == SUBTAB_API;
-        downloadLabelsBtn.setVisible(enApi);
-        downloadLabelsBtn.setManaged(enApi);
-        boolean hayOrdenes = enApi && !orderTable.getItems().isEmpty();
-        backToOrdersBtn.setVisible(hayOrdenes);
-        backToOrdersBtn.setManaged(hayOrdenes);
+        restaurarEstadoDeVista();
         // El filtro de tipo de envío es un control de la vista de órdenes (pre-descarga);
         // en la vista de etiquetas se deshabilita para que no modifique el resumen.
         setShippingFilterDisabled(true);
@@ -1628,7 +1680,7 @@ public class MainController {
                 countByZone.merge(r.getZone(), 1, Integer::sum);
             }
             int skuCount = uniqueSkus.size();
-            StringJoiner sj = new StringJoiner("  \u2502  ");
+            StringJoiner sj = new StringJoiner(SEP_RESUMEN);
             sj.add("Ordenes: " + ordCount);
             sj.add("Productos: " + prodCount);
             sj.add("SKUs: " + skuCount);
@@ -1640,7 +1692,7 @@ public class MainController {
             }
             String text = sj.toString();
             statsLabel.setText(text);
-            Tooltip tip = new Tooltip(text.replace(" | ", "\n"));
+            Tooltip tip = new Tooltip(text.replace(SEP_RESUMEN, "\n"));
             tip.setShowDelay(Duration.millis(200));
             statsLabel.setTooltip(tip);
         };
@@ -2334,7 +2386,7 @@ public class MainController {
         int totalProductos = result.groups().stream()
                 .mapToInt(g -> extractQuantityFromLabels(g.labels()))
                 .sum();
-        StringJoiner sj = new StringJoiner("  \u2502  ");
+        StringJoiner sj = new StringJoiner(SEP_RESUMEN);
         sj.add("Etiquetas: " + stats.totalLabels());
         sj.add("Productos: " + totalProductos);
         sj.add("SKUs: " + stats.uniqueSkus());
@@ -2349,7 +2401,7 @@ public class MainController {
 
         String text = sj.toString();
         statsLabel.setText(text);
-        Tooltip tip = new Tooltip(text.replace(" | ", "\n"));
+        Tooltip tip = new Tooltip(text.replace(SEP_RESUMEN, "\n"));
         tip.setShowDelay(Duration.millis(200));
         statsLabel.setTooltip(tip);
         statsBar.setVisible(true);
@@ -2359,9 +2411,8 @@ public class MainController {
         // El link apunta al archivo del resultado anterior. Lo repone quien haya guardado uno.
         mostrarLinkArchivo(null);
 
-        int tab = subTabActual();
-        if (tab == SUBTAB_API) apiMostrandoOrdenes = false;
-        vistasEtiquetas.put(tab, new VistaEtiquetas(result, rows, text, null));
+        // En qué quedó cada pestaña lo llevan showLabelTable y showOrderTable.
+        vistasEtiquetas.put(subTabActual(), new VistaEtiquetas(result, rows, text, null));
     }
 
     private int subTabActual() {
@@ -2416,20 +2467,19 @@ public class MainController {
             statsBar.setManaged(false);
             searchBar.setVisible(false);
             searchBar.setManaged(false);
-            mostrarLinkArchivo(null);
         } else {
             currentResult = vista.resultado();
             mostrarFilas(vista.filas());
             statsLabel.setText(vista.estadisticas());
-            Tooltip tip = new Tooltip(vista.estadisticas().replace(" | ", "\n"));
+            Tooltip tip = new Tooltip(vista.estadisticas().replace(SEP_RESUMEN, "\n"));
             tip.setShowDelay(Duration.millis(200));
             statsLabel.setTooltip(tip);
             statsBar.setVisible(true);
             statsBar.setManaged(true);
             searchBar.setVisible(true);
             searchBar.setManaged(true);
-            mostrarLinkArchivo(vista.archivoGuardado());
         }
+        // El link al archivo y los botones los repone showLabelTable, que los saca de la vista.
         showLabelTable();
     }
 
