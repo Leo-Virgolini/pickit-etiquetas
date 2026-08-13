@@ -23,14 +23,14 @@ public final class EmbalajeRenderer {
     private static final int Y_INICIAL = 20;
     /** Hasta dónde puede llegar el bloque: el separador de la zona de picking está en y=180. */
     private static final int Y_LIMITE = 178;
-    private static final int ALTO_LINEA = 26;
-    private static final int FUENTE = 24;
+    private static final int ALTO_LINEA = 28;
+    private static final int FUENTE = 26;
     private static final int ANCHO = 390;
     /**
      * Caracteres que entran en una línea. Con la fuente 0 de ZPL, proporcional, un carácter ocupa
-     * poco más de la mitad del alto nominal: 390 / (24 · 0,55) ≈ 29.
+     * poco más de la mitad del alto nominal: 390 / (26 · 0,55) ≈ 27.
      */
-    private static final int MAX_CARACTERES = 29;
+    private static final int MAX_CARACTERES = 27;
     /**
      * Largo máximo de una palabra sin cortar. Deja lugar para el rótulo más largo ("OBS: ", 5
      * caracteres) en la misma línea que la primera pieza.
@@ -177,6 +177,11 @@ public final class EmbalajeRenderer {
                 y += ALTO_LINEA;
                 continue;
             }
+
+            // Con este alto de línea entran cinco, y lineas() nunca arma más de cuatro. El corte
+            // es por si eso cambiara: perder una línea es preferible a imprimir sobre la zona de
+            // picking, que empieza en y=180.
+            if (y + FUENTE > Y_LIMITE) break;
 
             boolean ultima = i == lineas.size() - 1;
             // La última línea se queda con todo el alto libre que sobra, así que puede repartirse

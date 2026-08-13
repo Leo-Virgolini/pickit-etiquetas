@@ -154,10 +154,10 @@ class EmbalajeRendererTest {
     void elCampoZplApilaLasLineas() {
         String zpl = EmbalajeRenderer.campoZpl(List.of("ENVASE: BOL-1", "OBS: algo"));
 
-        assertEquals("^FO400,20^A0N,24,24^FB390,1,0,L^FDENVASE: BOL-1^FS\n"
-                        + "^FO401,20^A0N,24,24^FB390,1,0,L^FDENVASE:^FS\n"
-                        + "^FO400,46^A0N,24,24^FB390,5,0,L^FDOBS: algo^FS\n"
-                        + "^FO401,46^A0N,24,24^FB390,5,0,L^FDOBS:^FS\n",
+        assertEquals("^FO400,20^A0N,26,26^FB390,1,0,L^FDENVASE: BOL-1^FS\n"
+                        + "^FO401,20^A0N,26,26^FB390,1,0,L^FDENVASE:^FS\n"
+                        + "^FO400,48^A0N,26,26^FB390,4,0,L^FDOBS: algo^FS\n"
+                        + "^FO401,48^A0N,26,26^FB390,4,0,L^FDOBS:^FS\n",
                 zpl);
     }
 
@@ -182,8 +182,10 @@ class EmbalajeRendererTest {
     void elBloqueNoLlegaAlSeparadorDeLaZonaDePicking() {
         String zpl = EmbalajeRenderer.campoZpl(List.of("a", "b", "c", "d", "e", "f"));
 
-        // Seis líneas: la última arranca en y=150 y con fuente 24 termina en 174 (separador: 180).
-        assertTrue(zpl.contains("^FO400,150^A0N,24,24^FB390,1,0,L^FDf^FS"), zpl);
+        // lineas() nunca arma más de cuatro, pero si alguna vez armara de más, lo que no entra
+        // se descarta en lugar de imprimirse sobre la zona de picking.
+        assertFalse(zpl.contains("^FDf^FS"), zpl);
+        assertTrue(zpl.contains("^FO400,132^A0N,26,26^FB390,1,0,L^FDe^FS"), zpl);
     }
 
     @Test
@@ -198,7 +200,7 @@ class EmbalajeRendererTest {
         String largo = "ENVASE: CAJ-1 - INSCRIPCION MUY LARGA QUE NO ENTRA";
         String zpl = EmbalajeRenderer.campoZpl(List.of(largo, "OBS: algo"));
 
-        assertTrue(zpl.contains("^FDENVASE: CAJ-1 - INSCRIPCIO...^FS"), zpl);
+        assertTrue(zpl.contains("^FDENVASE: CAJ-1 - INSCRIPC...^FS"), zpl);
     }
 
     @Test
@@ -206,7 +208,7 @@ class EmbalajeRendererTest {
         String zpl = EmbalajeRenderer.campoZpl(List.of("ENVASE: X", "ROLLO: X", "OBS: " + "x".repeat(300)));
 
         String impreso = zpl.substring(zpl.indexOf("^FDOBS:") + 3, zpl.indexOf("^FS", zpl.indexOf("^FDOBS:")));
-        assertTrue(impreso.replace(" ", "").length() <= 4 * 29, impreso);
+        assertTrue(impreso.replace(" ", "").length() <= 3 * 27, impreso);
         assertTrue(impreso.endsWith("..."), impreso);
     }
 
@@ -214,7 +216,7 @@ class EmbalajeRendererTest {
     void unaPalabraMasLargaQueLaLineaSeParteParaQuePuedaEnvolver() {
         String zpl = EmbalajeRenderer.campoZpl(List.of("ENVASE: X", "OBS: " + "a".repeat(50)));
 
-        assertTrue(zpl.contains("^FDOBS: " + "a".repeat(24) + " " + "a".repeat(24) + " aa^FS"), zpl);
+        assertTrue(zpl.contains("^FDOBS: " + "a".repeat(22) + " " + "a".repeat(22) + " " + "a".repeat(6) + "^FS"), zpl);
     }
 
     @Test
@@ -268,8 +270,8 @@ class EmbalajeRendererTest {
     void laReferenciaNoCorreLasLineasDeAbajo() {
         String zpl = EmbalajeRenderer.campoZpl(List.of("REFERENCIA", "ENVASE: BOL-1"));
 
-        // El encabezado ocupa un alto de línea normal: la primera línea de datos sigue en y=46.
-        assertTrue(zpl.contains("^FO400,46^A0N,24,24^FB390,5,0,L^FDENVASE: BOL-1^FS"), zpl);
+        // El encabezado ocupa un alto de línea normal: la primera línea de datos sigue en y=48.
+        assertTrue(zpl.contains("^FO400,48^A0N,26,26^FB390,4,0,L^FDENVASE: BOL-1^FS"), zpl);
     }
 
     // -------------------------------------------------------------------------------------------

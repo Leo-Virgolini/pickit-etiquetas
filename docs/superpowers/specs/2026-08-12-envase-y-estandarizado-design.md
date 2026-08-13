@@ -258,3 +258,30 @@ que está escrito en el envase físico, que es como lo busca el operario.
 
 Sin inscripción va el código solo, sin comillas vacías colgando. El `" - "` de la línea de rollo
 —`ROLLO: DIAMANTES - 2 paños`— no cambia.
+
+## Adenda 2026-08-13 (6) — Fuente 26
+
+El bloque se queda donde está —el `Pack ID` / `Venta ID` de ML sigue ocupando la franja de la
+izquierda— y solo sube la fuente.
+
+| | Antes | Ahora |
+|---|---|---|
+| fuente | 24 | 26 |
+| alto de línea | 26 | 28 |
+| caracteres por línea | 29 | 27 |
+| líneas | 6 | 5 |
+
+`x=400` no se toca: bajarlo se comería el margen reservado por si un `Pack ID` viene de 12 dígitos.
+
+Con el Excel real —740 filas, 28 estandarizadas, 65 líneas— entra todo: se generaron los 56 bloques
+posibles (cada SKU en etiqueta de 1 y de 2+ unidades) y ninguno se recorta. El caso más ajustado es
+`OBS: 3 COLCHON 1 TAPA. AJUSTAR PAÑO SEGÚN CANT VENDIDA`, de 54 caracteres, que en una etiqueta de
+2+ unidades —donde `REFERENCIA` ocupa una línea— entra en 2 filas de 27 justo al límite. Una
+observación de 55 caracteres en ese mismo caso sí se recortaría.
+
+`campoZpl` corta ahora las líneas que no entrarían antes del separador de la zona de picking. Con
+cinco disponibles y cuatro como máximo real nunca se activa; está por si la cuenta cambia, porque
+perder una línea es preferible a imprimir sobre la zona de picking.
+
+`REFERENCIA` sigue en `^ABN,22,14`: las fuentes bitmap escalan en múltiplos enteros y el siguiente
+—33×21— no entra en el alto de línea.
