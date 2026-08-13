@@ -224,6 +224,23 @@ class EmbalajeRendererTest {
     }
 
     @Test
+    void unValorLargoNoSePierdeDetrasDelRotulo() {
+        // Bajar la palabra entera dejaría la fila con solo "ENVASE:", y como esa línea tiene una
+        // sola fila, el recorte se quedaría con el rótulo y se perdería el envase completo.
+        String zpl = EmbalajeRenderer.campoZpl(List.of("ENVASE: BOLSA-GRANDE-REFORZADA", "OBS: algo"));
+
+        assertTrue(zpl.contains("^FDENVASE: BOLSA-GRANDE-REFOR...^FS"), zpl);
+    }
+
+    @Test
+    void unaInscripcionLargaNoSePierde() {
+        String linea = "ENVASE: CAJ-1 \"INSCRIPCIONMUYLARGA\"";
+        String zpl = EmbalajeRenderer.campoZpl(List.of(linea, "OBS: algo"));
+
+        assertTrue(zpl.contains("INSCRIPCI"), zpl);
+    }
+
+    @Test
     void unaPalabraComunNoSeParteAunqueNoEntreEnLoQueQuedaDeLaFila() {
         // "OBS: 3 COLCHON 1 TAPA." deja 4 caracteres libres y "AJUSTAR" son 7. Partirla en
         // "AJUS TAR" para no desperdiciar ese margen se lee mucho peor que bajarla entera.

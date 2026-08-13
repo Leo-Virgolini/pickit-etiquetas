@@ -2046,10 +2046,15 @@ public class MainController {
             // ventana: sin aviso, el lote termina sin diálogo y el operario supone que los SKU
             // nuevos quedaron cargados cuando en realidad no se escribió nada.
             AppLogger.warn("No se pudo actualizar el Excel de medidas: " + e.getMessage());
-            String detalle = e.getMessage();
-            Platform.runLater(() -> AlertHelper.showError("Excel de medidas",
+            // POI tira varias excepciones sin mensaje, y ahí el diálogo terminaría en "null".
+            String detalle = e.getMessage() != null ? e.getMessage() : e.toString();
+            Runnable aviso = () -> AlertHelper.showError("Excel de medidas",
                     "No se pudieron agregar los SKU nuevos al Excel de medidas. Si lo tenés abierto, "
-                    + "cerralo y volvé a procesar el lote.\n\n" + detalle));
+                    + "cerralo y volvé a procesar el lote.\n\n" + detalle);
+            // Al procesar un archivo local esto corre en el hilo de JavaFX: diferirlo pondría el
+            // error después del resumen de éxito, al revés de lo que el operario necesita leer.
+            if (Platform.isFxApplicationThread()) aviso.run();
+            else Platform.runLater(aviso);
         }
         Platform.runLater(this::actualizarBotonSubirMedidas);
         return agregados;

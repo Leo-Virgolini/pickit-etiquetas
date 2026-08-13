@@ -396,3 +396,46 @@ El caso que quedaría al filo es una tirada larga de mayúsculas sin espacios, q
 del ancho de la fila: 29 mayúsculas serían 435 puntos. No es un riesgo nuevo de este cambio —con 27
 ya eran 405— pero es más ancho. Si alguna vez aparece una fila ilegible, `MAX_CARACTERES` es el
 número a bajar.
+
+## Adenda 2026-08-13 (11) — Correcciones de review
+
+### El valor de la línea podía perderse entero detrás del rótulo
+
+Al reemplazar `partirPalabrasLargas` por `envolver` (adenda 9), `MIN_PIEZA` quedó en 4: una palabra
+que entra en una fila completa se bajaba entera aunque dejara media fila desperdiciada arriba. En las
+líneas de una sola fila —envase, rollo— `acotar` se quedaba con esa fila, que tenía solo el rótulo:
+
+```
+ENVASE: BOLSA-GRANDE-REFORZADA   →   ENVASE:...
+ENVASE: CAJ-1 "INSCRIPCIONMUYLARGA"  →   ENVASE: CAJ-1...
+```
+
+Era exactamente la falla que `partirPalabrasLargas` existía para evitar. `MIN_PIEZA` pasa a
+`MAX_CARACTERES / 2`: la palabra se parte siempre que entre un pedazo grande, y solo se baja entera
+cuando lo que quedaría arriba es poco. Con eso `AJUSTAR` sigue sin partirse —quedan 4 caracteres— y
+el envase largo sale como `ENVASE: BOLSA-GRANDE-REFOR...`.
+
+### El número de orden podía ser el del código de barras
+
+`ORDEN_PATTERN` buscaba, con `DOTALL`, la primera tirada de 8+ dígitos en **todo el resto del
+bloque** después del rótulo. Si el número viene pegado al rótulo en el mismo `^FD` —formato que la
+propia etiqueta de ML usa en la segunda aparición del dato— el regex lo salteaba y seguía hasta el
+contenido del código de barras. La columna mostraba un número plausible pero equivocado, y es el que
+el operario usa para buscar la venta.
+
+Se reemplaza por un barrido acotado sobre los campos `^FD`: se acepta el número pegado al rótulo, y
+si no, se miran los **3 campos siguientes**. Además el campo tiene que ser el número y nada más, lo
+que descarta el contenido de los códigos de barras. Reverificado sobre los archivos reales: 1138
+etiquetas, las 1138 con su número.
+
+### Otros
+
+- El diálogo de alta fallida al Excel terminaba en `"null"` con las excepciones sin mensaje, y al
+  procesar un archivo local salía **después** del resumen de éxito porque el `Platform.runLater` lo
+  difería estando ya en el hilo de JavaFX.
+
+### Lo que se deja como está
+
+`MAX_CARACTERES = 29` está calibrado sobre dígitos y una fila llena de mayúsculas se pasa de los 390
+puntos. Es la decisión tomada en la adenda 10, con el costo asumido y documentado en la constante.
+Ninguna de las filas del Excel real llega a ese ancho.

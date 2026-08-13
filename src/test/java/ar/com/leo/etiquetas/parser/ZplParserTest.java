@@ -54,6 +54,35 @@ class ZplParserTest {
     }
 
     @Test
+    void tomaElNumeroAunqueVengaPegadoAlRotulo() {
+        // ML ya usa ese formato en la segunda aparición del dato ("Pack ID: 20000"), así que el
+        // número no siempre viene en un campo aparte.
+        String zpl = "^XA\n"
+                + "^FO30,40^A0N,28,28^FH^FDPack ID: 13605621573^FS\n"
+                + "^FO200,181^A0N,24,24^FH^FDColor: Gris  | SKU: 1241212^FS\n"
+                + "^FO250,275^BY4,4,0^BQN,2,7^FD41123456789012345678^FS\n"
+                + "^XZ\n";
+
+        assertEquals("13605621573", parser.parse(zpl).getFirst().orderIds());
+    }
+
+    @Test
+    void noSeQuedaConElCodigoDeBarrasQueVieneMasAbajo() {
+        // Sin número cerca del rótulo, la columna queda vacía en vez de mostrar un número
+        // plausible pero equivocado: el operario la usa para buscar la venta.
+        String zpl = "^XA\n"
+                + "^FO30,40^A0N,28,28^FH^FDPack ID:^FS\n"
+                + "^FO200,181^A0N,24,24^FH^FDColor: Gris  | SKU: 1241212^FS\n"
+                + "^FO120,22^A0N,24,24^FH^FDLINEA GE S A^FS\n"
+                + "^FO120,65^A0N,24,24^FH^FDDoctor Nicolas Repetto 2195^FS\n"
+                + "^FO120,100^A0N,24,24^FH^FDCP 1416^FS\n"
+                + "^FO250,275^BY4,4,0^BQN,2,7^FD41123456789012345678^FS\n"
+                + "^XZ\n";
+
+        assertEquals("", parser.parse(zpl).getFirst().orderIds());
+    }
+
+    @Test
     void sinRotuloConocidoLaOrdenQuedaVacia() {
         String sinId = "^XA\n"
                 + "^FO200,181^A0N,24,24^FH^FDColor: Gris  | SKU: 1241212^FS\n"

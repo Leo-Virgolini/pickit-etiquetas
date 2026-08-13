@@ -40,10 +40,15 @@ public final class EmbalajeRenderer {
      */
     private static final int MAX_CARACTERES = 29;
     /**
-     * Pedazo más chico en el que vale la pena partir una palabra. Si en la fila quedan menos
-     * caracteres que esto, la palabra arranca abajo en vez de dejar un cachito suelto arriba.
+     * Pedazo más chico en el que vale la pena partir una palabra.
+     *
+     * Marca el equilibrio entre dos formas de quedar mal. Si en la fila entra menos que esto, la
+     * palabra arranca abajo: partir "AJUSTAR" en "AJUS TAR" por cuatro caracteres se lee peor que
+     * dejar ese margen. Si entra más, se parte: bajarla entera dejaría media fila vacía, y en una
+     * línea de una sola fila —envase, rollo— el recorte se quedaría con el rótulo solo y el valor
+     * se perdería entero.
      */
-    private static final int MIN_PIEZA = 4;
+    private static final int MIN_PIEZA = MAX_CARACTERES / 2;
     /** Marca de texto cortado. Tres puntos y no "…": la fuente residual puede no traer ese glifo. */
     private static final String ELIPSIS = "...";
 
@@ -299,9 +304,9 @@ public final class EmbalajeRenderer {
     /**
      * Cómo queda repartido el texto en filas del ancho disponible.
      *
-     * Una palabra que no entra en lo que queda de la fila se parte ahí mismo y sigue abajo, en vez
-     * de bajarse entera: pasa con códigos y URLs, que no tienen espacios donde cortar, y bajarlos
-     * enteros dejaría el rótulo solo arriba y desperdiciaría el resto de cada fila.
+     * Una palabra que no entra en lo que queda de la fila se parte ahí mismo y sigue abajo, salvo
+     * que quede muy poco lugar (ver {@link #MIN_PIEZA}). Bajarla entera siempre desperdiciaría el
+     * resto de la fila, y en las líneas de una sola fila dejaría el rótulo solo.
      */
     private static List<String> envolver(String texto) {
         List<String> filas = new ArrayList<>();
@@ -315,17 +320,14 @@ public final class EmbalajeRenderer {
                     if (!fila.isEmpty()) fila.append(' ');
                     fila.append(palabra);
                     palabra = "";
-                } else if (palabra.length() <= MAX_CARACTERES || libre < MIN_PIEZA) {
-                    // Entra sola en una fila, o queda tan poco que partirla no vale la pena:
-                    // arranca abajo. Partir una palabra común se lee peor que dejar margen.
-                    filas.add(fila.toString());
-                    fila = new StringBuilder();
-                } else {
-                    // No entra ni en una fila entera, así que hay que partirla igual. Se aprovecha
-                    // lo que queda de esta.
+                } else if (libre >= MIN_PIEZA) {
                     if (!fila.isEmpty()) fila.append(' ');
                     fila.append(palabra, 0, libre);
                     palabra = palabra.substring(libre);
+                    filas.add(fila.toString());
+                    fila = new StringBuilder();
+                } else {
+                    // Queda tan poco que partirla no vale la pena: arranca abajo.
                     filas.add(fila.toString());
                     fila = new StringBuilder();
                 }

@@ -21,15 +21,22 @@ public class ZplParser {
     private static final Pattern QUANTITY_PATTERN = Pattern.compile(
             "\\^A0N,70,70\\^FB160,1,0,C(?:\\^FR)?\\^FD(\\d+)\\^FS");
     /**
-     * El número que ML imprime junto a "Pack ID:" —o "Venta ID:" cuando la etiqueta no agrupa
-     * varias órdenes—. Es el mismo dato que la descarga por API pone en la columna Orden, así que
-     * la tabla dice lo mismo venga la etiqueta de la API o de un archivo.
-     *
-     * Entre el rótulo y el número hay otro campo con un "20000", así que no alcanza con tomar el
-     * campo siguiente: se busca la primera tirada larga de dígitos.
+     * El rótulo con el que ML anuncia el número de la orden: "Pack ID:", o "Venta ID:" cuando la
+     * etiqueta no agrupa varias.
      */
-    private static final Pattern ORDEN_PATTERN = Pattern.compile(
-            "(?:Pack|Venta)\\s*ID:.*?\\^FD\\s*(\\d{8,})\\s*\\^FS", Pattern.DOTALL);
+    private static final Pattern ROTULO_ORDEN = Pattern.compile("(?:Pack|Venta)\\s*ID:");
+    /** El número en sí. Los pack y order id de ML son de 11 dígitos. */
+    private static final Pattern NUMERO_ORDEN = Pattern.compile("\\d{8,}");
+    /**
+     * Cuántos campos después del rótulo se busca el número.
+     *
+     * Acotarlo es lo que evita quedarse con un número equivocado. En la etiqueta real el rótulo
+     * viene duplicado —ML simula la negrita— y entre él y el número hay un campo con un "20000",
+     * así que el número queda a dos o tres campos. Sin tope, la búsqueda seguiría hasta el
+     * contenido del código de barras, que también es una tirada larga de dígitos: la columna
+     * mostraría un número plausible pero equivocado, y el operario la usa para buscar la venta.
+     */
+    private static final int MAX_CAMPOS_ORDEN = 3;
 
     private static final Pattern NON_DIGIT_START = Pattern.compile("^\\D+");
     private static final Pattern NON_DIGIT_END = Pattern.compile("\\D+$");
@@ -70,6 +77,17 @@ public class ZplParser {
         return sku;
     }
 
+    /**
+     * La tirada larga de dígitos de un campo, o vacío si no la tiene.
+     *
+     * El campo tiene que ser el número y nada más: los códigos de barras llevan su contenido en un
+     * ^FD y también traen tiradas largas de dígitos, pero mezcladas con otros caracteres.
+     */
+    private static String numeroDeOrden(String fieldContent) {
+        String texto = fieldContent.trim();
+        return NUMERO_ORDEN.matcher(texto).matches() ? texto : "";
+    }
+
     public List<ZplLabel> parseFile(Path filePath) throws IOException {
         String content = Files.readString(filePath, StandardCharsets.UTF_8);
         return parse(content);
@@ -96,9 +114,25 @@ public class ZplParser {
             List<String> detailsList = new ArrayList<>();
             String previousField = null;
 
+            String orderIds = "";
+            int camposDesdeRotulo = -1;
+
             Matcher fdMatcher = FD_FIELD.matcher(decoded);
             while (fdMatcher.find()) {
                 String fieldContent = fdMatcher.group(1);
+
+                if (orderIds.isEmpty()) {
+                    Matcher rotulo = ROTULO_ORDEN.matcher(fieldContent);
+                    if (rotulo.find()) {
+                        // El número puede venir pegado al rótulo, en el mismo campo.
+                        camposDesdeRotulo = 0;
+                        orderIds = numeroDeOrden(fieldContent.substring(rotulo.end()));
+                    } else if (camposDesdeRotulo >= 0 && camposDesdeRotulo < MAX_CAMPOS_ORDEN) {
+                        camposDesdeRotulo++;
+                        orderIds = numeroDeOrden(fieldContent);
+                    }
+                }
+
                 Matcher skuMatcher = SKU_PATTERN.matcher(fieldContent);
                 if (skuMatcher.find()) {
                     skus.add(normalizeSku(skuMatcher.group(1)));
@@ -124,12 +158,6 @@ public class ZplParser {
             Matcher qtyMatcher = QUANTITY_PATTERN.matcher(decoded);
             if (qtyMatcher.find()) {
                 quantity = Integer.parseInt(qtyMatcher.group(1));
-            }
-
-            String orderIds = "";
-            Matcher ordenMatcher = ORDEN_PATTERN.matcher(decoded);
-            if (ordenMatcher.find()) {
-                orderIds = ordenMatcher.group(1);
             }
 
             // turbo queda en false: es un dato del envío que solo conoce la API.
