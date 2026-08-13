@@ -59,7 +59,7 @@ validación, y no vale la pena frenar por eso.
 | inscripción `-` en la hoja | se ignora: las bolsas y la fila `NO` la traen así |
 | `TIPO DE ROLLO` cargado, con paños > 0 | `ROLLO: DIAMANTES - 2 paños` (un solo paño va en singular) |
 | `TIPO DE ROLLO` cargado, paños 0 o vacío | `ROLLO: DIAMANTES` / `ROLLO: NO` |
-| `CANT PAÑOS` con texto libre (`2-3`) | se imprime tal cual: es una columna de texto del usuario |
+| `CANT PAÑOS` con texto libre (`2 Y 1`) | `ROLLO: MIXTO - 2 Y 1 paños`; si el texto ya dice "paño", no se repite |
 | sin columna `ESTANDARIZADO` en el archivo | no se imprime nada y no se reclama nada |
 | `OBSERVACIONES` cargado | `OBS: Colchon + Tapa` |
 

@@ -102,7 +102,11 @@ public final class EmbalajeRenderer {
             if (cantidad <= 0) return "";
             return " - " + cantidad + (cantidad == 1 ? " paño" : " paños");
         } catch (NumberFormatException e) {
-            return " - " + v + " paños";
+            // El valor real del Excel es del tipo "2 Y 1", que se lee bien con el sufijo. Si el
+            // usuario ya escribió la palabra, no se repite.
+            String enMayusculas = v.toUpperCase();
+            boolean yaLoDice = enMayusculas.contains("PAÑO") || enMayusculas.contains("PANO");
+            return " - " + v + (yaLoDice ? "" : " paños");
         }
     }
 

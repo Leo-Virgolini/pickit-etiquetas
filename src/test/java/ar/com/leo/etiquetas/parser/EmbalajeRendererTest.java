@@ -75,6 +75,19 @@ class EmbalajeRendererTest {
     }
 
     @Test
+    void unaCantidadCombinadaSeImprimeTalCual() {
+        // "2 Y 1" es el valor que aparece en el Excel real.
+        assertEquals(List.of("ENVASE: BOL-1", "ROLLO: MIXTO - 2 Y 1 paños"),
+                EmbalajeRenderer.lineas(datos("BOL-1", "", "MIXTO", "2 Y 1", "")));
+    }
+
+    @Test
+    void noSeRepiteLaPalabraPanosSiYaEstaEnElTexto() {
+        assertEquals(List.of("ENVASE: BOL-1", "ROLLO: MIXTO - 2 PAÑOS GRANDES"),
+                EmbalajeRenderer.lineas(datos("BOL-1", "", "MIXTO", "2 PAÑOS GRANDES", "")));
+    }
+
+    @Test
     void unaCantidadDePanosNoNumericaSeImprimeTalCual() {
         // CANT PAÑOS es texto libre del usuario: si escribió "2-3", esconderlo sería peor que
         // mostrarlo, porque el dato existe y el operario lo necesita.
