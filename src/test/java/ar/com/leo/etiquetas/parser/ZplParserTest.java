@@ -6,6 +6,8 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ZplParserTest {
 
@@ -89,6 +91,41 @@ class ZplParserTest {
                 + "^XZ\n";
 
         assertEquals("", parser.parse(sinId).getFirst().orderIds());
+    }
+
+    // -------------------------------------------------------------------------------------------
+    // Turbo
+    // -------------------------------------------------------------------------------------------
+
+    /** El bloque de tipo de envío, hexeado por el ^FH como lo manda ML. */
+    private static String conEnvio(String tipo) {
+        return "^XA\n"
+                + "^FO200,181^A0N,24,24^FH^FDColor: Gris  | SKU: 1241212^FS\n"
+                + "^FO0,195^A0N,48,48^FB400,1,0,C^FH^FDEnv_C3_ADo " + tipo + "^FS\n"
+                + "^XZ\n";
+    }
+
+    @Test
+    void unEnvioTurboSeDetectaPorElTextoDeLaEtiqueta() {
+        // Es un dato del envío que en la descarga por API viene de los tags del shipment, pero que
+        // ML tambien imprime: sin esto, una etiqueta turbo de archivo no se agrupa en TURBOS.
+        assertTrue(parser.parse(conEnvio("Turbo")).getFirst().turbo());
+    }
+
+    @Test
+    void unEnvioFlexNoEsTurbo() {
+        assertFalse(parser.parse(conEnvio("Flex")).getFirst().turbo());
+    }
+
+    @Test
+    void laZonaInyectadaPorLaAppNoAlcanzaParaMarcarTurbo() {
+        // Un archivo ya procesado trae "ZONA: TURBOS" inyectado: el ancla es el texto de ML.
+        String zpl = "^XA\n"
+                + "^FO20,329^A0N,25,25^FDZONA: TURBOS^FS\n"
+                + "^FO200,181^A0N,24,24^FH^FDColor: Gris  | SKU: 1241212^FS\n"
+                + "^XZ\n";
+
+        assertFalse(parser.parse(zpl).getFirst().turbo());
     }
 
     @Test

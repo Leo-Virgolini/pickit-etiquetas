@@ -37,6 +37,15 @@ public class ZplParser {
      * mostraría un número plausible pero equivocado, y el operario la usa para buscar la venta.
      */
     private static final int MAX_CAMPOS_ORDEN = 3;
+    /**
+     * El bloque de tipo de envío que imprime ML: "Envío Turbo" frente a "Envío Flex".
+     *
+     * En la descarga por API el dato sale de los tags del shipment, pero por archivo no hay de
+     * dónde sacarlo salvo la etiqueta misma, y sin él una etiqueta turbo no se agrupa en TURBOS.
+     * Se ancla en el "Envío" para no confundirlo con el "ZONA: TURBOS" que la app inyecta y que un
+     * archivo ya procesado trae adentro.
+     */
+    private static final Pattern ENVIO_TURBO = Pattern.compile("Env\\S*o\\s+Turbo", Pattern.CASE_INSENSITIVE);
 
     private static final Pattern NON_DIGIT_START = Pattern.compile("^\\D+");
     private static final Pattern NON_DIGIT_END = Pattern.compile("\\D+$");
@@ -160,8 +169,9 @@ public class ZplParser {
                 quantity = Integer.parseInt(qtyMatcher.group(1));
             }
 
-            // turbo queda en false: es un dato del envío que solo conoce la API.
-            labels.add(new ZplLabel(block, sku, description, details, quantity, false, orderIds));
+            boolean turbo = ENVIO_TURBO.matcher(decoded).find();
+
+            labels.add(new ZplLabel(block, sku, description, details, quantity, turbo, orderIds));
         }
 
         return labels;

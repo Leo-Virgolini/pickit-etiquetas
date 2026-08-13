@@ -64,6 +64,8 @@ Genera un Excel de picking para el deposito con todos los pedidos pendientes de 
 
 ### Etiquetas ML
 
+Los dos sub-tabs (**API MercadoLibre** y **Archivo Local**) mantienen su propio estado: cada uno recuerda su tabla, sus estadisticas y su link al archivo guardado, y al cambiar de pestana se muestra lo de esa pestana en vez del resultado del otro flujo. Los botones **Descargar Etiquetas** y **Volver a ordenes buscadas**, que son pasos del flujo de la API, no aparecen en Archivo Local.
+
 Dos sub-pestañas para obtener etiquetas ZPL, procesarlas y enviarlas a la impresora Zebra.
 
 #### API MercadoLibre
@@ -80,7 +82,7 @@ Dos sub-pestañas para obtener etiquetas ZPL, procesarlas y enviarlas a la impre
 
 - **Parseo**: extrae bloques `^XA...^XZ`, decodifica hex (`_XX`), extrae SKU, producto, cantidad y detalles.
 - **Asignacion de zona**: cruza cada SKU contra el Excel de stock para determinar la zona de almacen.
-- **Ordenamiento** por prioridad: J* > T* > COMBOS > CARROS > TURBOS > RETIROS > ??? (sin mapear).
+- **Ordenamiento** por prioridad: J* > T* > COMBOS > CARROS > TURBOS > RETIROS > ??? (sin mapear). El turbo se detecta por los tags del shipment al bajar por API, y por el texto `Envio Turbo` que ML imprime en la etiqueta al procesar un archivo local.
 - **Inyeccion de headers en ZPL**: agrega al codigo ZPL de cada etiqueta:
   - Numero de posicion (#1, #2...) en bold (triple render)
   - Zona ("ZONA: J5")

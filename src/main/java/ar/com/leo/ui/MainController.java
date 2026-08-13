@@ -230,6 +230,25 @@ public class MainController {
     private SortResult currentResult;
     private List<OrdenML> fetchedOrders;
     private Set<Long> turboShipmentIds = Set.of();
+
+    /** Los dos sub-tabs de Etiquetas, en el orden en que están en el FXML. */
+    private static final int SUBTAB_API = 0;
+    private static final int SUBTAB_LOCAL = 1;
+
+    /**
+     * Lo que un sub-tab tiene cargado. Sin esto hay un solo juego de estado y cambiar de pestaña
+     * deja a la vista el resultado del otro flujo, con sus botones y sus estadísticas.
+     */
+    private record VistaEtiquetas(SortResult resultado, ObservableList<LabelTableRow> filas,
+                                  String estadisticas, File archivoGuardado) {
+    }
+
+    private final Map<Integer, VistaEtiquetas> vistasEtiquetas = new HashMap<>();
+    /** El sub-tab de API alterna entre las órdenes buscadas y las etiquetas ya descargadas. */
+    private boolean apiMostrandoOrdenes = true;
+
+    private Label placeholderApi;
+    private Label placeholderLocal;
     private FilteredList<OrderTableRow> filteredOrders;
     private Runnable orderStatsUpdater;
     private FilteredList<LabelTableRow> filteredLabels;
@@ -405,17 +424,16 @@ public class MainController {
         lockColumns(orderTable);
         lockColumns(labelTable);
 
-        // Placeholder dinámico según sub-tab seleccionado
-        Label placeholderLocal = new Label("\uD83D\uDCE6 Cargue etiquetas ZPL para ver el resultado ordenado");
+        // Cada pestaña muestra lo suyo. Placeholder dinámico según sub-tab seleccionado
+        placeholderLocal = new Label("\uD83D\uDCE6 Cargue etiquetas ZPL para ver el resultado ordenado");
         placeholderLocal.setStyle("-fx-font-size: 14px; -fx-text-fill: #888;");
-        Label placeholderApi = new Label("\uD83D\uDCCB Haga clic en 'Obtener Órdenes' para cargar las órdenes de ML");
+        placeholderApi = new Label("\uD83D\uDCCB Haga clic en 'Obtener Órdenes' para cargar las órdenes de ML");
         placeholderApi.setStyle("-fx-font-size: 14px; -fx-text-fill: #888;");
-        etiquetasSubTabPane.getSelectionModel().selectedIndexProperty().addListener((obs, oldIdx, newIdx) -> {
-            if (labelTable.getItems() == null || labelTable.getItems().isEmpty()) {
-                labelTable.setPlaceholder(newIdx.intValue() == 0 ? placeholderApi : placeholderLocal);
-            }
-        });
         labelTable.setPlaceholder(placeholderApi);
+        // Al cambiar de pestaña se reemplazan la tabla, las estadísticas, el link al archivo y los
+        // botones por los de la pestaña a la que se entra.
+        etiquetasSubTabPane.getSelectionModel().selectedIndexProperty().addListener(
+                (obs, anterior, actual) -> aplicarVistaDeSubTab(actual.intValue()));
 
         // Copiar al portapapeles con Ctrl+C (fila) y click derecho (celda)
         setupTableCopyHandler(orderTable);
@@ -1020,10 +1038,7 @@ public class MainController {
                     showLabelTable();
                     displayResult(result, medidas);
                     if (finalSavedFile != null) {
-                        fileLinkBar.getChildren().clear();
-                        LogHelper.addFileLink(fileLinkBar, finalSavedFile);
-                        fileLinkBar.setVisible(true);
-                        fileLinkBar.setManaged(true);
+                        registrarArchivoGuardado(finalSavedFile);
                     }
                     if (finalSaveError != null) {
                         AlertHelper.showError("Error al guardar", "No se pudo guardar el archivo automáticamente:\n" + finalSaveError);
@@ -1339,6 +1354,10 @@ public class MainController {
     }
 
     private void showOrderTable() {
+        // Solo se llega acá desde el sub-tab de API: la tabla de órdenes es de ese flujo.
+        apiMostrandoOrdenes = true;
+        downloadLabelsBtn.setVisible(true);
+        downloadLabelsBtn.setManaged(true);
         orderTable.setVisible(true);
         orderTable.setManaged(true);
         labelTable.setVisible(false);
@@ -1363,8 +1382,12 @@ public class MainController {
         boolean hayEtiquetas = currentResult != null && !currentResult.groups().isEmpty();
         comboSheetBtn.setDisable(!hayEtiquetas);
         printDirectBtn.setDisable(!hayEtiquetas);
-        // Mostrar botón volver solo si hay órdenes cargadas
-        boolean hayOrdenes = !orderTable.getItems().isEmpty();
+        // Descargar etiquetas y volver a las órdenes son pasos del flujo de la API: en Archivo
+        // Local no tienen sentido.
+        boolean enApi = subTabActual() == SUBTAB_API;
+        downloadLabelsBtn.setVisible(enApi);
+        downloadLabelsBtn.setManaged(enApi);
+        boolean hayOrdenes = enApi && !orderTable.getItems().isEmpty();
         backToOrdersBtn.setVisible(hayOrdenes);
         backToOrdersBtn.setManaged(hayOrdenes);
         // El filtro de tipo de envío es un control de la vista de órdenes (pre-descarga);
@@ -2219,11 +2242,7 @@ public class MainController {
                     extractQuantityFromLabels(group.labels()),
                     EstadoDato.estandarizadoDe(embalaje)));
         }
-        filteredLabels = new FilteredList<>(rows, p -> true);
-        SortedList<LabelTableRow> sortedLabels = new SortedList<>(filteredLabels);
-        sortedLabels.comparatorProperty().bind(labelTable.comparatorProperty());
-        labelTable.setItems(sortedLabels);
-        searchField.clear();
+        mostrarFilas(rows);
 
         LabelStatistics stats = result.statistics();
         int totalProductos = result.groups().stream()
@@ -2251,6 +2270,78 @@ public class MainController {
         statsBar.setManaged(true);
         searchBar.setVisible(true);
         searchBar.setManaged(true);
+        // El link apunta al archivo del resultado anterior. Lo repone quien haya guardado uno.
+        mostrarLinkArchivo(null);
+
+        int tab = subTabActual();
+        if (tab == SUBTAB_API) apiMostrandoOrdenes = false;
+        vistasEtiquetas.put(tab, new VistaEtiquetas(result, rows, text, null));
+    }
+
+    private int subTabActual() {
+        return etiquetasSubTabPane == null
+                ? SUBTAB_API
+                : etiquetasSubTabPane.getSelectionModel().getSelectedIndex();
+    }
+
+    private void mostrarFilas(ObservableList<LabelTableRow> filas) {
+        filteredLabels = new FilteredList<>(filas, p -> true);
+        SortedList<LabelTableRow> ordenadas = new SortedList<>(filteredLabels);
+        ordenadas.comparatorProperty().bind(labelTable.comparatorProperty());
+        labelTable.setItems(ordenadas);
+        searchField.clear();
+    }
+
+    private void mostrarLinkArchivo(File archivo) {
+        fileLinkBar.getChildren().clear();
+        if (archivo != null) LogHelper.addFileLink(fileLinkBar, archivo);
+        fileLinkBar.setVisible(archivo != null);
+        fileLinkBar.setManaged(archivo != null);
+    }
+
+    /** Deja el archivo guardado registrado en la vista, para reponer el link al volver a la pestaña. */
+    private void registrarArchivoGuardado(File archivo) {
+        mostrarLinkArchivo(archivo);
+        VistaEtiquetas vista = vistasEtiquetas.get(subTabActual());
+        if (vista != null) {
+            vistasEtiquetas.put(subTabActual(), new VistaEtiquetas(
+                    vista.resultado(), vista.filas(), vista.estadisticas(), archivo));
+        }
+    }
+
+    /**
+     * Muestra lo que la pestaña tenga cargado. Si todavía no corrió nada queda vacía con su
+     * placeholder, en vez de dejar a la vista el resultado del otro flujo.
+     */
+    private void aplicarVistaDeSubTab(int tab) {
+        if (tab == SUBTAB_API && apiMostrandoOrdenes) {
+            showOrderTable();
+            return;
+        }
+
+        VistaEtiquetas vista = vistasEtiquetas.get(tab);
+        if (vista == null) {
+            currentResult = null;
+            labelTable.setPlaceholder(tab == SUBTAB_LOCAL ? placeholderLocal : placeholderApi);
+            // Se rearma el envoltorio igual que con datos: si no, el buscador seguiría filtrando
+            // la lista de la pestaña anterior.
+            mostrarFilas(FXCollections.observableArrayList());
+            statsBar.setVisible(false);
+            statsBar.setManaged(false);
+            searchBar.setVisible(false);
+            searchBar.setManaged(false);
+            mostrarLinkArchivo(null);
+        } else {
+            currentResult = vista.resultado();
+            mostrarFilas(vista.filas());
+            statsLabel.setText(vista.estadisticas());
+            statsBar.setVisible(true);
+            statsBar.setManaged(true);
+            searchBar.setVisible(true);
+            searchBar.setManaged(true);
+            mostrarLinkArchivo(vista.archivoGuardado());
+        }
+        showLabelTable();
     }
 
     /**
