@@ -20,6 +20,16 @@ public class ZplParser {
     private static final Pattern SKU_PATTERN = Pattern.compile("SKU:\\s*(\\S+)");
     private static final Pattern QUANTITY_PATTERN = Pattern.compile(
             "\\^A0N,70,70\\^FB160,1,0,C(?:\\^FR)?\\^FD(\\d+)\\^FS");
+    /**
+     * El número que ML imprime junto a "Pack ID:" —o "Venta ID:" cuando la etiqueta no agrupa
+     * varias órdenes—. Es el mismo dato que la descarga por API pone en la columna Orden, así que
+     * la tabla dice lo mismo venga la etiqueta de la API o de un archivo.
+     *
+     * Entre el rótulo y el número hay otro campo con un "20000", así que no alcanza con tomar el
+     * campo siguiente: se busca la primera tirada larga de dígitos.
+     */
+    private static final Pattern ORDEN_PATTERN = Pattern.compile(
+            "(?:Pack|Venta)\\s*ID:.*?\\^FD\\s*(\\d{8,})\\s*\\^FS", Pattern.DOTALL);
 
     private static final Pattern NON_DIGIT_START = Pattern.compile("^\\D+");
     private static final Pattern NON_DIGIT_END = Pattern.compile("\\D+$");
@@ -116,7 +126,14 @@ public class ZplParser {
                 quantity = Integer.parseInt(qtyMatcher.group(1));
             }
 
-            labels.add(new ZplLabel(block, sku, description, details, quantity));
+            String orderIds = "";
+            Matcher ordenMatcher = ORDEN_PATTERN.matcher(decoded);
+            if (ordenMatcher.find()) {
+                orderIds = ordenMatcher.group(1);
+            }
+
+            // turbo queda en false: es un dato del envío que solo conoce la API.
+            labels.add(new ZplLabel(block, sku, description, details, quantity, false, orderIds));
         }
 
         return labels;
