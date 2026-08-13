@@ -781,9 +781,31 @@ public class MainController {
         }
     }
 
-    private ExcelMapping loadExcelMapping() throws Exception {
-        validateExcelFiles();
-        return excelReader.readMapping(Path.of(excelFileField.getText()));
+    /**
+     * Las rutas y el interruptor tal como están en la UI.
+     *
+     * Se toman en el hilo de JavaFX antes de arrancar el trabajo pesado: leer los Excel tarda lo
+     * suficiente como para congelar la ventana, y desde un hilo no se pueden tocar los controles.
+     */
+    private record ConfigExcel(String stock, String combos, String medidas, boolean medidasActivo) {
+    }
+
+    private ConfigExcel configExcel() {
+        return new ConfigExcel(
+                excelFileField.getText(),
+                comboExcelField.getText(),
+                medidasExcelField == null ? null : medidasExcelField.getText(),
+                medidasEnabledCheck != null && medidasEnabledCheck.isSelected());
+    }
+
+    /** Muestra un error venga del hilo de JavaFX o de uno de trabajo. */
+    private void mostrarError(String titulo, String mensaje) {
+        if (Platform.isFxApplicationThread()) AlertHelper.showError(titulo, mensaje);
+        else Platform.runLater(() -> AlertHelper.showError(titulo, mensaje));
+    }
+
+    private ExcelMapping loadExcelMapping(ConfigExcel config) throws Exception {
+        return excelReader.readMapping(Path.of(config.stock()));
     }
 
     @FXML
@@ -794,22 +816,46 @@ public class MainController {
             return;
         }
 
+        final ConfigExcel config;
         try {
-            ExcelMapping excelMapping = loadExcelMapping();
-            List<ZplLabel> labels = zplParser.parseFile(Path.of(zplPath));
-            MedidasExcelManager.Medidas medidas = loadMedidas();
-            Map<String, String> skusPendientes = new LinkedHashMap<>();
-            Set<String> embalajesFaltantes = new LinkedHashSet<>();
-            currentResult = injectZplHeaders(
-                    labelSorter.sort(labels, excelMapping.skuToZone()), excelMapping, medidas, skusPendientes,
-                    embalajesFaltantes);
-            int agregadosExcel = guardarSkusPendientesMedicion(skusPendientes);
-            showLabelTable();
-            displayResult(currentResult, medidas);
-            mostrarMensajeSkusFaltantes(agregadosExcel, embalajesFaltantes);
+            validateExcelFiles();
+            config = configExcel();
         } catch (Exception e) {
             AlertHelper.showError("Error al procesar", e.getMessage(), e);
+            return;
         }
+
+        // Lee dos Excel, parsea el archivo y escribe en el Excel de medidas: en el hilo de JavaFX
+        // la ventana queda congelada y el spinner ni siquiera llega a pintarse.
+        setLoading(true);
+
+        new Thread(() -> {
+            try {
+                ExcelMapping excelMapping = loadExcelMapping(config);
+                List<ZplLabel> labels = zplParser.parseFile(Path.of(zplPath));
+                MedidasExcelManager.Medidas medidas = loadMedidas(config);
+                Map<String, String> skusPendientes = new LinkedHashMap<>();
+                Set<String> embalajesFaltantes = new LinkedHashSet<>();
+                SortResult result = injectZplHeaders(
+                        labelSorter.sort(labels, excelMapping.skuToZone()), excelMapping, medidas,
+                        skusPendientes, embalajesFaltantes, config.combos());
+                int agregadosExcel = guardarSkusPendientesMedicion(skusPendientes, config);
+
+                Platform.runLater(() -> {
+                    setLoading(false);
+                    currentResult = result;
+                    showLabelTable();
+                    displayResult(result, medidas);
+                    mostrarMensajeSkusFaltantes(agregadosExcel, embalajesFaltantes);
+                });
+            } catch (Exception e) {
+                AppLogger.error("Error al procesar el archivo local", e);
+                Platform.runLater(() -> {
+                    setLoading(false);
+                    AlertHelper.showError("Error al procesar", e.getMessage(), e);
+                });
+            }
+        }).start();
     }
 
     @FXML
@@ -819,9 +865,10 @@ public class MainController {
             return;
         }
 
-        ExcelMapping excelMapping;
+        final ConfigExcel config;
         try {
-            excelMapping = loadExcelMapping();
+            validateExcelFiles();
+            config = configExcel();
         } catch (Exception e) {
             AlertHelper.showError("Error", e.getMessage(), e);
             return;
@@ -838,6 +885,7 @@ public class MainController {
 
         new Thread(() -> {
             try {
+                ExcelMapping excelMapping = loadExcelMapping(config);
                 String userId = MercadoLibreAPI.getUserId();
                 MercadoLibreAPI.MLOrderResult result = MercadoLibreAPI.obtenerVentasReadyToPrint(userId, incluirImpresas);
                 List<OrdenML> ordenes = result.ordenes();
@@ -942,9 +990,10 @@ public class MainController {
             return;
         }
 
-        ExcelMapping excelMapping;
+        final ConfigExcel config;
         try {
-            excelMapping = loadExcelMapping();
+            validateExcelFiles();
+            config = configExcel();
         } catch (Exception e) {
             AlertHelper.showError("Error", e.getMessage(), e);
             return;
@@ -997,21 +1046,21 @@ public class MainController {
         Optional<ButtonType> confirmResult = confirm.showAndWait();
         if (confirmResult.isEmpty() || confirmResult.get() != ButtonType.OK) return;
 
-        // Capturar referencias/paths en el hilo UI antes de lanzar el thread background.
-        final MedidasExcelManager.Medidas medidas = loadMedidas();
-        final String medidasPath = medidasExcelField != null ? medidasExcelField.getText() : null;
-
         setLoading(true);
 
         new Thread(() -> {
             try {
+                // Leer los Excel también tarda, así que va adentro del hilo: si no, la ventana
+                // queda congelada un rato antes de que el spinner alcance a pintarse.
+                ExcelMapping excelMapping = loadExcelMapping(config);
+                MedidasExcelManager.Medidas medidas = loadMedidas(config);
                 List<ZplLabel> labels = MercadoLibreAPI.descargarEtiquetasZplParaOrdenes(seleccionadas, turboShipmentIds);
                 Map<String, String> skusPendientes = new LinkedHashMap<>();
                 Set<String> embalajesFaltantes = new LinkedHashSet<>();
                 SortResult result = injectZplHeaders(
-                        labelSorter.sort(labels, excelMapping.skuToZone()), excelMapping, medidas, skusPendientes,
-                        embalajesFaltantes);
-                int agregadosExcel = guardarSkusPendientesMedicion(skusPendientes, medidasPath);
+                        labelSorter.sort(labels, excelMapping.skuToZone()), excelMapping, medidas,
+                        skusPendientes, embalajesFaltantes, config.combos());
+                int agregadosExcel = guardarSkusPendientesMedicion(skusPendientes, config);
 
                 // Guardar automáticamente en carpeta "Etiquetas"
                 String saveError = null;
@@ -1181,23 +1230,26 @@ public class MainController {
         showComboSheetIfNeeded();
     }
 
-    private List<ComboProduct> findMatchingCombos() {
-        String comboPath = comboExcelField.getText();
+    /** Los SKU del lote a la vista, separando los multi-SKU de los CARROS. */
+    private Set<String> skusDelLote() {
+        Set<String> batchSkus = new HashSet<>();
+        if (currentResult == null) return batchSkus;
+        for (SortedLabelGroup group : currentResult.groups()) {
+            for (String sku : group.sku().split("\n")) {
+                String trimmed = sku.trim();
+                if (!trimmed.isEmpty()) batchSkus.add(trimmed);
+            }
+        }
+        return batchSkus;
+    }
+
+    private List<ComboProduct> findMatchingCombos(String comboPath, Set<String> batchSkus) {
         if (comboPath == null || comboPath.isBlank()) return List.of();
-        if (currentResult == null || currentResult.groups().isEmpty()) return List.of();
+        if (batchSkus.isEmpty()) return List.of();
 
         try {
             Map<String, ComboProduct> allCombos = comboExcelReader.read(Path.of(comboPath));
             if (allCombos.isEmpty()) return List.of();
-
-            // Recolectar SKUs del lote actual (separar multi-SKU de CARROS)
-            Set<String> batchSkus = new HashSet<>();
-            for (SortedLabelGroup group : currentResult.groups()) {
-                for (String sku : group.sku().split("\n")) {
-                    String trimmed = sku.trim();
-                    if (!trimmed.isEmpty()) batchSkus.add(trimmed);
-                }
-            }
 
             // Crear mapa normalizado de combos para matchear por SKU numérico
             Map<String, ComboProduct> normalizedCombos = new LinkedHashMap<>();
@@ -1226,13 +1278,26 @@ public class MainController {
         }
     }
 
+    /**
+     * Busca los combos del lote y abre la hoja. La lectura del Excel de combos se hace en un hilo:
+     * en el de JavaFX la ventana queda congelada y el spinner no llega a pintarse.
+     */
     private void showComboSheetIfNeeded() {
-        List<ComboProduct> combos = findMatchingCombos();
-        if (combos.isEmpty()) {
-            AlertHelper.showInfo("Combos", "No se encontraron combos para las etiquetas actuales.");
-            return;
-        }
-        new ComboPrintDialog(getWindow(), combos).show();
+        String comboPath = comboExcelField.getText();
+        Set<String> batchSkus = skusDelLote();
+
+        setLoading(true);
+        new Thread(() -> {
+            List<ComboProduct> combos = findMatchingCombos(comboPath, batchSkus);
+            Platform.runLater(() -> {
+                setLoading(false);
+                if (combos.isEmpty()) {
+                    AlertHelper.showInfo("Combos", "No se encontraron combos para las etiquetas actuales.");
+                    return;
+                }
+                new ComboPrintDialog(getWindow(), combos).show();
+            });
+        }).start();
     }
 
     private static <T> TableCell<T, String> centeredCell() {
@@ -1619,9 +1684,10 @@ public class MainController {
     private SortResult injectZplHeaders(SortResult result, ExcelMapping excelMapping,
                                         MedidasExcelManager.Medidas medidas,
                                         Map<String, String> skusPendientesOut,
-                                        Set<String> embalajesFaltantesOut) {
+                                        Set<String> embalajesFaltantesOut,
+                                        String comboPath) {
         Map<String, String> skuToExtCode = excelMapping.skuToExternalCode();
-        Map<String, ComboProduct> normalizedCombos = loadNormalizedCombos();
+        Map<String, ComboProduct> normalizedCombos = loadNormalizedCombos(comboPath);
         // Hace falta para los SKU que todavía no figuran en el Excel: sin ninguna fila propia, es
         // lo único que dice si la función está en uso o si no hay nada que reclamar.
         boolean moduloEmbalajeActivo = medidas != null && medidas.embalajeEnUso();
@@ -2026,9 +2092,9 @@ public class MainController {
      * Lo que dice el Excel de medidas. Devuelve null si el módulo está apagado o el archivo no es
      * usable; en ese caso no se inyectan las líneas de embalaje ni se detectan pendientes.
      */
-    private MedidasExcelManager.Medidas loadMedidas() {
-        if (medidasEnabledCheck == null || !medidasEnabledCheck.isSelected()) return null;
-        String path = medidasExcelField == null ? null : medidasExcelField.getText();
+    private MedidasExcelManager.Medidas loadMedidas(ConfigExcel config) {
+        if (!config.medidasActivo()) return null;
+        String path = config.medidas();
         if (path == null || path.isBlank()) return null;
         try {
             return medidasManager.leerMedidas(Path.of(path));
@@ -2037,17 +2103,16 @@ public class MainController {
             // embalaje y con el diálogo final informando cero pendientes. El operario embalaría
             // creyendo que la etiqueta está completa.
             AppLogger.warn("No se pudo leer el Excel de medidas: " + e.getMessage());
-            AlertHelper.showError("Excel de medidas",
+            mostrarError("Excel de medidas",
                     "No se pudo leer el Excel de medidas, así que las etiquetas de este lote van a "
                     + "salir sin los datos de embalaje ni el aviso de medición.\n\n" + e.getMessage());
             return null;
         }
     }
 
-    private int guardarSkusPendientesMedicion(Map<String, String> skusPendientes) {
-        if (medidasEnabledCheck == null || !medidasEnabledCheck.isSelected()) return 0;
-        String path = medidasExcelField == null ? null : medidasExcelField.getText();
-        return guardarSkusPendientesMedicion(skusPendientes, path);
+    private int guardarSkusPendientesMedicion(Map<String, String> skusPendientes, ConfigExcel config) {
+        if (!config.medidasActivo()) return 0;
+        return guardarSkusPendientesMedicion(skusPendientes, config.medidas());
     }
 
     /**
@@ -2071,20 +2136,15 @@ public class MainController {
             AppLogger.warn("No se pudo actualizar el Excel de medidas: " + e.getMessage());
             // POI tira varias excepciones sin mensaje, y ahí el diálogo terminaría en "null".
             String detalle = e.getMessage() != null ? e.getMessage() : e.toString();
-            Runnable aviso = () -> AlertHelper.showError("Excel de medidas",
+            mostrarError("Excel de medidas",
                     "No se pudieron agregar los SKU nuevos al Excel de medidas. Si lo tenés abierto, "
                     + "cerralo y volvé a procesar el lote.\n\n" + detalle);
-            // Al procesar un archivo local esto corre en el hilo de JavaFX: diferirlo pondría el
-            // error después del resumen de éxito, al revés de lo que el operario necesita leer.
-            if (Platform.isFxApplicationThread()) aviso.run();
-            else Platform.runLater(aviso);
         }
         Platform.runLater(this::actualizarBotonSubirMedidas);
         return agregados;
     }
 
-    private Map<String, ComboProduct> loadNormalizedCombos() {
-        String comboPath = comboExcelField.getText();
+    private Map<String, ComboProduct> loadNormalizedCombos(String comboPath) {
         if (comboPath == null || comboPath.isBlank()) return null;
         try {
             Map<String, ComboProduct> all = comboExcelReader.read(Path.of(comboPath));
