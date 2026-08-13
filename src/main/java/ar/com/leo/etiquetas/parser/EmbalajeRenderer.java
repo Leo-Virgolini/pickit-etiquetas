@@ -95,6 +95,11 @@ public final class EmbalajeRenderer {
 
         if (cargado(datos.observaciones())) lineas.add("OBS: " + valor(datos.observaciones()));
 
+        // La fórmula del usuario puede decir que sí sin que haya ninguna de las tres columnas de
+        // datos: son suyas y se ubican por encabezado, así que pueden faltar. Un "REFERENCIA" solo
+        // no dice nada.
+        if (lineas.size() == 1 && REFERENCIA.equals(lineas.get(0))) lineas.clear();
+
         return lineas;
     }
 

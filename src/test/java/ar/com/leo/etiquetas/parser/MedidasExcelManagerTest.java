@@ -63,7 +63,7 @@ class MedidasExcelManagerTest {
                 new String[]{"1241212", "Producto A", "", "", "", "", "", "", "", "", "NO",
                         "SI", "BOL-1", "DIAMANTES", "4", "Colchon + Tapa"});
 
-        DatosEmbalaje datos = manager.leerMedidas(excel).get("1241212").embalaje();
+        DatosEmbalaje datos = manager.leerMedidas(excel).porSku().get("1241212").embalaje();
 
         assertEquals("BOL-1", datos.envase());
         assertEquals("DIAMANTES", datos.rollo());
@@ -79,7 +79,7 @@ class MedidasExcelManagerTest {
                         "SI", "CAJ-1"});
         agregarHojaEstandarizacion(excel, new String[][]{{"CAJ-1", "9Y"}, {"BOL-1", "AYUDIN"}});
 
-        DatosEmbalaje datos = manager.leerMedidas(excel).get("1241212").embalaje();
+        DatosEmbalaje datos = manager.leerMedidas(excel).porSku().get("1241212").embalaje();
 
         assertEquals("CAJ-1", datos.envase());
         assertEquals("9Y", datos.inscripcion());
@@ -91,7 +91,7 @@ class MedidasExcelManagerTest {
                 new String[]{"1241212", "Producto A", "", "", "", "", "", "", "", "", "NO",
                         "SI", "CAJ-1"});
 
-        assertEquals("", manager.leerMedidas(excel).get("1241212").embalaje().inscripcion());
+        assertEquals("", manager.leerMedidas(excel).porSku().get("1241212").embalaje().inscripcion());
     }
 
     @Test
@@ -101,7 +101,7 @@ class MedidasExcelManagerTest {
                         "SI", "CAJ-99"});
         agregarHojaEstandarizacion(excel, new String[][]{{"CAJ-1", "9Y"}});
 
-        DatosEmbalaje datos = manager.leerMedidas(excel).get("1241212").embalaje();
+        DatosEmbalaje datos = manager.leerMedidas(excel).porSku().get("1241212").embalaje();
 
         assertEquals("CAJ-99", datos.envase());
         assertEquals("", datos.inscripcion());
@@ -120,7 +120,7 @@ class MedidasExcelManagerTest {
         escribirNumero(excel, 1, 2, 0.8);
         escribirNumero(excel, 1, 3, 0.84);
 
-        MedidaSku medida = manager.leerMedidas(excel).get("1241212");
+        MedidaSku medida = manager.leerMedidas(excel).porSku().get("1241212");
 
         assertEquals(0.8, medida.pesoKg());
         assertEquals(0.84, medida.pesoMasKg());
@@ -133,7 +133,7 @@ class MedidasExcelManagerTest {
         Path excel = crearExcel("texto.xlsx", HEADERS_CON_EMBALAJE,
                 new String[]{"1241212", "Producto A", "", "", "", "", "38,4", "24", "10", "0,8"});
 
-        MedidaSku medida = manager.leerMedidas(excel).get("1241212");
+        MedidaSku medida = manager.leerMedidas(excel).porSku().get("1241212");
 
         assertNull(medida.anchoMasCm());
         assertFalse(medida.tieneMedidasParaSubir());
@@ -146,7 +146,7 @@ class MedidasExcelManagerTest {
         Path excel = crearExcel("sin-embalaje.xlsx", HEADERS_BASE,
                 new String[]{"1241212", "Producto A"});
 
-        MedidaSku medida = manager.leerMedidas(excel).get("1241212");
+        MedidaSku medida = manager.leerMedidas(excel).porSku().get("1241212");
 
         assertFalse(medida.embalaje().aplica(), "sin la columna, la función no aplica");
         assertEquals("Producto A", medida.producto(), "el resto de la fila se sigue leyendo");
@@ -157,7 +157,7 @@ class MedidasExcelManagerTest {
         Path excel = crearExcel("estandarizado-no.xlsx", HEADERS_CON_EMBALAJE,
                 new String[]{"1241212", "Producto A", "", "", "", "", "", "", "", "", "NO", "NO"});
 
-        DatosEmbalaje datos = manager.leerMedidas(excel).get("1241212").embalaje();
+        DatosEmbalaje datos = manager.leerMedidas(excel).porSku().get("1241212").embalaje();
 
         assertTrue(datos.aplica(), "la columna está: el SKU sí se reclama");
         assertFalse(datos.estandarizado());
@@ -177,7 +177,7 @@ class MedidasExcelManagerTest {
                 new String[]{"1241212", "Producto A", "", "", "", "", "", "", "", "", "NO", "",
                         "Colchon", "BOL-1", "DIAMANTES"});
 
-        DatosEmbalaje datos = manager.leerMedidas(excel).get("1241212").embalaje();
+        DatosEmbalaje datos = manager.leerMedidas(excel).porSku().get("1241212").embalaje();
 
         assertEquals("BOL-1", datos.envase());
         assertEquals("DIAMANTES", datos.rollo());
@@ -190,7 +190,7 @@ class MedidasExcelManagerTest {
         Path excel = crearExcel("sin-enie.xlsx", headers,
                 new String[]{"1241212", "Producto A", "NO", "DIAMANTE", "4"});
 
-        DatosEmbalaje datos = manager.leerMedidas(excel).get("1241212").embalaje();
+        DatosEmbalaje datos = manager.leerMedidas(excel).porSku().get("1241212").embalaje();
 
         assertEquals("4", datos.cantPanos());
     }
@@ -201,7 +201,7 @@ class MedidasExcelManagerTest {
         Path excel = crearExcel("rollo.xlsx", headers,
                 new String[]{"1241212", "Producto A", "NO", "DIAMANTES"});
 
-        assertEquals("DIAMANTES", manager.leerMedidas(excel).get("1241212").embalaje().rollo());
+        assertEquals("DIAMANTES", manager.leerMedidas(excel).porSku().get("1241212").embalaje().rollo());
     }
 
     @Test
@@ -210,7 +210,7 @@ class MedidasExcelManagerTest {
                 new String[]{"1241212", "Producto A"});
         escribirNumero(excel, 1, 14, 3);
 
-        assertEquals("3", manager.leerMedidas(excel).get("1241212").embalaje().cantPanos());
+        assertEquals("3", manager.leerMedidas(excel).porSku().get("1241212").embalaje().cantPanos());
     }
 
     // -------------------------------------------------------------------------------------------
@@ -224,7 +224,7 @@ class MedidasExcelManagerTest {
 
         manager.agregarPendientes(excel, List.of("999999"));
 
-        DatosEmbalaje datos = manager.leerMedidas(excel).get("999999").embalaje();
+        DatosEmbalaje datos = manager.leerMedidas(excel).porSku().get("999999").embalaje();
         assertEquals("", datos.envase(), "las columnas de embalaje quedan como estaban");
         assertFalse(datos.estandarizado());
     }
@@ -252,14 +252,14 @@ class MedidasExcelManagerTest {
 
         manager.marcarResultados(excel, List.of("1241212"), Map.of());
 
-        assertEquals("BOL-1", manager.leerMedidas(excel).get("1241212").embalaje().envase());
+        assertEquals("BOL-1", manager.leerMedidas(excel).porSku().get("1241212").embalaje().envase());
     }
 
     @Test
     void unArchivoNuevoSeCreaConLasColumnasDeEmbalaje() throws Exception {
         Path excel = tempDir.resolve("nuevo.xlsx");
 
-        manager.leerMedidas(excel);
+        manager.leerMedidas(excel).porSku();
 
         try (Workbook wb = WorkbookFactory.create(excel.toFile(), null, true)) {
             Row header = wb.getSheetAt(0).getRow(0);
@@ -275,7 +275,7 @@ class MedidasExcelManagerTest {
     void noSeCreaLaHojaCatalogoDeEmbalajes() throws Exception {
         Path excel = tempDir.resolve("sin-catalogo.xlsx");
 
-        manager.leerMedidas(excel);
+        manager.leerMedidas(excel).porSku();
 
         try (Workbook wb = WorkbookFactory.create(excel.toFile(), null, true)) {
             assertEquals(1, wb.getNumberOfSheets());
@@ -290,7 +290,7 @@ class MedidasExcelManagerTest {
                 new String[]{"1241212", "Producto A"});
         agregarHojaAjenaAlPrincipio(excel, "Resumen");
 
-        MedidaSku medida = manager.leerMedidas(excel).get("1241212");
+        MedidaSku medida = manager.leerMedidas(excel).porSku().get("1241212");
 
         assertNotNull(medida, "debe encontrar la hoja de medidas aunque no sea la primera");
     }
@@ -304,7 +304,7 @@ class MedidasExcelManagerTest {
         escribirNumero(excel, 1, 2, 30);
         escribirNumero(excel, 1, 3, 20);
 
-        MedidaSku medida = manager.leerMedidas(excel).get("1241212");
+        MedidaSku medida = manager.leerMedidas(excel).porSku().get("1241212");
 
         assertEquals(30.0, medida.anchoCm(), "la medida no debe ir a parar a la columna de envase");
         assertEquals(20.0, medida.altoCm());
@@ -327,7 +327,7 @@ class MedidasExcelManagerTest {
         manager.agregarPendientes(excel, List.of("999999"));
 
         // La fila con SKU vacío se reusa: los datos de embalaje que el usuario cargó ahí no se pisan.
-        MedidaSku medida = manager.leerMedidas(excel).get("999999");
+        MedidaSku medida = manager.leerMedidas(excel).porSku().get("999999");
         assertEquals("BOL-1", medida.embalaje().envase());
         assertEquals("DIAMANTES", medida.embalaje().rollo());
         assertEquals("2", medida.embalaje().cantPanos());
@@ -364,7 +364,7 @@ class MedidasExcelManagerTest {
 
         assertEquals("ID interno", leerHeader(excel, 0), "no se deben reescribir los encabezados");
         assertEquals("SKU", leerHeader(excel, 1));
-        assertEquals("BOL-1", manager.leerMedidas(excel).get("1241212").embalaje().envase());
+        assertEquals("BOL-1", manager.leerMedidas(excel).porSku().get("1241212").embalaje().envase());
     }
 
     @Test
@@ -382,7 +382,7 @@ class MedidasExcelManagerTest {
             assertEquals(2, auxiliar.getRow(0).getLastCellNum(), "la hoja auxiliar no se toca");
             assertEquals(0, auxiliar.getLastRowNum());
         }
-        assertNotNull(manager.leerMedidas(excel).get("999999"), "el SKU va a la hoja de medidas");
+        assertNotNull(manager.leerMedidas(excel).porSku().get("999999"), "el SKU va a la hoja de medidas");
     }
 
     @Test
@@ -418,11 +418,11 @@ class MedidasExcelManagerTest {
             }
         }
 
-        assertEquals(Map.of(), manager.leerMedidas(excel));
+        assertEquals(Map.of(), manager.leerMedidas(excel).porSku());
 
         manager.agregarPendientes(excel, List.of("999999"));
         assertEquals("SKU", leerHeader(excel, 0));
-        assertNotNull(manager.leerMedidas(excel).get("999999"));
+        assertNotNull(manager.leerMedidas(excel).porSku().get("999999"));
     }
 
     @Test
@@ -443,7 +443,7 @@ class MedidasExcelManagerTest {
         manager.agregarPendientes(excel, List.of("999999"));
 
         assertEquals("ENVASE", leerHeader(excel, 10), "no se pisa la columna de embalaje");
-        assertEquals("BOL-1", manager.leerMedidas(excel).get("1241212").embalaje().envase());
+        assertEquals("BOL-1", manager.leerMedidas(excel).porSku().get("1241212").embalaje().envase());
         assertEquals("SUBIDO", leerHeader(excel, 13));
     }
 
@@ -460,7 +460,7 @@ class MedidasExcelManagerTest {
             }
         }
 
-        assertThrows(IllegalArgumentException.class, () -> manager.leerMedidas(excel));
+        assertThrows(IllegalArgumentException.class, () -> manager.leerMedidas(excel).porSku());
     }
 
     @Test
@@ -487,7 +487,7 @@ class MedidasExcelManagerTest {
             }
         }
 
-        assertEquals("BOL-1", manager.leerMedidas(excel).get("1241212").embalaje().envase());
+        assertEquals("BOL-1", manager.leerMedidas(excel).porSku().get("1241212").embalaje().envase());
     }
 
     @Test
@@ -549,6 +549,36 @@ class MedidasExcelManagerTest {
     // -------------------------------------------------------------------------------------------
     // Helpers
     // -------------------------------------------------------------------------------------------
+
+    // -------------------------------------------------------------------------------------------
+    // Si la función de embalaje está en uso
+    // -------------------------------------------------------------------------------------------
+
+    @Test
+    void conLaColumnaEstandarizadoLaFuncionEstaEnUsoAunqueNoHayaFilas() throws Exception {
+        // Es el archivo recién creado por la app: trae la columna y ninguna fila todavía.
+        // Deducirlo de las filas leídas diría que está apagada justo en el primer lote, que es
+        // donde todos los SKU son nuevos y el aviso es el que más importa.
+        Path excel = crearExcel("solo-headers.xlsx", HEADERS_CON_EMBALAJE, new String[]{});
+
+        assertTrue(manager.leerMedidas(excel).embalajeEnUso());
+    }
+
+    @Test
+    void sinLaColumnaEstandarizadoLaFuncionNoEstaEnUso() throws Exception {
+        Path excel = crearExcel("sin-estandarizado.xlsx", HEADERS_BASE,
+                new String[]{"1241212", "Producto A"});
+
+        assertFalse(manager.leerMedidas(excel).embalajeEnUso());
+    }
+
+    @Test
+    void unArchivoQueNoExisteSeCreaConLaFuncionEnUso() throws Exception {
+        // La app lo crea con sus HEADERS, que incluyen ESTANDARIZADO.
+        Path excel = tempDir.resolve("nuevo-con-flag.xlsx");
+
+        assertTrue(manager.leerMedidas(excel).embalajeEnUso());
+    }
 
     private Path crearExcel(String nombre, String[] headers, String[] fila) throws Exception {
         Path excel = tempDir.resolve(nombre);

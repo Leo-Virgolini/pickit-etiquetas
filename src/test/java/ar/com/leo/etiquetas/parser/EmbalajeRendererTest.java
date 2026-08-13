@@ -241,6 +241,16 @@ class EmbalajeRendererTest {
     }
 
     @Test
+    void elEncabezadoDeReferenciaNoSaleSolo() {
+        // Las columnas de envase, rollo y observaciones son del usuario y se ubican por encabezado:
+        // puede tener ESTANDARIZADO y ninguna de las otras tres. Sin datos abajo, "REFERENCIA" no
+        // dice nada.
+        DatosEmbalaje soloLaFormula = new DatosEmbalaje("", "", "", "", "", true, true);
+
+        assertEquals(List.of(), EmbalajeRenderer.lineas(soloLaFormula, 2));
+    }
+
+    @Test
     void laLineaDeReferenciaVaEnNegritaEntera() {
         // No tiene dos puntos, así que la negrita no puede salir del rótulo como en las demás.
         String zpl = EmbalajeRenderer.campoZpl(List.of("REFERENCIA", "ENVASE: BOL-1"));

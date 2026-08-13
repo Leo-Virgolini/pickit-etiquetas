@@ -150,16 +150,29 @@ public class MedidasExcelManager {
                 estandarizado, envase, rollo, panos, observaciones);
     }
 
-    public Map<String, MedidaSku> leerMedidas(Path excelPath) throws Exception {
+    /**
+     * Lo que dice el Excel de medidas.
+     *
+     * @param porSku        una entrada por fila con SKU cargado
+     * @param embalajeEnUso la hoja tiene la columna ESTANDARIZADO. No se puede deducir de las filas
+     *                      leídas: un archivo recién creado por la app trae la columna y ninguna
+     *                      fila, y ahí es justo donde todos los SKU son nuevos y hay que avisar.
+     */
+    public record Medidas(Map<String, MedidaSku> porSku, boolean embalajeEnUso) {
+    }
+
+    public Medidas leerMedidas(Path excelPath) throws Exception {
         synchronized (fileLock) {
             return leerMedidasInterno(excelPath);
         }
     }
 
-    private Map<String, MedidaSku> leerMedidasInterno(Path excelPath) throws Exception {
+    private Medidas leerMedidasInterno(Path excelPath) throws Exception {
         if (!Files.exists(excelPath)) {
             crearArchivoVacio(excelPath);
-            return new LinkedHashMap<>();
+            // Se relee el archivo recién creado en vez de dar por sentado lo que tiene: así el
+            // flag sale siempre del mismo lugar, los encabezados del archivo.
+            if (!Files.exists(excelPath)) return new Medidas(new LinkedHashMap<>(), false);
         }
 
         try (OPCPackage pkg = OPCPackage.open(excelPath.toFile(), PackageAccess.READ);
@@ -168,15 +181,15 @@ public class MedidasExcelManager {
         }
     }
 
-    private Map<String, MedidaSku> leerMedidasDe(Workbook workbook) {
+    private Medidas leerMedidasDe(Workbook workbook) {
         Map<String, MedidaSku> medidas = new LinkedHashMap<>();
         Sheet sheet = hojaMedidas(workbook);
-        if (sheet == null) return medidas;
+        if (sheet == null) return new Medidas(medidas, false);
 
         // Una hoja sin ninguna fila es un archivo recién creado: se devuelve vacío para que
         // agregarPendientes lo inicialice. Si tiene filas pero no encabezados, en cambio, es un
         // archivo equivocado y el error tiene que llegarle al usuario.
-        if (sheet.getPhysicalNumberOfRows() == 0) return medidas;
+        if (sheet.getPhysicalNumberOfRows() == 0) return new Medidas(medidas, false);
 
         Columnas cols = resolverColumnas(sheet);
         if (cols.sku() == -1) {
@@ -220,7 +233,7 @@ public class MedidasExcelManager {
                     celda(row, cols.error()),
                     embalaje));
         }
-        return medidas;
+        return new Medidas(medidas, cols.estandarizado() != -1);
     }
 
     /**
@@ -234,7 +247,7 @@ public class MedidasExcelManager {
         if (skusNuevos == null || skusNuevos.isEmpty()) return 0;
 
         synchronized (fileLock) {
-            Map<String, MedidaSku> existentes = leerMedidasInterno(excelPath);
+            Map<String, MedidaSku> existentes = leerMedidasInterno(excelPath).porSku();
             Collection<String> aAgregar = skusNuevos.stream()
                     .filter(s -> s != null && !s.isBlank())
                     .map(String::trim)

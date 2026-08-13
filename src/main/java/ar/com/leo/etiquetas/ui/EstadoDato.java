@@ -3,20 +3,18 @@ package ar.com.leo.etiquetas.ui;
 import ar.com.leo.etiquetas.model.DatosEmbalaje;
 import ar.com.leo.etiquetas.model.MedidaSku;
 
-import java.util.Map;
-
 /**
- * Estado de un dato del Excel de medidas para mostrarlo en la tabla de etiquetas.
+ * Estado de la columna ESTANDARIZADO de un SKU, para mostrarlo en la tabla de etiquetas.
  *
- * Los criterios son los mismos que usan la etiqueta y el aviso post-proceso, y viven acá para que
- * no puedan divergir: si la tabla dijera que un SKU tiene embalaje y la etiqueta imprimiera
- * "NO ESTANDARIZADO", no habría forma de saber cuál de las dos tiene razón.
+ * Los criterios son los mismos que usa la etiqueta y viven acá para que no puedan divergir: si la
+ * tabla dijera que un SKU tiene el embalaje cargado y la etiqueta imprimiera "NO ESTANDARIZADO",
+ * no habría forma de saber cuál de las dos tiene razón.
  */
 public enum EstadoDato {
 
     SI("✓ SI"),
     NO("✘ NO"),
-    /** Ese SKU nunca lleva el dato: es un carro, un SKU no numérico, o el módulo está apagado. */
+    /** Ese SKU nunca lleva el dato: es un carro, un SKU no numérico, o la función está apagada. */
     NO_APLICA("—");
 
     private final String texto;
@@ -61,14 +59,6 @@ public enum EstadoDato {
     public static DatosEmbalaje embalajeDe(MedidaSku medida, boolean moduloActivo) {
         if (medida != null) return medida.embalaje();
         return moduloActivo ? DatosEmbalaje.SIN_CARGAR : DatosEmbalaje.VACIO;
-    }
-
-    /**
-     * Si el Excel tiene la columna ESTANDARIZADO, mirando las filas que sí se leyeron. Hace falta
-     * para los SKU ausentes, que no traen ninguna fila de donde deducirlo.
-     */
-    public static boolean moduloEmbalajeActivo(Map<String, MedidaSku> medidas) {
-        return medidas != null && medidas.values().stream().anyMatch(m -> m.embalaje().aplica());
     }
 
     /**

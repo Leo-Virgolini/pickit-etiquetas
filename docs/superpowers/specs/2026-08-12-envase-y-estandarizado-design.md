@@ -202,3 +202,30 @@ y no se toca. Se corre lo que el margen permite y se agranda la fuente.
 
 Los 20px entre el fin del número de ML (x≈380 con sus 11 dígitos en fuente 30) y el borde del bloque
 son el margen por si alguna vez viene de 12 dígitos.
+
+## Adenda 2026-08-13 (3) — Correcciones de review
+
+### La columna Medidas sale de la tabla y del aviso
+
+El banner MEDIR ya no se imprime, así que informar el estado de las medidas dejó de tener uso.
+`EstadoDato.medidasDe` y la columna desaparecen. El diálogo del final del lote conserva cuántos SKU
+nuevos se agregaron al Excel —son las filas que hay que completar con el envase— y lista los SKU sin
+estandarizar. La detección de pendientes y el alta en el Excel siguen intactas.
+
+### "¿La función está en uso?" deja de inferirse
+
+`EstadoDato.moduloEmbalajeActivo` deducía la respuesta de las filas leídas, así que un mapa vacío
+contestaba "apagada". Un Excel recién creado por la app trae la columna `ESTANDARIZADO` y ninguna
+fila: en el primer lote —justo donde todos los SKU son nuevos y el aviso es el que más importa— no
+se habría impreso ningún `NO ESTANDARIZADO`.
+
+`MedidasExcelManager.leerMedidas` pasa a devolver `Medidas(porSku, embalajeEnUso)`, con el flag
+tomado de donde realmente se sabe: `cols.estandarizado() != -1`. La inferencia se elimina.
+
+### Otros dos
+
+- `lineas(datos, cantidad)` descarta el encabezado `REFERENCIA` si quedó solo: la fórmula del usuario
+  puede decir que sí sin que el archivo tenga las columnas de envase, rollo ni observaciones.
+- Las anclas `Unidad` y `SKU:` se buscan solo en el ZPL de ML, a partir del final de lo inyectado.
+  `OBS` es texto libre del Excel y una observación del tipo "2 Unidades por caja" hacía que ZONA se
+  posicionara tomando como referencia la línea de embalaje.

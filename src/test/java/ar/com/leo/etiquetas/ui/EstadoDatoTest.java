@@ -4,11 +4,7 @@ import ar.com.leo.etiquetas.model.DatosEmbalaje;
 import ar.com.leo.etiquetas.model.MedidaSku;
 import org.junit.jupiter.api.Test;
 
-import java.util.Map;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class EstadoDatoTest {
 
@@ -96,26 +92,6 @@ class EstadoDatoTest {
     void unSkuVacioNoEsElegible() {
         assertEquals(false, EstadoDato.esSkuElegible("J1-D", "  "));
         assertEquals(false, EstadoDato.esSkuElegible("J1-D", null));
-    }
-
-    // -------------------------------------------------------------------------------------------
-    // Módulo de embalaje activo
-    // -------------------------------------------------------------------------------------------
-
-    @Test
-    void elModuloEstaActivoSiElExcelTieneLaColumna() {
-        Map<String, MedidaSku> medidas = Map.of("1241212", medida(null, sinEstandarizar()));
-
-        assertTrue(EstadoDato.moduloEmbalajeActivo(medidas));
-    }
-
-    @Test
-    void elModuloEstaApagadoSiNingunaFilaTieneLaColumna() {
-        Map<String, MedidaSku> medidas = Map.of("1241212", medida(null, DatosEmbalaje.VACIO));
-
-        assertFalse(EstadoDato.moduloEmbalajeActivo(medidas));
-        assertFalse(EstadoDato.moduloEmbalajeActivo(Map.of()));
-        assertFalse(EstadoDato.moduloEmbalajeActivo(null));
     }
 
     // -------------------------------------------------------------------------------------------

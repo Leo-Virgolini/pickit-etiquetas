@@ -599,7 +599,7 @@ public class MainController {
             try {
                 Map<String, ar.com.leo.etiquetas.model.MedidaSku> medidas;
                 try {
-                    medidas = medidasManager.leerMedidas(Path.of(path));
+                    medidas = medidasManager.leerMedidas(Path.of(path)).porSku();
                 } catch (Exception e) {
                     setMedidasStatus("⚠ Error leyendo Excel", "-fx-text-fill: #b91c1c;", "No se pudo leer el Excel de medidas: " + e.getMessage());
                     Platform.runLater(() -> AlertHelper.showError("Medidas ML", "No se pudo leer el Excel de medidas: " + e.getMessage()));
@@ -779,7 +779,7 @@ public class MainController {
         try {
             ExcelMapping excelMapping = loadExcelMapping();
             List<ZplLabel> labels = zplParser.parseFile(Path.of(zplPath));
-            Map<String, ar.com.leo.etiquetas.model.MedidaSku> medidas = loadMedidasMap();
+            MedidasExcelManager.Medidas medidas = loadMedidas();
             Map<String, String> skusPendientes = new LinkedHashMap<>();
             Set<String> embalajesFaltantes = new LinkedHashSet<>();
             currentResult = injectZplHeaders(
@@ -980,7 +980,7 @@ public class MainController {
         if (confirmResult.isEmpty() || confirmResult.get() != ButtonType.OK) return;
 
         // Capturar referencias/paths en el hilo UI antes de lanzar el thread background.
-        final Map<String, ar.com.leo.etiquetas.model.MedidaSku> medidas = loadMedidasMap();
+        final MedidasExcelManager.Medidas medidas = loadMedidas();
         final String medidasPath = medidasExcelField != null ? medidasExcelField.getText() : null;
 
         setLoading(true);
@@ -1587,17 +1587,23 @@ public class MainController {
     private static final boolean BANNER_MEDIR = false;
 
     /**
-     * @param embalajesFaltantesOut se completa con los SKU cuya columna ESTANDARIZADO no dice SI.
+     * @param skusPendientesOut     se completa con los SKU sin medidas de una etiqueta de una
+     *                              unidad, para darlos de alta en el Excel.
+     * @param embalajesFaltantesOut se completa con los SKU que salieron con el aviso
+     *                              "NO ESTANDARIZADO" impreso: los que tienen NO en esa columna y
+     *                              los que todavía no figuran en el Excel. Un SKU cuyas etiquetas
+     *                              son todas de dos o más unidades no entra, porque ahí el envase
+     *                              sale como referencia y no se reclama nada.
      */
     private SortResult injectZplHeaders(SortResult result, ExcelMapping excelMapping,
-                                        Map<String, ar.com.leo.etiquetas.model.MedidaSku> medidas,
+                                        MedidasExcelManager.Medidas medidas,
                                         Map<String, String> skusPendientesOut,
                                         Set<String> embalajesFaltantesOut) {
         Map<String, String> skuToExtCode = excelMapping.skuToExternalCode();
         Map<String, ComboProduct> normalizedCombos = loadNormalizedCombos();
         // Hace falta para los SKU que todavía no figuran en el Excel: sin ninguna fila propia, es
         // lo único que dice si la función está en uso o si no hay nada que reclamar.
-        boolean moduloEmbalajeActivo = EstadoDato.moduloEmbalajeActivo(medidas);
+        boolean moduloEmbalajeActivo = medidas != null && medidas.embalajeEnUso();
         List<SortedLabelGroup> newGroups = new ArrayList<>();
         int labelPosition = 1;
         Set<String> skusYaMarcados = new HashSet<>();
@@ -1624,7 +1630,7 @@ public class MainController {
             // ...") que nunca llegan al Excel de medidas, así que no se les puede cargar ni medida
             // ni embalaje. La condición es una sola para los dos usos, para que no diverjan.
             boolean skuElegible = medidas != null && EstadoDato.esSkuElegible(zone, sku);
-            ar.com.leo.etiquetas.model.MedidaSku medidaSku = skuElegible ? medidas.get(sku) : null;
+            ar.com.leo.etiquetas.model.MedidaSku medidaSku = skuElegible ? medidas.porSku().get(sku) : null;
 
             boolean skuPendienteMedicion = skuElegible && (medidaSku == null || !medidaSku.estaMedido());
 
@@ -1680,7 +1686,12 @@ public class MainController {
                             "^FO20,70^GB380,52,52^FS\n"
                             + "^FO20,75^A0N,42,42^FB380,1,0,C^FR^FD" + medirText + "^FS\n";
                 }
-                raw = raw.substring(0, insertIdx) + "^LH0,0\n" + posField1 + "\n" + posField2 + "\n" + posField3 + "\n" + embalajeZpl + medirPrefix + raw.substring(insertIdx);
+                String inyectado = "^LH0,0\n" + posField1 + "\n" + posField2 + "\n" + posField3 + "\n" + embalajeZpl + medirPrefix;
+                raw = raw.substring(0, insertIdx) + inyectado + raw.substring(insertIdx);
+                // A partir de acá arranca el ZPL de ML. Las anclas se buscan solo ahí: OBS es
+                // texto libre del Excel y una observación que diga "2 Unidades por caja" haría
+                // que ZONA se posicione tomando como referencia la línea de embalaje.
+                final int inicioMl = insertIdx + inyectado.length();
                 labelPosition++;
 
                 // Parsear ^LH original para convertir coordenadas relativas a absolutas
@@ -1693,7 +1704,7 @@ public class MainController {
                 }
 
                 // 1. Inyectar ZONA siempre debajo de "Unidades"
-                int unidadIdx = raw.indexOf(ANCHOR_UNIDAD);
+                int unidadIdx = raw.indexOf(ANCHOR_UNIDAD, inicioMl);
                 if (unidadIdx < 0) {
                     AppLogger.warn("ZPL - No se encontró el ancla '" + ANCHOR_UNIDAD
                             + "' para inyectar ZONA (sku=" + sku + ", zona=" + zone
@@ -1726,6 +1737,7 @@ public class MainController {
                 // 2. Inyectar COD.EXT. debajo del último SKU (solo para zonas que no son CARROS)
                 if (extCodeText != null) {
                     int lastSkuIdx = raw.lastIndexOf(ANCHOR_SKU);
+                    if (lastSkuIdx < inicioMl) lastSkuIdx = -1;
                     if (lastSkuIdx < 0) {
                         AppLogger.warn("ZPL - No se encontró el ancla '" + ANCHOR_SKU
                                 + "' para inyectar COD.EXT. (sku=" + sku + ", zona=" + zone
@@ -1990,10 +2002,10 @@ public class MainController {
     }
 
     /**
-     * Medidas por SKU, incluidos los datos de embalaje. Devuelve null si el módulo está apagado o
-     * el archivo no es usable; en ese caso ni el banner MEDIR ni las líneas de embalaje se inyectan.
+     * Lo que dice el Excel de medidas. Devuelve null si el módulo está apagado o el archivo no es
+     * usable; en ese caso no se inyectan las líneas de embalaje ni se detectan pendientes.
      */
-    private Map<String, ar.com.leo.etiquetas.model.MedidaSku> loadMedidasMap() {
+    private MedidasExcelManager.Medidas loadMedidas() {
         if (medidasEnabledCheck == null || !medidasEnabledCheck.isSelected()) return null;
         String path = medidasExcelField == null ? null : medidasExcelField.getText();
         if (path == null || path.isBlank()) return null;
@@ -2169,9 +2181,9 @@ public class MainController {
         };
     }
 
-    private void displayResult(SortResult result, Map<String, ar.com.leo.etiquetas.model.MedidaSku> medidas) {
+    private void displayResult(SortResult result, MedidasExcelManager.Medidas medidas) {
         ObservableList<LabelTableRow> rows = FXCollections.observableArrayList();
-        boolean moduloEmbalajeActivo = EstadoDato.moduloEmbalajeActivo(medidas);
+        boolean moduloEmbalajeActivo = medidas != null && medidas.embalajeEnUso();
         List<Integer> groupSizes = result.groups().stream()
                 .map(g -> g.labels().size())
                 .toList();
@@ -2180,7 +2192,7 @@ public class MainController {
         for (SortedLabelGroup group : result.groups()) {
             // Sin módulo de medidas activo no hay nada que informar: las dos columnas quedan en "—".
             boolean elegible = medidas != null && EstadoDato.esSkuElegible(group.zone(), group.sku());
-            ar.com.leo.etiquetas.model.MedidaSku medida = elegible ? medidas.get(group.sku()) : null;
+            ar.com.leo.etiquetas.model.MedidaSku medida = elegible ? medidas.porSku().get(group.sku()) : null;
             // La columna informa sobre el SKU, no sobre una etiqueta puntual: un grupo puede tener
             // etiquetas de una unidad y de varias, y el dato cargado es el mismo para todas.
             DatosEmbalaje embalaje = elegible
