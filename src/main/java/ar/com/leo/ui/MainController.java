@@ -1421,6 +1421,23 @@ public class MainController {
     private void showOrderTable() {
         // Solo se llega acá desde el sub-tab de API: la tabla de órdenes es de ese flujo.
         apiMostrandoOrdenes = true;
+        // El resumen de las órdenes es otro que el del lote de etiquetas. Se recalcula por si la
+        // selección cambió mientras se estaba en la otra pestaña.
+        boolean hayOrdenesBuscadas = orderStatsUpdater != null;
+        if (hayOrdenesBuscadas) {
+            if (orderTable.getItems().isEmpty()) {
+                statsLabel.setText("No hay ordenes para mostrar");
+                statsLabel.setTooltip(null);
+            } else {
+                orderStatsUpdater.run();
+            }
+        }
+        statsBar.setVisible(hayOrdenesBuscadas);
+        statsBar.setManaged(hayOrdenesBuscadas);
+        searchBar.setVisible(hayOrdenesBuscadas);
+        searchBar.setManaged(hayOrdenesBuscadas);
+        // El link apunta al lote descargado, que no es lo que se está mostrando.
+        mostrarLinkArchivo(null);
         downloadLabelsBtn.setVisible(true);
         downloadLabelsBtn.setManaged(true);
         orderTable.setVisible(true);
@@ -2395,6 +2412,9 @@ public class MainController {
             currentResult = vista.resultado();
             mostrarFilas(vista.filas());
             statsLabel.setText(vista.estadisticas());
+            Tooltip tip = new Tooltip(vista.estadisticas().replace(" | ", "\n"));
+            tip.setShowDelay(Duration.millis(200));
+            statsLabel.setTooltip(tip);
             statsBar.setVisible(true);
             statsBar.setManaged(true);
             searchBar.setVisible(true);
