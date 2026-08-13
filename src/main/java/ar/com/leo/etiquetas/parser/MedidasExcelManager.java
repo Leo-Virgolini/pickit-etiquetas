@@ -20,25 +20,28 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * Gestiona el Excel "madre" de medidas de embalaje por SKU.
- * Columnas esperadas:
- *   SKU | PRODUCTO | Ancho cm | Alto cm | Profundidad cm | Peso físico (empaque + producto) kg
- *       | Ancho +20% | Alto +20% | Profunidad +20% | Peso físico (empaque + producto) +20% | SUBIDO
- * Las +20% son las que se suben a la API de ML (dims en cm, peso en kg).
+ * Gestiona el Excel "madre" de medidas de embalaje por SKU:
+ *
+ *   SKU | PRODUCTO | Largo cm | Ancho cm | Alto cm | Peso físico (empaque + producto) kg
+ *       | Largo +20% | Ancho +20% | Alto +20% | Peso físico (empaque + producto) +5%
+ *       | SUBIDO | ESTANDARIZADO | ENVASE | TIPO DE ROLLO | CANT PAÑOS | OBSERVACIONES | ERROR
+ *
+ * Las columnas con porcentaje son las que se suben a la API de ML (dims en cm, peso en kg). Todas
+ * se ubican por su encabezado, no por posición: el usuario reordena y agrega columnas propias.
  */
 public class MedidasExcelManager {
 
     public static final String[] HEADERS = {
             "SKU",
             "PRODUCTO",
+            "Largo\ncm",
             "Ancho\ncm",
             "Alto\ncm",
-            "Profundidad\ncm",
             "Peso físico\n(empaque + producto)\nkg",
+            "Largo +20%",
             "Ancho +20%",
             "Alto +20%",
-            "Profunidad +20%",
-            "Peso físico (empaque + producto) +20%",
+            "Peso físico (empaque + producto) +5%",
             "SUBIDO",
             "ESTANDARIZADO",
             "ENVASE",

@@ -12,10 +12,10 @@ public class LabelTableRow {
     private final StringProperty details;
     private final IntegerProperty quantity;
     private final ObjectProperty<EstadoDato> medidas;
-    private final ObjectProperty<EstadoDato> embalaje;
+    private final ObjectProperty<EstadoDato> estandarizado;
 
     public LabelTableRow(String printNumber, String orderIds, String zone, String sku, String productDescription, String details, int quantity,
-                         EstadoDato medidas, EstadoDato embalaje) {
+                         EstadoDato medidas, EstadoDato estandarizado) {
         this.printNumber = new SimpleStringProperty(printNumber);
         this.orderIds = new SimpleStringProperty(orderIds);
         this.zone = new SimpleStringProperty(zone);
@@ -24,7 +24,7 @@ public class LabelTableRow {
         this.details = new SimpleStringProperty(details);
         this.quantity = new SimpleIntegerProperty(quantity);
         this.medidas = new SimpleObjectProperty<>(medidas);
-        this.embalaje = new SimpleObjectProperty<>(embalaje);
+        this.estandarizado = new SimpleObjectProperty<>(estandarizado);
     }
 
     public StringProperty printNumberProperty() { return printNumber; }
@@ -35,7 +35,7 @@ public class LabelTableRow {
     public StringProperty detailsProperty() { return details; }
     public IntegerProperty quantityProperty() { return quantity; }
     public ObjectProperty<EstadoDato> medidasProperty() { return medidas; }
-    public ObjectProperty<EstadoDato> embalajeProperty() { return embalaje; }
+    public ObjectProperty<EstadoDato> estandarizadoProperty() { return estandarizado; }
 
     public String getPrintNumber() { return printNumber.get(); }
     public String getOrderIds() { return orderIds.get(); }
@@ -45,5 +45,5 @@ public class LabelTableRow {
     public String getDetails() { return details.get(); }
     public int getQuantity() { return quantity.get(); }
     public EstadoDato getMedidas() { return medidas.get(); }
-    public EstadoDato getEmbalaje() { return embalaje.get(); }
+    public EstadoDato getEstandarizado() { return estandarizado.get(); }
 }

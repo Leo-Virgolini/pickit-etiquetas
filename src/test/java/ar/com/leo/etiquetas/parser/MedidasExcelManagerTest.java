@@ -251,6 +251,7 @@ class MedidasExcelManagerTest {
             Row header = wb.getSheetAt(0).getRow(0);
             assertEquals("SUBIDO", header.getCell(10).getStringCellValue());
             assertEquals("ESTANDARIZADO", header.getCell(11).getStringCellValue());
+            assertEquals("ENVASE", header.getCell(12).getStringCellValue());
             assertEquals("OBSERVACIONES", header.getCell(15).getStringCellValue());
             assertEquals("ERROR", header.getCell(16).getStringCellValue());
         }

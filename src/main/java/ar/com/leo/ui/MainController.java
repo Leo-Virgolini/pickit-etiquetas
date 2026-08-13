@@ -130,7 +130,7 @@ public class MainController {
     @FXML
     private TableColumn<LabelTableRow, EstadoDato> medidasCol;
     @FXML
-    private TableColumn<LabelTableRow, EstadoDato> embalajeCol;
+    private TableColumn<LabelTableRow, EstadoDato> estandarizadoCol;
     @FXML
     private Button fetchOrdersBtn;
     @FXML
@@ -295,8 +295,8 @@ public class MainController {
 
         medidasCol.setCellValueFactory(cd -> cd.getValue().medidasProperty());
         medidasCol.setCellFactory(col -> estadoDatoCell());
-        embalajeCol.setCellValueFactory(cd -> cd.getValue().embalajeProperty());
-        embalajeCol.setCellFactory(col -> estadoDatoCell());
+        estandarizadoCol.setCellValueFactory(cd -> cd.getValue().estandarizadoProperty());
+        estandarizadoCol.setCellFactory(col -> estadoDatoCell());
 
         orderTable.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
         orderTable.getSelectionModel().setSelectionMode(javafx.scene.control.SelectionMode.MULTIPLE);
