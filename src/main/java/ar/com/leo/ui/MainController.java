@@ -1760,8 +1760,9 @@ public class MainController {
     private static final boolean BANNER_MEDIR = false;
 
     /**
-     * @param skusPendientesOut     se completa con los SKU sin medidas de una etiqueta de una
-     *                              unidad, para darlos de alta en el Excel.
+     * @param skusPendientesOut     se completa con los SKU sin medidas, para darlos de alta en el
+     *                              Excel. No importa de cuántas unidades sea la etiqueta: lo que se
+     *                              crea es la fila donde después hay que cargarlos.
      * @param embalajesFaltantesOut se completa con los SKU que salieron con el aviso
      *                              "NO ESTANDARIZADO" impreso: los que tienen NO en esa columna y
      *                              los que todavía no figuran en el Excel.
@@ -1810,6 +1811,14 @@ public class MainController {
             ar.com.leo.etiquetas.model.MedidaSku medidaSku = skuElegible ? medidas.porSku().get(sku) : null;
 
             boolean skuPendienteMedicion = skuElegible && (medidaSku == null || !medidaSku.estaMedido());
+            // El alta de la fila en el Excel no mira la cantidad de la etiqueta: lo que hace es
+            // dejar dónde cargar el SKU. Un SKU que solo sale en etiquetas de varias unidades
+            // avisa igual en papel, así que sin esto el operario iría al Excel y no encontraría la
+            // fila que el aviso le pide completar.
+            if (skuPendienteMedicion) {
+                skusPendientesOut.putIfAbsent(sku,
+                        group.productDescription() != null ? group.productDescription() : "");
+            }
 
             // Datos de embalaje del SKU. Son los mismos para todas las etiquetas del grupo, pero
             // las líneas dependen de la cantidad de cada una, así que se arman más abajo.
@@ -1832,10 +1841,6 @@ public class MainController {
                 if (sinDatosOut != null && EmbalajeRenderer.avisaSinDatos(lineasEmbalaje)) {
                     sinDatosOut.add(sku);
                 }
-                boolean necesitaMedir = skuPendienteMedicion && label.quantity() == 1;
-                if (necesitaMedir) {
-                    skusPendientesOut.putIfAbsent(sku, group.productDescription() != null ? group.productDescription() : "");
-                }
                 // Las líneas de embalaje ocupan la franja donde ML imprime "Recortá esta parte...",
                 // que no le sirve al operario. Se quita antes de calcular el punto de inserción para
                 // que el índice corresponda al texto que efectivamente se va a partir.
@@ -1852,6 +1857,9 @@ public class MainController {
                 String posField2 = "^FO46,30^A0N,35,35^FD" + posText + "^FS";
                 String posField3 = "^FO45,31^A0N,35,35^FD" + posText + "^FS";
                 String medirPrefix = "";
+                // Medir sí necesita el producto suelto: con dos o más unidades el operario no tiene
+                // uno para pasarle la cinta.
+                boolean necesitaMedir = skuPendienteMedicion && label.quantity() == 1;
                 // Solo marcamos una etiqueta por SKU aunque haya varias elegibles (todas de 1 unidad).
                 // Alcanza con una sola medición para cargar las dimensiones del SKU.
                 if (BANNER_MEDIR && necesitaMedir && skusYaMarcados.add(sku)) {
