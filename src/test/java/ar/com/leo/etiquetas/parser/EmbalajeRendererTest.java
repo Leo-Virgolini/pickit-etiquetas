@@ -322,22 +322,33 @@ class EmbalajeRendererTest {
         String zpl = EmbalajeRenderer.campoZpl(List.of("REFERENCIA", "ENVASE: BOL-1"));
 
         // Fuente bitmap B, de trazo más cuadrado que el ^A0 del resto del bloque.
-        assertTrue(zpl.contains("^FO400,20^ABN,22,14^FDREFERENCIA^FS"), zpl);
+        assertTrue(zpl.contains("^FO400,14^ABN,22,14^FDREFERENCIA^FS"), zpl);
         // Negrita: segunda pasada corrida 1px, como en las demás líneas.
-        assertTrue(zpl.contains("^FO401,20^ABN,22,14^FDREFERENCIA^FS"), zpl);
+        assertTrue(zpl.contains("^FO401,14^ABN,22,14^FDREFERENCIA^FS"), zpl);
         // Subrayado: ZPL no lo tiene como atributo, así que es una línea dibujada. La fuente es
         // monoespaciada, así que el ancho es exacto: 10 glifos de 14 más los 9 espacios de 4 que
         // la fuente B deja entre caracteres.
-        assertTrue(zpl.contains("^FO400,42^GB176,2,2^FS"), zpl);
+        assertTrue(zpl.contains("^FO400,36^GB176,2,2^FS"), zpl);
     }
 
     @Test
     void laReferenciaNoCorreLasLineasDeAbajo() {
         String zpl = EmbalajeRenderer.campoZpl(List.of("REFERENCIA", "ENVASE: BOL-1"));
 
-        // El encabezado ocupa un alto de línea normal: la primera línea de datos sigue en y=46,
-        // dos puntos por debajo del subrayado, que termina en y=44.
+        // El encabezado ocupa un alto de línea normal: la primera línea de datos sigue en y=46
+        // aunque el encabezado suba dentro de su propia línea.
         assertTrue(zpl.contains("^FO400,46^A0N,26,26^FB390,5,0,L^FDENVASE: BOL-1^FS"), zpl);
+    }
+
+    @Test
+    void elEncabezadoDeReferenciaNoQuedaPegadoALaLineaDeAbajo() {
+        String zpl = EmbalajeRenderer.campoZpl(List.of("REFERENCIA", "ENVASE: BOL-1"));
+
+        // Sube dentro de su línea: el subrayado termina en y=38 y deja ocho puntos de aire hasta
+        // la primera línea de datos, en vez de los dos que quedaban con el encabezado apoyado en
+        // el arranque del bloque.
+        assertTrue(zpl.contains("^FO400,36^GB176,2,2^FS"), zpl);
+        assertTrue(zpl.contains("^FO400,46^A0N,26,26"), zpl);
     }
 
     // -------------------------------------------------------------------------------------------

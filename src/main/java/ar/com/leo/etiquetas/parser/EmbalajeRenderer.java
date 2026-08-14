@@ -86,6 +86,15 @@ public final class EmbalajeRenderer {
      * justo donde termina el glifo número ocho sin sus huecos (8 · 14 + 7 · 4 = 140).
      */
     private static final int GAP_REFERENCIA = 4;
+    /**
+     * Cuánto sube el encabezado dentro de su propia línea.
+     *
+     * Mide 24 con el subrayado incluido, contra los 26 del paso del bloque, así que apoyado en el
+     * arranque de su línea deja el subrayado a dos puntos de la primera línea de datos y se lee
+     * como si fueran una sola cosa. Sube él y no baja el resto: el alto que se libere abajo es el
+     * que se reparte la última línea.
+     */
+    private static final int SUBIDA_REFERENCIA = 6;
 
     private EmbalajeRenderer() {
     }
@@ -237,21 +246,23 @@ public final class EmbalajeRenderer {
     }
 
     /**
-     * Encabezado de referencia: fuente bitmap, en negrita y subrayado.
+     * Encabezado de referencia: fuente bitmap, en negrita y subrayado, y unos puntos por encima
+     * del arranque de su línea (ver {@link #SUBIDA_REFERENCIA}).
      *
      * ZPL no tiene subrayado como atributo, así que se dibuja. Con la fuente proporcional del resto
      * del bloque habría que estimar el ancho de la palabra; la bitmap es monoespaciada, así que sale
      * exacto contando glifos y huecos.
      */
     private static String referencia(int y) {
+        int yTexto = y - SUBIDA_REFERENCIA;
         String campo = "^A" + FUENTE_REFERENCIA + "N," + ALTO_REFERENCIA + ',' + ANCHO_REFERENCIA
                 + "^FD" + REFERENCIA + "^FS\n";
         // Los glifos más los huecos que quedan entre ellos, sin el que sobraría al final.
         int ancho = REFERENCIA.length() * ANCHO_REFERENCIA
                 + (REFERENCIA.length() - 1) * GAP_REFERENCIA;
-        return "^FO" + X + ',' + y + campo
-                + "^FO" + (X + 1) + ',' + y + campo
-                + "^FO" + X + ',' + (y + ALTO_REFERENCIA) + "^GB" + ancho + ",2,2^FS\n";
+        return "^FO" + X + ',' + yTexto + campo
+                + "^FO" + (X + 1) + ',' + yTexto + campo
+                + "^FO" + X + ',' + (yTexto + ALTO_REFERENCIA) + "^GB" + ancho + ",2,2^FS\n";
     }
 
     /** Recuadro relleno con el aviso en video inverso, centrado vertical y horizontalmente. */
