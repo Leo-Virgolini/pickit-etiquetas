@@ -21,7 +21,20 @@ public final class EmbalajeRenderer {
     // y su fuente 30. Los 20 de diferencia son el margen por si alguna vez viene de 12. Arriba no
     // hay nada de ML: el texto "Recortá esta parte..." se elimina.
     private static final int X = 400;
+    /**
+     * Dónde arranca la primera línea. No es el punto más alto que pinta el bloque: el encabezado
+     * de referencia sube {@link #SUBIDA_REFERENCIA} por encima, y ese es el techo real
+     * ({@link #Y_TECHO}).
+     */
     private static final int Y_INICIAL = 20;
+    /**
+     * Lo más arriba que llega cualquier cosa del bloque.
+     *
+     * Vale la pena tenerlo escrito porque el margen de arriba no es infinito: el "#N" de la
+     * etiqueta usa y=30 justamente para no ser cortado por el borde superior. Está cubierto por un
+     * test, así que mover Y_INICIAL o SUBIDA_REFERENCIA sin pensar en el borde falla.
+     */
+    private static final int Y_TECHO = 14;
     /** Hasta dónde puede llegar el bloque: el separador de la zona de picking está en y=180. */
     private static final int Y_LIMITE = 178;
     private static final int FUENTE = 26;
@@ -105,8 +118,11 @@ public final class EmbalajeRenderer {
      * arranque de su línea deja el subrayado a dos puntos de la primera línea de datos y se lee
      * como si fueran una sola cosa. Sube él y no baja el resto: el alto que se libere abajo es el
      * que se reparte la última línea.
+     *
+     * Lo que sube sale de {@link #Y_TECHO}: si alguna vez se imprime rozado por el borde de
+     * arriba, ese es el número a subir.
      */
-    private static final int SUBIDA_REFERENCIA = 6;
+    private static final int SUBIDA_REFERENCIA = Y_INICIAL - Y_TECHO;
 
     private EmbalajeRenderer() {
     }
@@ -115,8 +131,9 @@ public final class EmbalajeRenderer {
      * Líneas a imprimir para un SKU en una etiqueta de {@code cantidad} unidades.
      *
      * Con más de una unidad el operario no está embalando un producto suelto, así que el envase
-     * cargado es orientativo: las líneas salen igual pero encabezadas por "REFERENCIA", y si no hay
-     * nada cargado no sale nada, en vez del aviso que frena.
+     * cargado es orientativo: las líneas salen igual, pero encabezadas por "REFERENCIA". Es la
+     * única diferencia. Los avisos no dependen de la cantidad —el embalaje está sin resolver
+     * igual— y salen sin encabezado, porque no hay ningún dato que rotular.
      */
     public static List<String> lineas(DatosEmbalaje datos, int cantidad) {
         List<String> lineas = new ArrayList<>();

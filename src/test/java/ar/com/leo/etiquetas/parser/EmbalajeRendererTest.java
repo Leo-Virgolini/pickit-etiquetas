@@ -4,6 +4,10 @@ import ar.com.leo.etiquetas.model.DatosEmbalaje;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+import static java.util.stream.Collectors.joining;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -367,6 +371,28 @@ class EmbalajeRendererTest {
         // El encabezado ocupa un alto de línea normal: la primera línea de datos sigue en y=46
         // aunque el encabezado suba dentro de su propia línea.
         assertTrue(zpl.contains("^FO400,46^A0N,26,26^FB390,5,0,L^FDENVASE: BOL-1^FS"), zpl);
+    }
+
+    @Test
+    void nadaDelBloqueSubePorEncimaDelTecho() {
+        // El margen de arriba no es infinito: el "#N" de la etiqueta usa y=30 para no ser cortado
+        // por el borde superior. El encabezado de referencia es lo más alto que pinta el bloque, y
+        // sube por encima del arranque de su línea, así que el techo se fija acá.
+        List<List<String>> bloques = List.of(
+                List.of("REFERENCIA", "ENVASE: X", "ROLLO: X", "OBS: X"),
+                List.of("NO ESTANDARIZADO"),
+                List.of("SIN DATOS DE EMBALAJE"),
+                List.of("ENVASE: X"));
+
+        Matcher m = Pattern.compile("\\^FO\\d+,(\\d+)")
+                .matcher(bloques.stream().map(EmbalajeRenderer::campoZpl).collect(joining()));
+
+        int masArriba = Integer.MAX_VALUE;
+        while (m.find()) masArriba = Math.min(masArriba, Integer.parseInt(m.group(1)));
+
+        // El numero va literal a proposito: comparar contra la constante de la que sale la
+        // geometria pasaria siempre. Si cambia, hay que volver a pensar en el borde de arriba.
+        assertEquals(14, masArriba);
     }
 
     @Test
