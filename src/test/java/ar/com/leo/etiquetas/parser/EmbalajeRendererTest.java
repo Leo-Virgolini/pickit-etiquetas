@@ -156,8 +156,8 @@ class EmbalajeRendererTest {
 
         assertEquals("^FO400,20^A0N,26,26^FB390,1,0,L^FDENVASE: BOL-1^FS\n"
                         + "^FO401,20^A0N,26,26^FB390,1,0,L^FDENVASE:^FS\n"
-                        + "^FO400,48^A0N,26,26^FB390,4,0,L^FDOBS: algo^FS\n"
-                        + "^FO401,48^A0N,26,26^FB390,4,0,L^FDOBS:^FS\n",
+                        + "^FO400,46^A0N,26,26^FB390,5,0,L^FDOBS: algo^FS\n"
+                        + "^FO401,46^A0N,26,26^FB390,5,0,L^FDOBS:^FS\n",
                 zpl);
     }
 
@@ -180,12 +180,12 @@ class EmbalajeRendererTest {
 
     @Test
     void elBloqueNoLlegaAlSeparadorDeLaZonaDePicking() {
-        String zpl = EmbalajeRenderer.campoZpl(List.of("a", "b", "c", "d", "e", "f"));
+        String zpl = EmbalajeRenderer.campoZpl(List.of("a", "b", "c", "d", "e", "f", "g"));
 
         // lineas() nunca arma más de cuatro, pero si alguna vez armara de más, lo que no entra
         // se descarta en lugar de imprimirse sobre la zona de picking.
-        assertFalse(zpl.contains("^FDf^FS"), zpl);
-        assertTrue(zpl.contains("^FO400,132^A0N,26,26^FB390,1,0,L^FDe^FS"), zpl);
+        assertFalse(zpl.contains("^FDg^FS"), zpl);
+        assertTrue(zpl.contains("^FO400,150^A0N,26,26^FB390,1,0,L^FDf^FS"), zpl);
     }
 
     @Test
@@ -208,19 +208,44 @@ class EmbalajeRendererTest {
         String zpl = EmbalajeRenderer.campoZpl(List.of("ENVASE: X", "ROLLO: X", "OBS: " + "x".repeat(300)));
 
         String impreso = zpl.substring(zpl.indexOf("^FDOBS:") + 3, zpl.indexOf("^FS", zpl.indexOf("^FDOBS:")));
-        assertTrue(impreso.replace(" ", "").length() <= 3 * 29, impreso);
+        assertTrue(impreso.replace(" ", "").length() <= 4 * 29, impreso);
         assertTrue(impreso.endsWith("..."), impreso);
     }
 
     @Test
     void laUltimaLineaSeAcotaPorFilasYNoPorCaracteres() {
-        // ^FB corta por palabras: estos 54 caracteres entran en dos filas por cuenta de caracteres
-        // (2 x 27) pero necesitan tres, y lo que no entra ZPL lo reimprime encima de la última.
-        // Es una observación real del Excel.
+        // ^FB corta por palabras, así que no alcanza con contar caracteres: estas cuatro palabras
+        // miden 68 y entrarían en las tres filas por cuenta de caracteres (3 x 29 = 87), pero
+        // ninguna entra en lo que deja la anterior y ocupan una fila cada una. Lo que no entra,
+        // ZPL no lo descarta: lo reimprime encima de la última.
+        String palabra = "A".repeat(15);
+        String obs = "OBS: " + palabra + " " + palabra + " " + palabra + " " + palabra;
+        String zpl = EmbalajeRenderer.campoZpl(List.of("REFERENCIA", "ENVASE: X", "ROLLO: X", obs));
+
+        assertTrue(zpl.contains("^FB390,3,0,L^FDOBS: " + palabra + " " + palabra + " " + palabra + "...^FS"), zpl);
+    }
+
+    @Test
+    void unaObservacionRealEntraEnteraEnLaEtiquetaDeVariasUnidades() {
+        // Con el encabezado de referencia arriba, esta observación del Excel entraba en dos filas
+        // y perdía la última palabra. Son 54 caracteres que al cortarse por palabras ocupan tres
+        // filas, y tres es lo que entra hasta el separador de la zona de picking.
         String obs = "OBS: 3 COLCHON 1 TAPA. AJUSTAR PAÑO SEGÚN CANT VENDIDA";
         String zpl = EmbalajeRenderer.campoZpl(List.of("REFERENCIA", "ENVASE: X", "ROLLO: X", obs));
 
-        assertTrue(zpl.contains("^FB390,2,0,L^FDOBS: 3 COLCHON 1 TAPA. AJUSTAR PAÑO SEGÚN CANT...^FS"), zpl);
+        assertTrue(zpl.contains("^FB390,3,0,L^FD" + obs + "^FS"), zpl);
+    }
+
+    @Test
+    void laUltimaLineaAprovechaTodoElAltoQueLeQueda() {
+        // El caso de una etiqueta de mas de una unidad, que es el bloque mas alto: encabezado,
+        // envase, rollo y observaciones. Hasta el separador de la zona de picking (y=180) entran
+        // tres filas de observaciones, porque el paso entre lineas es el mismo interlineado que
+        // ^FB usa entre las filas de una misma linea y no queda aire de sobra.
+        String obs = "OBS: " + "x".repeat(200);
+        String zpl = EmbalajeRenderer.campoZpl(List.of("REFERENCIA", "ENVASE: X", "ROLLO: X", obs));
+
+        assertTrue(zpl.contains("^FO400,98^A0N,26,26^FB390,3,0,L"), zpl);
     }
 
     @Test
@@ -310,8 +335,9 @@ class EmbalajeRendererTest {
     void laReferenciaNoCorreLasLineasDeAbajo() {
         String zpl = EmbalajeRenderer.campoZpl(List.of("REFERENCIA", "ENVASE: BOL-1"));
 
-        // El encabezado ocupa un alto de línea normal: la primera línea de datos sigue en y=48.
-        assertTrue(zpl.contains("^FO400,48^A0N,26,26^FB390,4,0,L^FDENVASE: BOL-1^FS"), zpl);
+        // El encabezado ocupa un alto de línea normal: la primera línea de datos sigue en y=46,
+        // dos puntos por debajo del subrayado, que termina en y=44.
+        assertTrue(zpl.contains("^FO400,46^A0N,26,26^FB390,5,0,L^FDENVASE: BOL-1^FS"), zpl);
     }
 
     // -------------------------------------------------------------------------------------------

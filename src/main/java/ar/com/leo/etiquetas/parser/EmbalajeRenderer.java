@@ -23,8 +23,15 @@ public final class EmbalajeRenderer {
     private static final int Y_INICIAL = 20;
     /** Hasta dónde puede llegar el bloque: el separador de la zona de picking está en y=180. */
     private static final int Y_LIMITE = 178;
-    private static final int ALTO_LINEA = 28;
     private static final int FUENTE = 26;
+    /**
+     * Paso entre una línea y la siguiente. Es el alto de la fuente y no uno mayor: dentro de un
+     * ^FB las filas de una misma línea ya se separan así, que es el ritmo con el que se lee el
+     * bloque. Dejar aire de más entre líneas se lo saca a la última, que es la que se reparte el
+     * alto que sobra: con 28 las observaciones de una etiqueta de varias unidades entraban en dos
+     * filas y la tercera no llegaba por dos puntos.
+     */
+    private static final int ALTO_LINEA = FUENTE;
     private static final int ANCHO = 390;
     /**
      * Caracteres que entran en una fila.
@@ -199,7 +206,7 @@ public final class EmbalajeRenderer {
                 continue;
             }
 
-            // Con este alto de línea entran cinco, y lineas() nunca arma más de cuatro. El corte
+            // Con este alto de línea entran seis, y lineas() nunca arma más de cuatro. El corte
             // es por si eso cambiara: perder una línea es preferible a imprimir sobre la zona de
             // picking, que empieza en y=180.
             if (y + FUENTE > Y_LIMITE) break;
@@ -208,6 +215,9 @@ public final class EmbalajeRenderer {
             // La última línea se queda con todo el alto libre que sobra, así que puede repartirse
             // en varias. Las anteriores no pueden crecer sin correr las de abajo, así que entran
             // en una sola — la inscripción del envase también es texto libre del usuario.
+            //
+            // La cuenta sale exacta porque ALTO_LINEA es el interlineado que ^FB usa entre las
+            // filas: la última fila termina en y + maxLineas · ALTO_LINEA.
             int maxLineas = ultima ? Math.max(1, (Y_LIMITE - y) / ALTO_LINEA) : 1;
             // En los dos casos se acota: con ^FB, ZPL no descarta lo que no entra, lo reimprime
             // encima de la última fila y queda una mancha ilegible.
