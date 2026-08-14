@@ -856,9 +856,10 @@ public class MainController {
                 MedidasExcelManager.Medidas medidas = loadMedidas(config);
                 Map<String, String> skusPendientes = new LinkedHashMap<>();
                 Set<String> embalajesFaltantes = new LinkedHashSet<>();
+                Set<String> sinDatos = new LinkedHashSet<>();
                 SortResult result = injectZplHeaders(
                         labelSorter.sort(labels, excelMapping.skuToZone()), excelMapping, medidas,
-                        skusPendientes, embalajesFaltantes, config.combos());
+                        skusPendientes, embalajesFaltantes, sinDatos, config.combos());
                 int agregadosExcel = guardarSkusPendientesMedicion(skusPendientes, config);
 
                 Platform.runLater(() -> {
@@ -866,7 +867,7 @@ public class MainController {
                     currentResult = result;
                     showLabelTable();
                     displayResult(result, medidas);
-                    mostrarMensajeSkusFaltantes(agregadosExcel, embalajesFaltantes);
+                    mostrarMensajeSkusFaltantes(agregadosExcel, embalajesFaltantes, sinDatos);
                 });
             } catch (Exception e) {
                 AppLogger.error("Error al procesar el archivo local", e);
@@ -1085,9 +1086,10 @@ public class MainController {
                 List<ZplLabel> labels = MercadoLibreAPI.descargarEtiquetasZplParaOrdenes(seleccionadas, turboShipmentIds);
                 Map<String, String> skusPendientes = new LinkedHashMap<>();
                 Set<String> embalajesFaltantes = new LinkedHashSet<>();
+                Set<String> sinDatos = new LinkedHashSet<>();
                 SortResult result = injectZplHeaders(
                         labelSorter.sort(labels, excelMapping.skuToZone()), excelMapping, medidas,
-                        skusPendientes, embalajesFaltantes, config.combos());
+                        skusPendientes, embalajesFaltantes, sinDatos, config.combos());
                 int agregadosExcel = guardarSkusPendientesMedicion(skusPendientes, config);
 
                 // Guardar automáticamente en carpeta "Etiquetas"
@@ -1109,6 +1111,7 @@ public class MainController {
                 final File finalSavedFile = savedFile;
                 final int agregadosCount = agregadosExcel;
                 final Set<String> embalajesFaltantesFinal = new LinkedHashSet<>(embalajesFaltantes);
+                final Set<String> sinDatosFinal = new LinkedHashSet<>(sinDatos);
                 Platform.runLater(() -> {
                     setLoading(false);
                     currentResult = result;
@@ -1120,7 +1123,7 @@ public class MainController {
                     if (finalSaveError != null) {
                         AlertHelper.showError("Error al guardar", "No se pudo guardar el archivo automáticamente:\n" + finalSaveError);
                     }
-                    mostrarMensajeSkusFaltantes(agregadosCount, embalajesFaltantesFinal);
+                    mostrarMensajeSkusFaltantes(agregadosCount, embalajesFaltantesFinal, sinDatosFinal);
                 });
             } catch (Exception e) {
                 Platform.runLater(() -> {
@@ -1132,13 +1135,19 @@ public class MainController {
     }
 
     /**
-     * Diálogo del final del lote: los SKU que salieron avisados como sin estandarizar y las filas
-     * nuevas que se agregaron al Excel, que son justamente las que hay que completar con el envase.
-     * No se muestra si no hay ninguna de las dos cosas.
+     * Diálogo del final del lote: los SKU que salieron avisados en la etiqueta y las filas nuevas
+     * que se agregaron al Excel, que son justamente las que hay que completar con el envase. No se
+     * muestra si no hay ninguna de las tres cosas.
+     *
+     * Los dos avisos van en listas separadas porque no se arreglan igual: a uno le falta la
+     * decisión —la fórmula de ESTANDARIZADO todavía dice que no— y al otro le falta la carga de
+     * las columnas de embalaje.
      */
-    private void mostrarMensajeSkusFaltantes(int agregadosExcel, Set<String> embalajesFaltantes) {
+    private void mostrarMensajeSkusFaltantes(int agregadosExcel, Set<String> embalajesFaltantes,
+                                             Set<String> sinDatos) {
         boolean hayEmbalajes = embalajesFaltantes != null && !embalajesFaltantes.isEmpty();
-        if (agregadosExcel <= 0 && !hayEmbalajes) return;
+        boolean haySinDatos = sinDatos != null && !sinDatos.isEmpty();
+        if (agregadosExcel <= 0 && !hayEmbalajes && !haySinDatos) return;
 
         StringBuilder msg = new StringBuilder();
         if (agregadosExcel > 0) {
@@ -1152,7 +1161,16 @@ public class MainController {
             for (String sku : embalajesFaltantes) msg.append("  ").append(sku).append("\n");
         }
 
-        String titulo = hayEmbalajes ? "Estandarización pendiente" : "Excel de medidas actualizado";
+        if (haySinDatos) {
+            if (!msg.isEmpty()) msg.append("\n");
+            msg.append(sinDatos.size())
+                    .append(" SKU(s) estandarizado(s) pero sin datos de embalaje cargados:\n");
+            for (String sku : sinDatos) msg.append("  ").append(sku).append("\n");
+        }
+
+        String titulo = hayEmbalajes || haySinDatos
+                ? "Estandarización pendiente"
+                : "Excel de medidas actualizado";
         AlertHelper.showInfoScrollable(titulo, msg.toString());
     }
 
@@ -1746,14 +1764,17 @@ public class MainController {
      *                              unidad, para darlos de alta en el Excel.
      * @param embalajesFaltantesOut se completa con los SKU que salieron con el aviso
      *                              "NO ESTANDARIZADO" impreso: los que tienen NO en esa columna y
-     *                              los que todavía no figuran en el Excel. Un SKU cuyas etiquetas
-     *                              son todas de dos o más unidades no entra, porque ahí el envase
-     *                              sale como referencia y no se reclama nada.
+     *                              los que todavía no figuran en el Excel.
+     * @param sinDatosOut           se completa con los SKU que salieron con el aviso de falta de
+     *                              datos: la fórmula dice que sí, pero no tienen cargada ninguna de
+     *                              las tres columnas de embalaje. Van aparte porque lo que hay que
+     *                              arreglar en el Excel es otra cosa.
      */
     private SortResult injectZplHeaders(SortResult result, ExcelMapping excelMapping,
                                         MedidasExcelManager.Medidas medidas,
                                         Map<String, String> skusPendientesOut,
                                         Set<String> embalajesFaltantesOut,
+                                        Set<String> sinDatosOut,
                                         String comboPath) {
         Map<String, String> skuToExtCode = excelMapping.skuToExternalCode();
         Map<String, ComboProduct> normalizedCombos = loadNormalizedCombos(comboPath);
@@ -1807,6 +1828,9 @@ public class MainController {
                 if (embalajesFaltantesOut != null
                         && EmbalajeRenderer.avisaSinEstandarizar(lineasEmbalaje)) {
                     embalajesFaltantesOut.add(sku);
+                }
+                if (sinDatosOut != null && EmbalajeRenderer.avisaSinDatos(lineasEmbalaje)) {
+                    sinDatosOut.add(sku);
                 }
                 boolean necesitaMedir = skuPendienteMedicion && label.quantity() == 1;
                 if (necesitaMedir) {

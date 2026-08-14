@@ -172,6 +172,16 @@ class EmbalajeRendererTest {
     }
 
     @Test
+    void elAvisoDeFaltaDeDatosSaleComoRecuadroNegro() {
+        String zpl = EmbalajeRenderer.campoZpl(List.of("SIN DATOS DE EMBALAJE"));
+
+        // Mismo recuadro que NO ESTANDARIZADO, pero con el cuerpo bajado a 32: con 38 sus 21
+        // caracteres se pasan de los 390 de ancho, y ^FB reimprime encima lo que no entra.
+        assertTrue(zpl.contains("^FO400,20^GB390,52,52^FS"), zpl);
+        assertTrue(zpl.contains("^FO400,30^A0N,32,32^FB390,1,0,C^FR^FDSIN DATOS DE EMBALAJE^FS"), zpl);
+    }
+
+    @Test
     void unaLineaSinRotuloNoLlevaSegundaPasada() {
         String zpl = EmbalajeRenderer.campoZpl(List.of("SIN DOS PUNTOS"));
 
@@ -300,21 +310,40 @@ class EmbalajeRendererTest {
     }
 
     @Test
-    void conMasDeUnaUnidadYSinEmbalajeCargadoNoSeImprimeNada() {
+    void elAvisoDeSinEstandarizarNoDependeDeLaCantidad() {
+        // Que la etiqueta sea de varias unidades no cambia que el SKU esté sin resolver: si no se
+        // avisara, el operario embalaría creyendo que la etiqueta está completa.
         DatosEmbalaje sinEstandarizar = new DatosEmbalaje("BOL-1", "9Y", "DIAMANTES", "2", "", false, true);
 
-        assertEquals(List.of(), EmbalajeRenderer.lineas(sinEstandarizar, 2));
-        assertEquals(List.of(), EmbalajeRenderer.lineas(DatosEmbalaje.SIN_CARGAR, 2));
+        assertEquals(List.of("NO ESTANDARIZADO"), EmbalajeRenderer.lineas(sinEstandarizar, 2));
+        assertEquals(List.of("NO ESTANDARIZADO"), EmbalajeRenderer.lineas(DatosEmbalaje.SIN_CARGAR, 2));
     }
 
     @Test
-    void elEncabezadoDeReferenciaNoSaleSolo() {
+    void elAvisoSaleSinElEncabezadoDeReferencia() {
+        // El encabezado rotula datos de embalaje, y en el aviso no hay ninguno: la etiqueta de
+        // varias unidades sale igual que la de una.
+        String zpl = EmbalajeRenderer.campoZpl(EmbalajeRenderer.lineas(DatosEmbalaje.SIN_CARGAR, 2));
+
+        assertFalse(zpl.contains("REFERENCIA"), zpl);
+    }
+
+    @Test
+    void conLaFormulaEnSiYSinNingunaColumnaSeAvisaQueFaltanDatos() {
         // Las columnas de envase, rollo y observaciones son del usuario y se ubican por encabezado:
-        // puede tener ESTANDARIZADO y ninguna de las otras tres. Sin datos abajo, "REFERENCIA" no
-        // dice nada.
+        // puede tener ESTANDARIZADO y ninguna de las otras tres. Un bloque vacío escondería que al
+        // Excel le falta la carga, y con más de una unidad además dejaría "REFERENCIA" solo.
         DatosEmbalaje soloLaFormula = new DatosEmbalaje("", "", "", "", "", true, true);
 
-        assertEquals(List.of(), EmbalajeRenderer.lineas(soloLaFormula, 2));
+        assertEquals(List.of("SIN DATOS DE EMBALAJE"), EmbalajeRenderer.lineas(soloLaFormula, 1));
+        assertEquals(List.of("SIN DATOS DE EMBALAJE"), EmbalajeRenderer.lineas(soloLaFormula, 2));
+    }
+
+    @Test
+    void alcanzaConUnaDeLasTresColumnasParaQueNoSeAviseFaltaDeDatos() {
+        DatosEmbalaje soloObservaciones = new DatosEmbalaje("", "", "", "", "FRAGIL", true, true);
+
+        assertEquals(List.of("OBS: FRAGIL"), EmbalajeRenderer.lineas(soloObservaciones, 1));
     }
 
     @Test
@@ -358,9 +387,24 @@ class EmbalajeRendererTest {
     @Test
     void soloSeAvisaPorLoQueSalioImpreso() {
         assertTrue(EmbalajeRenderer.avisaSinEstandarizar(lineas(DatosEmbalaje.SIN_CARGAR)));
-        // Con más de una unidad no se imprime nada, así que tampoco hay nada que listar.
-        assertFalse(EmbalajeRenderer.avisaSinEstandarizar(
+        // La etiqueta de varias unidades ahora avisa igual, así que su SKU también se lista.
+        assertTrue(EmbalajeRenderer.avisaSinEstandarizar(
                 EmbalajeRenderer.lineas(DatosEmbalaje.SIN_CARGAR, 2)));
         assertFalse(EmbalajeRenderer.avisaSinEstandarizar(lineas(datos("BOL-1", "", "", "", ""))));
+    }
+
+    @Test
+    void laFaltaDeDatosSeListaAparteDeLaFaltaDeEstandarizacion() {
+        // Son dos cosas distintas de arreglar en el Excel: una es la fórmula y la otra son las
+        // columnas de embalaje, así que el diálogo del final del lote las separa.
+        DatosEmbalaje soloLaFormula = new DatosEmbalaje("", "", "", "", "", true, true);
+        List<String> faltanDatos = EmbalajeRenderer.lineas(soloLaFormula, 1);
+        List<String> sinEstandarizar = lineas(DatosEmbalaje.SIN_CARGAR);
+
+        assertTrue(EmbalajeRenderer.avisaSinDatos(faltanDatos));
+        assertFalse(EmbalajeRenderer.avisaSinEstandarizar(faltanDatos));
+
+        assertFalse(EmbalajeRenderer.avisaSinDatos(sinEstandarizar));
+        assertFalse(EmbalajeRenderer.avisaSinDatos(lineas(datos("BOL-1", "", "", "", ""))));
     }
 }

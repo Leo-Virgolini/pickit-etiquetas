@@ -8,7 +8,8 @@ import java.util.List;
 /**
  * Arma las líneas de embalaje que van en la etiqueta a partir de lo cargado en el Excel, y su
  * fragmento ZPL. Un SKU lleva entre una y tres líneas —envase, rollo y observaciones—, o una sola
- * con el aviso si su columna ESTANDARIZADO dice que el embalaje todavía no está cargado.
+ * con un aviso en recuadro: cuando su columna ESTANDARIZADO dice que el embalaje todavía no está
+ * resuelto, o cuando dice que sí pero no hay ninguna de las tres columnas cargada.
  */
 public final class EmbalajeRenderer {
 
@@ -66,9 +67,20 @@ public final class EmbalajeRenderer {
     // encima.
     private static final int FUENTE_AVISO = 38;
     private static final int ALTO_AVISO = 52;
+    /**
+     * Ancho de una mayúscula en la fuente escalable, en milésimos de su alto. Medido en impresión:
+     * a cuerpo 26 ocupa unos 15 puntos.
+     */
+    private static final int ANCHO_MAYUSCULA = 577;
 
     /** Reemplaza a todo el bloque cuando la columna ESTANDARIZADO no dice que sí. */
     private static final String SIN_ESTANDARIZAR = "NO ESTANDARIZADO";
+    /**
+     * Reemplaza a todo el bloque cuando la fórmula dice que sí pero no hay ninguna de las tres
+     * columnas de datos cargada. Es un problema distinto —ahí lo que falta es la carga, no la
+     * decisión— pero para el operario da lo mismo: no tiene ninguna indicación de embalaje.
+     */
+    private static final String SIN_DATOS = "SIN DATOS DE EMBALAJE";
     /** Encabeza el bloque cuando la etiqueta es de más de una unidad. */
     private static final String REFERENCIA = "REFERENCIA";
     // El encabezado va en la fuente residual B, de trazo más cuadrado que el ^A0 del resto, para
@@ -112,17 +124,16 @@ public final class EmbalajeRenderer {
         // antes de existir, en vez de reclamar algo que el usuario todavía no puede cargar.
         if (datos == null || !datos.aplica()) return lineas;
 
-        boolean referencia = cantidad > 1;
-
         // El aviso sale de la columna ESTANDARIZADO y no de si hay envase cargado: es una fórmula
         // del usuario que resume si completó envase, tipo de rollo y cantidad de paños. Cuando dice
-        // que no, la etiqueta solo tiene que frenar al operario, sin ruido alrededor.
+        // que no, la etiqueta solo tiene que frenar al operario, sin ruido alrededor: ni siquiera
+        // el encabezado de referencia, que rotula datos de embalaje y acá no hay ninguno.
         if (!datos.estandarizado()) {
-            if (referencia) return lineas;
             lineas.add(SIN_ESTANDARIZAR);
             return lineas;
         }
 
+        boolean referencia = cantidad > 1;
         if (referencia) lineas.add(REFERENCIA);
 
         // "NO" en el envase es una decisión tomada —ese producto no lleva caja ni bolsa— así que se
@@ -140,9 +151,12 @@ public final class EmbalajeRenderer {
         if (cargado(datos.observaciones())) lineas.add("OBS: " + valor(datos.observaciones()));
 
         // La fórmula del usuario puede decir que sí sin que haya ninguna de las tres columnas de
-        // datos: son suyas y se ubican por encabezado, así que pueden faltar. Un "REFERENCIA" solo
-        // no dice nada.
-        if (lineas.size() == 1 && REFERENCIA.equals(lineas.get(0))) lineas.clear();
+        // datos: son suyas y se ubican por encabezado, así que pueden faltar. Dejar el bloque en
+        // blanco escondería que al Excel le falta la carga, y con más de una unidad además dejaría
+        // "REFERENCIA" solo, que no dice nada.
+        boolean sinDatos = lineas.isEmpty()
+                || (lineas.size() == 1 && REFERENCIA.equals(lineas.getFirst()));
+        if (sinDatos) return new ArrayList<>(List.of(SIN_DATOS));
 
         return lineas;
     }
@@ -153,7 +167,20 @@ public final class EmbalajeRenderer {
      * y no por lo que dice el Excel.
      */
     public static boolean avisaSinEstandarizar(List<String> lineas) {
-        return lineas != null && lineas.size() == 1 && SIN_ESTANDARIZAR.equals(lineas.get(0));
+        return esAviso(lineas, SIN_ESTANDARIZAR);
+    }
+
+    /**
+     * Si esas líneas son el aviso de que faltan los datos de embalaje. Se lista aparte del anterior
+     * porque lo que hay que arreglar en el Excel es otra cosa: ahí la fórmula ya dice que sí y lo
+     * que falta es completar las columnas.
+     */
+    public static boolean avisaSinDatos(List<String> lineas) {
+        return esAviso(lineas, SIN_DATOS);
+    }
+
+    private static boolean esAviso(List<String> lineas, String aviso) {
+        return lineas != null && lineas.size() == 1 && aviso.equals(lineas.getFirst());
     }
 
     /**
@@ -203,8 +230,8 @@ public final class EmbalajeRenderer {
         for (int i = 0; i < lineas.size(); i++) {
             String linea = lineas.get(i);
 
-            if (SIN_ESTANDARIZAR.equals(linea)) {
-                zpl.append(aviso(y));
+            if (SIN_ESTANDARIZAR.equals(linea) || SIN_DATOS.equals(linea)) {
+                zpl.append(recuadro(y, linea));
                 y += ALTO_AVISO;
                 continue;
             }
@@ -266,11 +293,25 @@ public final class EmbalajeRenderer {
     }
 
     /** Recuadro relleno con el aviso en video inverso, centrado vertical y horizontalmente. */
-    private static String aviso(int y) {
+    private static String recuadro(int y, String texto) {
+        int fuente = fuenteAviso(texto);
         return "^FO" + X + ',' + y + "^GB" + ANCHO + ',' + ALTO_AVISO + ',' + ALTO_AVISO + "^FS\n"
-                + "^FO" + X + ',' + (y + (ALTO_AVISO - FUENTE_AVISO) / 2)
-                + "^A0N," + FUENTE_AVISO + ',' + FUENTE_AVISO
-                + "^FB" + ANCHO + ",1,0,C^FR^FD" + SIN_ESTANDARIZAR + "^FS\n";
+                + "^FO" + X + ',' + (y + (ALTO_AVISO - fuente) / 2)
+                + "^A0N," + fuente + ',' + fuente
+                + "^FB" + ANCHO + ",1,0,C^FR^FD" + sanitizar(texto) + "^FS\n";
+    }
+
+    /**
+     * Cuerpo con el que el aviso entra entero en una fila, hasta el tamaño de referencia.
+     *
+     * El aviso es lo único del bloque que tiene que leerse de lejos, así que va lo más grande
+     * posible; pero pasarse no es una opción, porque ^FB no descarta lo que no entra sino que lo
+     * reimprime encima de la fila y queda una mancha. La cuenta toma todos los caracteres como
+     * mayúsculas —los espacios son más angostos— así que se queda corta, que es el lado seguro.
+     */
+    private static int fuenteAviso(String texto) {
+        int entero = ANCHO * 1000 / (texto.length() * ANCHO_MAYUSCULA);
+        return Math.min(FUENTE_AVISO, entero);
     }
 
     private static String campo(int x, int y, int maxLineas, String texto) {
