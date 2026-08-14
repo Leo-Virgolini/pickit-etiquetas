@@ -1507,6 +1507,7 @@ public class MainController {
             downloadLabelsBtn.setDisable(true);
             comboSheetBtn.setDisable(!hayEtiquetas);
             printDirectBtn.setDisable(!hayEtiquetas);
+            backToOrdersBtn.setDisable(!hayOrdenes);
             backToOrdersBtn.setVisible(hayOrdenes);
             backToOrdersBtn.setManaged(hayOrdenes);
             VistaEtiquetas vista = vistasEtiquetas.get(subTabActual());
