@@ -2,6 +2,9 @@ package ar.com.leo.etiquetas.ui;
 
 import ar.com.leo.etiquetas.model.DatosEmbalaje;
 import ar.com.leo.etiquetas.model.MedidaSku;
+import ar.com.leo.etiquetas.parser.EmbalajeRenderer;
+
+import java.util.List;
 
 /**
  * Estado de la columna ESTANDARIZADO de un SKU, para mostrarlo en la tabla de etiquetas.
@@ -14,6 +17,8 @@ public enum EstadoDato {
 
     SI("✓ SI"),
     NO("✘ NO"),
+    /** La fórmula del Excel dice que sí, pero no hay ninguna columna de embalaje cargada. */
+    SIN_DATOS("⚠ SIN DATOS"),
     /** Ese SKU nunca lleva el dato: es un carro, un SKU no numérico, o la función está apagada. */
     NO_APLICA("—");
 
@@ -38,14 +43,24 @@ public enum EstadoDato {
 
     /**
      * Sale de la columna ESTANDARIZADO del Excel, que es una fórmula del usuario: resume si
-     * completó envase, tipo de rollo y cantidad de paños. La app no lo deduce por su cuenta, así
-     * que la tabla y la etiqueta siempre dicen lo mismo.
+     * completó envase, tipo de rollo y cantidad de paños.
+     *
+     * Se resuelve preguntándole al renderer qué imprime, y no releyendo el dato por separado: así
+     * la tabla no puede decir una cosa y el papel otra. Es lo que pasaba con un SKU cuya fórmula
+     * dice que sí y no tiene ninguna columna cargada: la etiqueta avisa y la tabla mostraba "SI".
+     *
+     * La cantidad no entra en la cuenta —va 1— porque es un dato del SKU y los avisos salen igual
+     * en las etiquetas de una unidad y en las de varias.
      */
     public static EstadoDato estandarizadoDe(DatosEmbalaje datos) {
         if (datos == null) return NO;
         // Sin la columna en el Excel no hay nada que informar: la función no está en uso.
         if (!datos.aplica()) return NO_APLICA;
-        return datos.estandarizado() ? SI : NO;
+
+        List<String> lineas = EmbalajeRenderer.lineas(datos, 1);
+        if (EmbalajeRenderer.avisaSinEstandarizar(lineas)) return NO;
+        if (EmbalajeRenderer.avisaSinDatos(lineas)) return SIN_DATOS;
+        return SI;
     }
 
     /**

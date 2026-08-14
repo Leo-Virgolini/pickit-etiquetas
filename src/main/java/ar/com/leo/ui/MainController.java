@@ -1810,12 +1810,16 @@ public class MainController {
             boolean skuElegible = medidas != null && EstadoDato.esSkuElegible(zone, sku);
             ar.com.leo.etiquetas.model.MedidaSku medidaSku = skuElegible ? medidas.porSku().get(sku) : null;
 
+            // Dos preguntas distintas sobre el mismo SKU. Al Excel hay que agregarle una fila si
+            // todavía no la tiene, y eso no depende de si está medido ni de cuántas unidades trae
+            // la etiqueta: la fila es donde después se cargan las medidas y el embalaje, y un SKU
+            // que solo sale de a varias unidades avisa en papel igual, así que sin esto el operario
+            // iría al Excel y no encontraría la fila que el aviso le pide completar.
+            boolean skuSinFila = skuElegible && medidaSku == null;
+            // Medir es otra cosa: la fila puede existir y estar vacía.
             boolean skuPendienteMedicion = skuElegible && (medidaSku == null || !medidaSku.estaMedido());
-            // El alta de la fila en el Excel no mira la cantidad de la etiqueta: lo que hace es
-            // dejar dónde cargar el SKU. Un SKU que solo sale en etiquetas de varias unidades
-            // avisa igual en papel, así que sin esto el operario iría al Excel y no encontraría la
-            // fila que el aviso le pide completar.
-            if (skuPendienteMedicion) {
+
+            if (skuSinFila) {
                 skusPendientesOut.putIfAbsent(sku,
                         group.productDescription() != null ? group.productDescription() : "");
             }
@@ -2369,6 +2373,9 @@ public class MainController {
                 setText(item.texto());
                 setStyle(switch (item) {
                     case NO -> "-fx-background-color: #FEE2E2; -fx-text-fill: #991B1B; -fx-font-weight: bold;";
+                    // Ambar y no rojo: la etiqueta avisa igual, pero lo que falta es la carga de
+                    // las columnas y no la decision de estandarizar.
+                    case SIN_DATOS -> "-fx-background-color: #FEF3C7; -fx-text-fill: #92400E; -fx-font-weight: bold;";
                     case SI -> "-fx-text-fill: #15803d; -fx-font-weight: bold;";
                     case NO_APLICA -> "-fx-text-fill: #9ca3af;";
                 });

@@ -24,6 +24,11 @@ class EstadoDatoTest {
         return new DatosEmbalaje("BOL-1", "9Y", "DIAMANTES", "2", "", false, true);
     }
 
+    private static DatosEmbalaje soloLaFormula() {
+        // La fórmula dice que sí, pero ninguna de las tres columnas está cargada.
+        return new DatosEmbalaje("", "", "", "", "", true, true);
+    }
+
     // -------------------------------------------------------------------------------------------
     // Texto
     // -------------------------------------------------------------------------------------------
@@ -40,6 +45,7 @@ class EstadoDatoTest {
     void cadaEstadoTieneSuTexto() {
         assertEquals("✓ SI", EstadoDato.SI.texto());
         assertEquals("✘ NO", EstadoDato.NO.texto());
+        assertEquals("⚠ SIN DATOS", EstadoDato.SIN_DATOS.texto());
         assertEquals("—", EstadoDato.NO_APLICA.texto());
     }
 
@@ -61,6 +67,27 @@ class EstadoDatoTest {
     @Test
     void sinLaColumnaEnElExcelNoAplica() {
         assertEquals(EstadoDato.NO_APLICA, EstadoDato.estandarizadoDe(DatosEmbalaje.VACIO));
+    }
+
+    @Test
+    void conLaFormulaEnSiYSinNingunaColumnaElEstadoLoDice() {
+        // La etiqueta de ese SKU imprime "SIN DATOS DE EMBALAJE": si la tabla dijera "SI" no habría
+        // forma de saber cuál de las dos tiene razón.
+        assertEquals(EstadoDato.SIN_DATOS, EstadoDato.estandarizadoDe(soloLaFormula()));
+    }
+
+    @Test
+    void alcanzaConUnaDeLasTresColumnasParaQueElEstadoSeaSi() {
+        DatosEmbalaje soloObservaciones = new DatosEmbalaje("", "", "", "", "FRAGIL", true, true);
+
+        assertEquals(EstadoDato.SI, EstadoDato.estandarizadoDe(soloObservaciones));
+    }
+
+    @Test
+    void elEstadoNoDependeDeLaCantidadDeLaEtiqueta() {
+        // Es un dato del SKU: sus etiquetas de una unidad y de varias comparten la fila del Excel,
+        // y desde que los avisos salen siempre, también comparten lo que se imprime.
+        assertEquals(EstadoDato.NO, EstadoDato.estandarizadoDe(DatosEmbalaje.SIN_CARGAR));
     }
 
     // -------------------------------------------------------------------------------------------
