@@ -1438,15 +1438,13 @@ public class MainController {
             comboSheetBtn.setDisable(true);
             printDirectBtn.setDisable(true);
             backToOrdersBtn.setDisable(true);
+            setShippingFilterDisabled(true);
         } else {
             restaurarEstadoDeVista();
         }
         searchField.setDisable(loading);
         estadoFilterCombo.setDisable(loading);
         despachoFilterCombo.setDisable(loading);
-        filterFlexCheck.setDisable(loading);
-        filterColectaCheck.setDisable(loading);
-        filterTurboCheck.setDisable(loading);
         fetchOrdersBtn.setDisable(loading);
     }
 
@@ -1474,11 +1472,11 @@ public class MainController {
         labelTable.setManaged(false);
         searchField.clear();
         restaurarEstadoDeVista();
-        setShippingFilterDisabled(false);
     }
 
     /**
-     * Repone lo que depende de lo que hay cargado: los botones de acción y el link al archivo.
+     * Repone lo que depende de lo que hay cargado: los botones de acción, el filtro de tipo de
+     * envío y el link al archivo.
      *
      * {@code setLoading(false)} no puede saberlo —habilita todo por igual— y así "Descargar
      * Etiquetas" quedaba clickeable sobre un lote ya descargado, que al tocarlo lo vuelve a bajar y
@@ -1489,6 +1487,10 @@ public class MainController {
         boolean enApi = subTabActual() == SUBTAB_API;
         boolean hayOrdenes = enApi && !orderTable.getItems().isEmpty();
         boolean hayEtiquetas = currentResult != null && !currentResult.groups().isEmpty();
+
+        // El filtro de tipo de envío es un control de la vista de órdenes (pre-descarga): en la de
+        // etiquetas no debe poder tocarse porque cambiaría el resumen del lote ya armado.
+        setShippingFilterDisabled(!(enApi && apiMostrandoOrdenes));
 
         // Descargar etiquetas y volver a las órdenes son pasos del flujo de la API: en Archivo
         // Local no tienen sentido.
@@ -1525,9 +1527,6 @@ public class MainController {
         orderTable.setManaged(false);
         searchField.clear();
         restaurarEstadoDeVista();
-        // El filtro de tipo de envío es un control de la vista de órdenes (pre-descarga);
-        // en la vista de etiquetas se deshabilita para que no modifique el resumen.
-        setShippingFilterDisabled(true);
     }
 
     @FXML
@@ -2822,8 +2821,11 @@ public class MainController {
     private void pickitSetInputsEnabled() {
         pickitGenerateBtn.setDisable(false);
         pickitCheckML.setDisable(false);
-        pickitCheckNube.setDisable(false);
-        pickitCheckManual.setDisable(false);
+        // "Solo Turbo" excluye Nube y Manual: el listener los apaga al marcarlo y hay que
+        // respetarlo, no habilitarlos por igual.
+        boolean soloTurbo = pickitCheckTurbo.isSelected();
+        pickitCheckNube.setDisable(soloTurbo);
+        pickitCheckManual.setDisable(soloTurbo);
         // Restaurar estado según checkboxes (los bindings se re-evalúan)
         pickitSlaSection.setDisable(!pickitCheckML.isSelected());
         pickitManualSection.setDisable(!pickitCheckManual.isSelected());
