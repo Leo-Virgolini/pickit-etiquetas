@@ -1821,7 +1821,7 @@ public class MainController {
             for (ZplLabel label : group.labels()) {
                 String raw = label.rawZpl();
                 // Un pedido de dos o más unidades no es un producto suelto, así que el envase sale
-                // como referencia, y no sale nada si todavía no está cargado.
+                // encabezado como referencia. Los avisos salen igual: no dependen de la cantidad.
                 List<String> lineasEmbalaje = EmbalajeRenderer.lineas(datosEmbalaje, label.quantity());
                 String embalajeZpl = EmbalajeRenderer.campoZpl(lineasEmbalaje);
                 // El aviso final lista exactamente los SKU que salieron avisados en papel.
