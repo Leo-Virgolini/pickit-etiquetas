@@ -439,3 +439,129 @@ etiquetas, las 1138 con su número.
 `MAX_CARACTERES = 29` está calibrado sobre dígitos y una fila llena de mayúsculas se pasa de los 390
 puntos. Es la decisión tomada en la adenda 10, con el costo asumido y documentado en la constante.
 Ninguna de las filas del Excel real llega a ese ancho.
+
+## Adenda 2026-08-14 (12) — El bloque desperdiciaba una fila de observaciones
+
+Con el encabezado `REFERENCIA` arriba, `OBS` arrancaba en `y=104` y entraba en dos filas, mientras
+quedaban 24 puntos libres hasta el separador de la zona de picking (`y=180`). Para que entrara la
+tercera hacía falta arrancar en `y≤102`: faltaban dos puntos.
+
+La causa era el paso del bloque. `ALTO_LINEA` era 28 con `FUENTE` 26, pero **dentro de un `^FB` las
+filas de una misma línea se separan por el alto de la fuente**. Ese aire de más entre líneas se lo
+comía la última, que es la única que crece: cada línea previa le restaba dos puntos.
+
+`ALTO_LINEA` pasa a ser `FUENTE`. El bloque queda con el mismo ritmo que ya tenían entre sí las filas
+de una `OBS` larga, y `maxLineas = (Y_LIMITE - y) / ALTO_LINEA` pasa a ser una cuenta exacta, porque
+el divisor es el interlineado real:
+
+```
+REFERENCIA   y=14   (subrayado en y=36)
+ENVASE:      y=46
+ROLLO:       y=72
+OBS:         y=98   ^FB390,3   →  termina en y=176, con 4 de margen
+```
+
+Verificado sobre el Excel de producción, 779 bloques (cantidad 1 y 2):
+
+| | antes (paso 28) | ahora (paso 26) |
+|---|---|---|
+| observaciones cortadas con `...` | 2 | 0 |
+| `OBS` que usan 3+ filas | 10 | 20 |
+| bloques que pasan `y=180` | 0 | 0 |
+| lo más abajo que llega el bloque | y=156 | y=176 |
+
+### El encabezado quedó pegado a la línea de abajo
+
+Efecto del cambio anterior: con el subrayado incluido `REFERENCIA` mide 24 contra los 26 del paso,
+así que apoyado en el arranque de su línea quedaba a dos puntos de `ENVASE` (antes eran cuatro) y se
+leía como una sola cosa. Sube 6 **dentro de su propia línea** (`SUBIDA_REFERENCIA`): las de abajo no
+se mueven, así que la última conserva sus tres filas. El encabezado arranca ahora en `y=14`, seis
+puntos más arriba de lo que el bloque había usado nunca; si apareciera rozado por el borde superior,
+la constante está aislada para bajarla.
+
+## Adenda 2026-08-14 (13) — Los dos casos que salían en blanco
+
+Una etiqueta de 2+ unidades con el SKU sin estandarizar no imprimía nada. La decisión venía de la
+adenda 2: con varias unidades el envase es orientativo, así que no se reclamaba lo que faltara. En la
+práctica el operario embalaba sin enterarse de que el embalaje de ese SKU está sin resolver, y son
+**721 de los 750 SKU** del Excel.
+
+El aviso pasa a no depender de la cantidad. Sale **sin** el encabezado: `REFERENCIA` rotula datos de
+embalaje y en un aviso no hay ninguno, así que la etiqueta de varias unidades sale igual que la de
+una.
+
+El otro caso en blanco era la fórmula diciendo que sí sin ninguna de las tres columnas cargadas —son
+del usuario y se ubican por encabezado, así que pueden faltar—. El bloque salía vacío y escondía que
+al Excel le falta la carga; con más de una unidad además dejaba `REFERENCIA` solo, que ya se
+descartaba. Ahora sale `SIN DATOS DE EMBALAJE`, en el mismo recuadro.
+
+### El cuerpo del aviso sale del largo del texto
+
+`SIN DATOS DE EMBALAJE` son 21 caracteres: a cuerpo 38 ocupan ~479 de los 390 de ancho, y `^FB` no
+descarta lo que sobra sino que lo reimprime encima. En vez de una segunda constante a ojo,
+`fuenteAviso(texto)` calcula el cuerpo con el que entra y lo topea en `FUENTE_AVISO`:
+
+```
+NO ESTANDARIZADO       (16)  →  38   (≤350 de 390)
+SIN DATOS DE EMBALAJE  (21)  →  32   (≤388 de 390)
+```
+
+La cuenta toma todo carácter como mayúscula —los espacios son más angostos— así que se queda corta,
+que es el lado seguro.
+
+### La única diferencia entre 1 unidad y varias
+
+Después de esto, `REFERENCIA` es lo único que cambia, y solo en el caso con datos cargados:
+
+| | 1 unidad | 2+ unidades |
+|---|---|---|
+| sin estandarizar | `NO ESTANDARIZADO` | igual |
+| estandarizado, sin columnas | `SIN DATOS DE EMBALAJE` | igual |
+| estandarizado con datos | `ENVASE` / `ROLLO` / `OBS` | `REFERENCIA` + lo mismo |
+
+## Adenda 2026-08-14 (14) — Lo que arrastraron los avisos
+
+### El diálogo del final del lote
+
+`avisaSinEstandarizar` alimenta la lista del diálogo, así que las etiquetas de varias unidades
+entraron solas: la regla sigue siendo "se lista lo que salió avisado en papel". El aviso nuevo se
+lista **aparte**, porque lo que hay que arreglar en el Excel es otra cosa: a uno le falta la decisión
+—la fórmula todavía dice que no— y al otro la carga de las columnas.
+
+### La fila del Excel no se creaba para las etiquetas de varias unidades
+
+El alta exigía `label.quantity() == 1`, criterio heredado del banner MEDIR, que necesita el producto
+suelto para pasarle la cinta. Pero lo que el alta hace es crear la fila donde después hay que cargar
+el SKU, y eso no depende de la cantidad. Con los avisos saliendo ahora en las etiquetas de varias
+unidades la inconsistencia se volvía visible: el papel pedía completar un SKU que en el Excel no
+tenía fila. Sobre el lote del 14/08 (70 etiquetas) son 8 SKU de 44 —uno sale de a 24 unidades, no iba
+a aparecer suelto nunca—. La condición de cantidad queda en el banner, que es para lo único que se
+pensó.
+
+Además la variable se parte en dos, porque eran dos preguntas distintas sobre el mismo SKU:
+
+```java
+boolean skuSinFila           = skuElegible && medidaSku == null;
+boolean skuPendienteMedicion = skuElegible && (medidaSku == null || !medidaSku.estaMedido());
+```
+
+El alta usaba la segunda y funcionaba de rebote, porque `agregarPendientes` filtra por su cuenta los
+SKU que ya figuran. Andaba, pero se apoyaba en un detalle de otra clase.
+
+### La tabla decía "SI" sobre una etiqueta que avisa
+
+`estandarizadoDe` releía `datos.estandarizado()` por su cuenta, así que un SKU con la fórmula en sí y
+sin columnas mostraba `✓ SI` mientras su etiqueta imprimía `SIN DATOS DE EMBALAJE` — exactamente lo
+que el javadoc de `EstadoDato` dice que no puede pasar. Ahora le pregunta al renderer qué imprime:
+
+```java
+List<String> lineas = EmbalajeRenderer.lineas(datos, 1);
+if (EmbalajeRenderer.avisaSinEstandarizar(lineas)) return NO;
+if (EmbalajeRenderer.avisaSinDatos(lineas)) return SIN_DATOS;
+return SI;
+```
+
+La cantidad va en 1 porque el estado es del SKU y los avisos ya no dependen de ella. El cuarto estado
+`SIN_DATOS` (`⚠ SIN DATOS`, ámbar) lo pidió el compilador: el `switch` de colores de la celda es
+exhaustivo. Verificado sobre el Excel de producción, 750 SKU × 3 cantidades: 0 incoherencias entre lo
+que dice la tabla y lo que imprime la etiqueta.
